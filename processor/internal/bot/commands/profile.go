@@ -123,19 +123,14 @@ func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bo
 	}
 	name := strings.Join(args, " ")
 
-	if err := ctx.Humans.AddProfile(ctx.TargetID, name, ""); err != nil {
+	// AddProfile reports the number it assigned. Deriving it instead — by
+	// searching back for the highest profile with a matching name — reported
+	// the wrong profile whenever the name was reused, since names are not
+	// unique and the store assigns the lowest FREE number, not max+1.
+	newNo, err := ctx.Humans.AddProfile(ctx.TargetID, name, "")
+	if err != nil {
 		log.Errorf("profile: add: %v", err)
 		return []bot.Reply{{React: "🙅"}}
-	}
-
-	// Find the new profile number
-	newNo := 0
-	if profiles, err := ctx.Humans.GetProfiles(ctx.TargetID); err == nil {
-		for _, p := range profiles {
-			if strings.EqualFold(p.Name, name) && p.ProfileNo > newNo {
-				newNo = p.ProfileNo
-			}
-		}
 	}
 
 	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.created", newNo, ctx.EscapeForReply(name))}}

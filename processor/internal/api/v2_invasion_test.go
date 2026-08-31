@@ -31,6 +31,17 @@ func newV2InvasionGameData() *gamedata.GameData {
 		},
 		Grunts: map[int]*gamedata.Grunt{
 			5: {ID: 5, TypeID: 11, Gender: 2, Template: "CHARACTER_GRASS_GRUNT_FEMALE"},
+			// Named grunts: no TypeID, so their grunt_type is derived from the
+			// template and is NOT a pokemon type name (#209).
+			44: {ID: 44, Gender: 0, Template: "CHARACTER_GIOVANNI"},
+			1:  {ID: 1, Gender: 0, Template: "CHARACTER_BLANCHE"},
+			// Gendered pair collapsing to one name: ("mixed", gender 0) is
+			// reachable from the bot but from NO grunt_id.
+			4: {ID: 4, Gender: 1, Template: "CHARACTER_GRUNT_MALE"},
+			6: {ID: 6, Gender: 2, Template: "CHARACTER_GRUNT_FEMALE"},
+			// Underscore-named grunts: the shapes legacy rows hold with spaces.
+			500: {ID: 500, Gender: 0, Template: "CHARACTER_EVENT_NPC_0"},
+			40:  {ID: 40, Gender: 0, Template: "CHARACTER_PLAYER_TEAM_LEADER"},
 		},
 		Util: &gamedata.UtilData{
 			PokestopEvent: map[int]gamedata.EventInfo{
@@ -145,16 +156,50 @@ func TestV2Invasion_Boss(t *testing.T) {
 
 // --- exactly-one-mode + gender placement ------------------------------------
 
-func TestV2Invasion_NoModeSet422(t *testing.T) {
+// Omitting every targeting field means "everything". v2 uses blank-means-
+// wildcard consistently rather than requiring a magic value, and invasion was
+// the one type demanding an explicit target.
+//
+// Not bot parity: bare !invasion prints usage rather than tracking everything.
+func TestV2Invasion_NoModeMeansEverything(t *testing.T) {
 	r, is, _, restore := newV2InvasionTestAPI(t)
 	defer restore()
 
-	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion", `[{"distance":500}]`)
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422 for no mode set, got %d: %s", w.Code, w.Body.String())
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true", `[{}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for an omitted target, got %d: %s", w.Code, w.Body.String())
 	}
-	if len(is.AllRows()) != 0 {
-		t.Fatalf("no-mode rule must not be stored: %+v", is.AllRows())
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "everything" {
+		t.Fatalf("stored = %+v, want grunt_type everything", rows)
+	}
+}
+
+// Distance-only rules are the common shape of this: "everything within 500m".
+func TestV2Invasion_NoModeWithOtherFieldsStillEverything(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"distance":500,"clean":true}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "everything" || rows[0].Distance != 500 {
+		t.Fatalf("stored = %+v, want everything at 500m", rows)
+	}
+}
+
+// Setting two targets is still a client bug and still 422s.
+func TestV2Invasion_MultipleModesStill422(t *testing.T) {
+	r, _, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"type_id":11,"boss":true}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for two modes, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -266,13 +311,18 @@ func TestV2Invasion_RejectsEmptyArray(t *testing.T) {
 
 // --- round-trip -------------------------------------------------------------
 
+// A read emits ONE targeting field — what the rule is stored as — whichever
+// input mode created it. type_id resolves to the type's name (#209).
 func TestV2Invasion_TypeIDRoundTrip(t *testing.T) {
 	r, _, _, restore := newV2InvasionTestAPI(t)
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion", `[{"type_id":11,"gender":"female"}]`)
 	rule := v2RulesArray(t, v2DecodeBody(t, w), "created")[0]
-	if tid, _ := rule["type_id"].(float64); int(tid) != 11 {
-		t.Fatalf("expected type_id=11 in response, got %v", rule["type_id"])
+	if gt, _ := rule["grunt_type"].(string); gt != "grass" {
+		t.Fatalf("expected grunt_type=grass in response, got %v", rule["grunt_type"])
+	}
+	if _, ok := rule["type_id"]; ok {
+		t.Fatalf("type_id is a write-side convenience and must not be emitted: %v", rule)
 	}
 	if g, _ := rule["gender"].(string); g != "female" {
 		t.Fatalf("expected gender=female in response, got %v", rule["gender"])
@@ -284,11 +334,15 @@ func TestV2Invasion_EverythingRoundTrip(t *testing.T) {
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion", `[{"everything":true}]`)
 	rule := v2RulesArray(t, v2DecodeBody(t, w), "created")[0]
-	if e, _ := rule["everything"].(bool); !e {
-		t.Fatalf("expected everything=true in response, got %v", rule["everything"])
+	if gt, _ := rule["grunt_type"].(string); gt != "everything" {
+		t.Fatalf("expected grunt_type=everything in response, got %v", rule["grunt_type"])
 	}
 	if _, ok := rule["type_id"]; ok {
 		t.Fatalf("everything rule should not carry type_id: %v", rule)
+	}
+	// The catch-alls have no gender.
+	if g := rule["gender"]; g != nil {
+		t.Fatalf("everything rule should not carry gender, got %v", g)
 	}
 }
 
@@ -297,8 +351,8 @@ func TestV2Invasion_BossRoundTrip(t *testing.T) {
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion", `[{"boss":true}]`)
 	rule := v2RulesArray(t, v2DecodeBody(t, w), "created")[0]
-	if b, _ := rule["boss"].(bool); !b {
-		t.Fatalf("expected boss=true in response, got %v", rule["boss"])
+	if gt, _ := rule["grunt_type"].(string); gt != "boss" {
+		t.Fatalf("expected grunt_type=boss in response, got %v", rule["grunt_type"])
 	}
 }
 
@@ -430,9 +484,9 @@ func TestV2Invasion_UnknownHuman404(t *testing.T) {
 
 // TestV2Invasion_RoundTrip_TypeIDMode is the Part B fixed-point check for the
 // invasion MODE case: a type_id rule (with male gender + default common fields)
-// GETs back with the active mode present (type_id), gender shown (male is not the
-// wildcard), and the inactive modes (everything/boss/grunt_id) absent; PUTting
-// that body back leaves the stored rule unchanged.
+// GETs back as grunt_type — the one targeting field a read emits — with gender
+// shown (male is not the wildcard) and the write-side modes absent; PUTting that
+// body back leaves the stored rule unchanged.
 func TestV2Invasion_RoundTrip_TypeIDMode(t *testing.T) {
 	r, is, _, restore := newV2InvasionTestAPI(t)
 	defer restore()
@@ -442,13 +496,13 @@ func TestV2Invasion_RoundTrip_TypeIDMode(t *testing.T) {
 	got := roundTripRule(t, r, basePath, `[{"type_id":11,"gender":"male","distance":300}]`)
 
 	// Active mode present; gender shown; inactive modes absent.
-	if got["type_id"] == nil {
-		t.Fatalf("active mode type_id must be present, got %v", got)
+	if got["grunt_type"] != "grass" {
+		t.Fatalf("read must emit grunt_type=grass, got %v", got)
 	}
 	if got["gender"] != "male" {
 		t.Fatalf("meaningful gender must be shown, got %v", got["gender"])
 	}
-	for _, k := range []string{"everything", "boss", "grunt_id"} {
+	for _, k := range []string{"everything", "boss", "grunt_id", "type_id"} {
 		if v, present := got[k]; present && v != nil {
 			t.Fatalf("inactive mode %s must be absent/null, got %v", k, v)
 		}
@@ -470,8 +524,8 @@ func TestV2Invasion_RoundTrip_EverythingMode(t *testing.T) {
 	basePath := "/api/v2/humans/u1/tracking/invasion"
 	got := roundTripRule(t, r, basePath, `[{"everything":true,"clean":true}]`)
 
-	if got["everything"] != true {
-		t.Fatalf("active mode everything must be present (true), got %v", got["everything"])
+	if got["grunt_type"] != "everything" {
+		t.Fatalf("read must emit grunt_type=everything, got %v", got["grunt_type"])
 	}
 	if v, present := got["type_id"]; present && v != nil {
 		t.Fatalf("type_id must be absent in everything mode, got %v", v)
@@ -531,5 +585,212 @@ func TestV2Invasion_PutSelfReplace_NoConflict(t *testing.T) {
 	rows := is.AllRows()
 	if len(rows) != 1 || rows[0].Distance != 750 {
 		t.Fatalf("replace did not apply: %+v", rows)
+	}
+}
+
+// --- #209: every rule v2 emits must be a rule v2 accepts ---------------------
+
+// invRules GETs the rule list for u1.
+func invRules(t *testing.T, r *gin.Engine) []map[string]any {
+	t.Helper()
+	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/tracking/invasion", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET invasion rules = %d: %s", w.Code, w.Body.String())
+	}
+	return v2RulesArray(t, v2DecodeBody(t, w), "rules")
+}
+
+// A rule whose stored grunt_type is a NAMED GRUNT returned no targeting field
+// of any kind, so handing a v2 read straight back to a v2 write failed with
+// "exactly one of type_id, grunt_id, everything, boss must be set". 41 of the
+// 59 distinct grunt_type values in shipped data are affected — every leader,
+// every npc_*, mixed, darkness, gruntb, decoy.
+func TestV2Invasion_NamedGruntRoundTrips(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	// Store a named-grunt rule the way the bot does.
+	is.Insert(&db.InvasionTrackingAPI{ID: "u1", ProfileNo: 1, GruntType: "giovanni"})
+
+	rules := invRules(t, r)
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d: %v", len(rules), rules)
+	}
+	gt, ok := rules[0]["grunt_type"].(string)
+	if !ok || gt != "giovanni" {
+		t.Fatalf("read emitted grunt_type=%v, want \"giovanni\"; full rule: %v", rules[0]["grunt_type"], rules[0])
+	}
+
+	// And the value it emitted must be one it accepts.
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"giovanni"}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-posting the emitted rule = %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ("mixed", gender 0) is what !invasion mixed stores, and no grunt_id can
+// express it: grunt ids 4 and 6 carry gender 1 and 2, and grunt_id mode takes
+// the grunt's own gender. This is why returning grunt_id on read would not
+// have closed the round trip.
+func TestV2Invasion_GenderlessPairedNameRoundTrips(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	is.Insert(&db.InvasionTrackingAPI{ID: "u1", ProfileNo: 1, GruntType: "mixed", Gender: 0})
+
+	rules := invRules(t, r)
+	if gt, _ := rules[0]["grunt_type"].(string); gt != "mixed" {
+		t.Fatalf("read emitted grunt_type=%v, want \"mixed\"", rules[0]["grunt_type"])
+	}
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"mixed"}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-posting = %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// A type-name rule also reads back as grunt_type: the read emits exactly one
+// targeting field, and it is whatever the rule is STORED as. That contract is
+// what lets a future grunt_id column start being emitted for grunt-targeted
+// rules without breaking clients.
+func TestV2Invasion_TypeNameRuleReadsBackAsGruntType(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	is.Insert(&db.InvasionTrackingAPI{ID: "u1", ProfileNo: 1, GruntType: "grass", Gender: 2})
+
+	rules := invRules(t, r)
+	if gt, _ := rules[0]["grunt_type"].(string); gt != "grass" {
+		t.Fatalf("read emitted grunt_type=%v, want \"grass\"", rules[0]["grunt_type"])
+	}
+}
+
+// grunt_id stays a first-class write mode — a future migration stores it
+// faithfully and matches on it, so it must not be reduced to sugar.
+func TestV2Invasion_GruntIDStillAccepted(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_id":44}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("grunt_id write = %d: %s", w.Code, w.Body.String())
+	}
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "giovanni" {
+		t.Fatalf("stored = %+v, want grunt_type giovanni", rows)
+	}
+}
+
+func TestV2Invasion_UnknownGruntTypeRejected(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"nosuchgrunt"}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for an unknown grunt_type, got %d: %s", w.Code, w.Body.String())
+	}
+	if n := len(is.AllRows()); n != 0 {
+		t.Errorf("rejected rule must not be stored; %d rows", n)
+	}
+}
+
+// grunt_type is a one-of mode like the others.
+func TestV2Invasion_GruntTypeIsMutuallyExclusive(t *testing.T) {
+	r, _, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"giovanni","type_id":11}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for two modes, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// gender must be usable with grunt_type — ("mixed", gender 1) has to be
+// expressible, and it is not a type_id.
+func TestV2Invasion_GenderAllowedWithGruntType(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"mixed","gender":"male"}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "mixed" || rows[0].Gender != 1 {
+		t.Fatalf("stored = %+v, want (mixed, gender 1)", rows)
+	}
+}
+
+// A pokestop-event name belongs to /incident and must not be settable here,
+// or the two endpoints would overlap on the shared table.
+func TestV2Invasion_EventNameRejectedAsGruntType(t *testing.T) {
+	r, _, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"showcase"}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for an event name on the invasion endpoint, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- space-separated legacy names -------------------------------------------
+
+// The bot's parser replaces underscores with spaces in unquoted tokens, so
+// rows written before the canonical set used underscores hold "npc 0" where
+// TypeNameFromTemplate now produces "npc_0". Such a row reads back verbatim
+// and used to 422 on the way in, which made GET -> PUT not quite total.
+//
+// They are dead either way — matching/invasion.go compares the stored value
+// against ResolveGruntTypeName, which returns the underscore form — so
+// normalising on write repairs the rule as well as closing the round trip.
+func TestV2Invasion_AcceptsSpaceSeparatedLegacyName(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"player team leader"}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a legacy space-separated name, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "player_team_leader" {
+		t.Fatalf("stored = %+v, want the normalised underscore form", rows)
+	}
+}
+
+// A stored legacy row must survive GET -> PUT, landing on the repaired form.
+func TestV2Invasion_LegacyRowRoundTripsToRepairedForm(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	is.Insert(&db.InvasionTrackingAPI{ID: "u1", ProfileNo: 1, GruntType: "npc 0"})
+
+	rules := invRules(t, r)
+	gt, _ := rules[0]["grunt_type"].(string)
+	if gt != "npc 0" {
+		t.Fatalf("read emitted %q, want the stored value verbatim", gt)
+	}
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"npc 0"}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-posting the emitted value = %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// Normalisation must not invent names: a genuinely unknown value still 422s.
+func TestV2Invasion_NormalisationStillRejectsUnknown(t *testing.T) {
+	r, _, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"no such grunt"}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for an unknown name, got %d: %s", w.Code, w.Body.String())
 	}
 }

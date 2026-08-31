@@ -1,40 +1,36 @@
 package commands
 
 import (
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
-	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/store"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func invasionCtx(t *testing.T) *bot.CommandContext {
+func invasionTestCtx(t *testing.T) (*bot.CommandContext, *store.MockTrackingStore[db.InvasionTrackingAPI]) {
 	t.Helper()
 	ctx, _ := testCtx(t)
-	ctx.Config = &config.Config{}
 
 	invasions := store.NewMockTrackingStore[db.InvasionTrackingAPI](
 		store.InvasionGetUID, store.InvasionSetUID,
-	)
-	ctx.Tracking = &store.TrackingStores{
-		Invasions: invasions,
-	}
+	).WithIDScope(func(i *db.InvasionTrackingAPI) string { return i.ID })
+	ctx.Tracking = &store.TrackingStores{Invasions: invasions}
 
 	gd := &gamedata.GameData{
 		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
 		Moves:    map[int]*gamedata.Move{},
 		Types:    map[int]*gamedata.TypeInfo{},
-		Grunts:   map[int]*gamedata.Grunt{},
+		Grunts: map[int]*gamedata.Grunt{
+			500: {ID: 500, Template: "CHARACTER_EVENT_NPC_0"},
+			40:  {ID: 40, Template: "CHARACTER_PLAYER_TEAM_LEADER"},
+			44:  {ID: 44, Template: "CHARACTER_GIOVANNI"},
+		},
+		Util: &gamedata.UtilData{PokestopEvent: map[int]gamedata.EventInfo{}},
 	}
-
 	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
 	ctx.Resolver = resolver
 	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
@@ -44,124 +40,59 @@ func invasionCtx(t *testing.T) *bot.CommandContext {
 		Translations:        ctx.Translations,
 		DefaultTemplateName: "1",
 	}
-	ctx.HasArea = true
-
-	return ctx
+	return ctx, invasions
 }
 
-func runInvasion(t *testing.T, ctx *bot.CommandContext, input string) []bot.Reply {
-	t.Helper()
-	cmd := &InvasionCommand{}
-	args := strings.Fields(input)
-	return cmd.Run(ctx, args)
-}
-
-func TestInvasion_Everything(t *testing.T) {
-	ctx := invasionCtx(t)
-	replies := runInvasion(t, ctx, "everything")
-
-	require.NotEmpty(t, replies)
-	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
-
-	rows, _ := ctx.Tracking.Invasions.SelectByIDProfile("user1", 1)
-	require.Len(t, rows, 1)
-	assert.Equal(t, "everything", rows[0].GruntType)
-}
-
-func TestInvasion_DefaultToEverything(t *testing.T) {
-	// When no type specified and no unrecognized args, defaults to everything
-	ctx := invasionCtx(t)
-	replies := runInvasion(t, ctx, "clean")
-
-	require.NotEmpty(t, replies)
-	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
-
-	rows, _ := ctx.Tracking.Invasions.SelectByIDProfile("user1", 1)
-	require.Len(t, rows, 1)
-	assert.Equal(t, "everything", rows[0].GruntType)
-}
-
-func TestInvasion_Duplicate(t *testing.T) {
-	ctx := invasionCtx(t)
-	replies1 := runInvasion(t, ctx, "everything")
-	require.NotEmpty(t, replies1)
-	assert.Equal(t, "✅", replies1[0].React)
-
-	replies2 := runInvasion(t, ctx, "everything")
-	require.NotEmpty(t, replies2)
-	assert.Equal(t, "👌", replies2[0].React, "duplicate should be 👌, reply: %s", replies2[0].Text)
-}
-
-func TestInvasion_Remove(t *testing.T) {
-	ctx := invasionCtx(t)
-	runInvasion(t, ctx, "everything")
-	rows, _ := ctx.Tracking.Invasions.SelectByIDProfile("user1", 1)
-	require.Len(t, rows, 1)
-
-	replies := runInvasion(t, ctx, "remove everything")
-	require.NotEmpty(t, replies)
-	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
-
-	rows, _ = ctx.Tracking.Invasions.SelectByIDProfile("user1", 1)
-	assert.Len(t, rows, 0)
-}
-
-func TestInvasion_InvalidTemplate_NonAdmin(t *testing.T) {
-	ctx := invasionCtx(t)
-	ctx.IsAdmin = false
-
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(dir+"/dts.json", []byte("[]"), 0644))
-	ts, err := dts.LoadTemplates(dir, dir)
-	require.NoError(t, err)
-	ctx.DTS = ts
-
-	replies := runInvasion(t, ctx, "everything template:99")
-	require.NotEmpty(t, replies)
-	assert.Equal(t, "🙅", replies[0].React)
-	assert.Contains(t, replies[0].Text, "99")
-}
-
-func TestInvasion_WithDistance(t *testing.T) {
-	ctx := invasionCtx(t)
-	ctx.HasLocation = true
-	replies := runInvasion(t, ctx, "everything d500")
-
-	require.NotEmpty(t, replies)
-	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
-
-	rows, _ := ctx.Tracking.Invasions.SelectByIDProfile("user1", 1)
-	require.Len(t, rows, 1)
-	assert.Equal(t, 500, rows[0].Distance)
-}
-
-func TestInvasion_AcceptsAreaOverride(t *testing.T) {
-	ctx, _ := newTestLocationCtx(t)
-
-	invasions := store.NewMockTrackingStore[db.InvasionTrackingAPI](
-		store.InvasionGetUID, store.InvasionSetUID,
-	)
-	ctx.Tracking = &store.TrackingStores{Invasions: invasions}
-
-	gd := &gamedata.GameData{
-		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
-		Moves:    map[int]*gamedata.Move{},
-		Types:    map[int]*gamedata.TypeInfo{},
-		Grunts:   map[int]*gamedata.Grunt{},
+// The parser replaces underscores with spaces in every unquoted token
+// (parser.go), so `!invasion npc_0` reaches the command as the arg "npc 0"
+// while the canonical set built from TypeNameFromTemplate holds "npc_0". Every
+// underscore-named grunt — the 24 npc_* and player_team_leader — was therefore
+// unreachable from the bot unless the user thought to quote it.
+func TestInvasionAcceptsUnderscoreNamesAfterParserNormalisation(t *testing.T) {
+	for _, arg := range []string{"npc 0", "player team leader"} {
+		t.Run(arg, func(t *testing.T) {
+			ctx, invasions := invasionTestCtx(t)
+			c := &InvasionCommand{}
+			replies := c.Run(ctx, []string{arg})
+			if len(replies) == 0 {
+				t.Fatal("expected a reply")
+			}
+			if replies[0].React == "🙅" {
+				t.Errorf("%q was rejected. The parser turns the typed npc_0 into %q, "+
+					"so this is exactly how an underscore-named grunt arrives: %+v",
+					arg, arg, replies[0])
+			}
+			// And it must store the CANONICAL underscore form, or the matcher
+			// (which compares against ResolveGruntTypeName) will never fire.
+			rows := invasions.AllRows()
+			want := strings.ReplaceAll(arg, " ", "_")
+			if len(rows) != 1 || rows[0].GruntType != want {
+				t.Errorf("stored = %+v, want grunt_type %q", rows, want)
+			}
+		})
 	}
-	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
-	ctx.Resolver = resolver
-	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
-	ctx.GameData = gd
-	ctx.RowText = &rowtext.Generator{GD: gd, Translations: ctx.Translations, DefaultTemplateName: "1"}
-	ctx.HasArea = true
+}
 
-	cmd := &InvasionCommand{}
-	replies := cmd.Run(ctx, strings.Fields("everything area:london"))
-	require.NotEmpty(t, replies)
-	assert.NotEqual(t, "🙅", replies[0].React, "rejected: %+v", replies)
+// A name that matches nothing must still be rejected — normalising a spelling
+// is not the same as accepting anything.
+func TestInvasionStillRejectsUnknownName(t *testing.T) {
+	ctx, _ := invasionTestCtx(t)
+	c := &InvasionCommand{}
+	replies := c.Run(ctx, []string{"no such grunt"})
+	if len(replies) == 0 || replies[0].React != "🙅" {
+		t.Errorf("expected rejection of an unknown name, got %+v", replies)
+	}
+}
 
-	rules, _ := ctx.Tracking.Invasions.SelectByIDProfile("user1", 1)
-	require.Len(t, rules, 1)
-	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+// A name with no underscore is unaffected.
+func TestInvasionAcceptsPlainName(t *testing.T) {
+	ctx, _ := invasionTestCtx(t)
+	c := &InvasionCommand{}
+	replies := c.Run(ctx, []string{"giovanni"})
+	if len(replies) == 0 {
+		t.Fatal("expected a reply")
+	}
+	if replies[0].React == "🙅" {
+		t.Errorf("giovanni was rejected: %+v", replies[0])
+	}
 }

@@ -299,6 +299,9 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		{"nest", cfg.General.DisableNest},
 		{"gym", cfg.General.DisableGym},
 		{"maxbattle", cfg.General.DisableMaxBattle},
+		// "showcase" rather than "pokestop_event": matches how "fort" was
+		// named for its tracking type in #195. See #210.
+		{"showcase", cfg.General.DisableShowcase},
 	}
 	disabledHooks := make([]string, 0)
 	for _, h := range hookTypes {

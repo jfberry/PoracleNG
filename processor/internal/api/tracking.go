@@ -245,16 +245,37 @@ func (f flexInt) isSet() bool {
 // Build it with newOverrideContext before the loop, then pass it into
 // validateOverrideFields for every row.
 type overrideContext struct {
-	human     *store.Human    // nil when AreaLogic is nil (no permission check needed)
-	permitted map[string]bool // lowercase area set; nil when area security disabled
+	human *store.Human
+	// permitted is the set of areas this human may scope a rule to, keyed the
+	// same way normalizeOverrideAreas keys what it stores (lowercased,
+	// underscores as spaces) so validation and storage cannot disagree about
+	// whether "North_Side" is the fence "north side".
+	//
+	// Nil means "could not determine" — no fences loaded — and the check is
+	// skipped rather than rejecting everything.
+	permitted map[string]bool
+}
+
+// normalizeAreaKey keys an area name for permission comparison, matching
+// normalizeOverrideAreas' storage normalisation exactly.
+func normalizeAreaKey(s string) string {
+	return strings.ToLower(strings.ReplaceAll(s, "_", " "))
 }
 
 // newOverrideContext fetches the full human record once and pre-builds the
 // permitted-area set. It is called once per handler invocation, outside the
 // per-row loop, so that a batch POST of N rows only issues one Get query.
 // Returns an error message + HTTP status on failure.
+// newOverrideContext resolves the human and the set of areas they may scope a
+// rule to.
+//
+// The permitted set used to come from AreaLogic alone, and AreaLogic is nil in
+// production (main.go never sets it), so the set was always nil and the
+// override_areas check never ran on any tracking write — v1 or v2, all 11
+// types. Falling back to the live state's fences is what makes it real; this
+// mirrors what v2_mutes.go already does for area-scoped mutes (#211).
 func newOverrideContext(deps *TrackingDeps, humanID string) (overrideContext, string, int) {
-	if deps.AreaLogic == nil {
+	if deps.Humans == nil {
 		return overrideContext{}, "", 0
 	}
 	human, err := deps.Humans.Get(humanID)
@@ -265,10 +286,23 @@ func newOverrideContext(deps *TrackingDeps, humanID string) (overrideContext, st
 		return overrideContext{}, "user not found", http.StatusNotFound
 	}
 	admin := isAdmin(deps, humanID)
-	available := deps.AreaLogic.GetAvailableAreas(human.CommunityMembership, admin)
-	permitted := make(map[string]bool, len(available))
-	for _, a := range available {
-		permitted[strings.ToLower(a.Name)] = true
+
+	var names []string
+	if deps.AreaLogic != nil {
+		// Prefer AreaLogic when present (community-aware, like the bot).
+		for _, a := range deps.AreaLogic.GetAvailableAreas(human.CommunityMembership, admin) {
+			names = append(names, a.Name)
+		}
+	} else if deps.StateMgr != nil {
+		// Production path: same policy, sourced from the live fences.
+		names = settableAreaNames(deps, human, admin, false)
+	} else {
+		return overrideContext{human: human}, "", 0
+	}
+
+	permitted := make(map[string]bool, len(names))
+	for _, n := range names {
+		permitted[normalizeAreaKey(n)] = true
 	}
 	return overrideContext{human: human, permitted: permitted}, "", 0
 }
@@ -322,7 +356,7 @@ func validateOverrideFields(
 
 	if hasAreas && oc.permitted != nil {
 		for _, a := range overrideAreas {
-			if !oc.permitted[strings.ToLower(a)] {
+			if !oc.permitted[normalizeAreaKey(a)] {
 				return "area not permitted: " + a, http.StatusBadRequest
 			}
 		}

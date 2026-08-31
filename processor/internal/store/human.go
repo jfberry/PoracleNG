@@ -189,8 +189,11 @@ type HumanStore interface {
 	// the profile does not exist.
 	SwitchProfile(id string, profileNo int) (bool, error)
 
-	// AddProfile creates a new profile, auto-assigning the next profile_no.
-	AddProfile(id string, name string, activeHours string) error
+	// AddProfile creates a new profile, auto-assigning the LOWEST FREE
+	// profile_no (not max+1 — with 1 and 3 taken the new one is 2), and
+	// returns the number it assigned. Callers cannot predict it, so returning
+	// it is the only way for an API to report what it created (#213).
+	AddProfile(id string, name string, activeHours string) (int, error)
 
 	// DeleteProfile removes a profile and its tracking data. If the
 	// deleted profile was current, switches to the lowest remaining.
@@ -204,6 +207,10 @@ type HumanStore interface {
 
 	// UpdateProfileHours updates the active_hours field on a profile.
 	UpdateProfileHours(id string, profileNo int, activeHours string) error
+
+	// UpdateProfileName renames a profile, leaving its schedule, area and
+	// location untouched (#213).
+	UpdateProfileName(id string, profileNo int, name string) error
 
 	// --- Saved locations ---
 

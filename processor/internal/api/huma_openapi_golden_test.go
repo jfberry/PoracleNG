@@ -164,7 +164,9 @@ func registerAllHumaOpsForTest(humaAPI huma.API) {
 	RegisterConfigSave(humaAPI, ConfigDeps{})
 	RegisterConfigValidate(humaAPI, ConfigDeps{})
 	RegisterMasterdataMonsters(humaAPI, nil, nil)
-	RegisterMasterdataGrunts(humaAPI, nil)
+	RegisterMasterdataGrunts(humaAPI, nil, nil)
+	RegisterMasterdataCostumes(humaAPI, nil, nil)
+	RegisterV2Activity(humaAPI, nil)
 
 	// Snapshot inspection + button actions.
 	RegisterSnapshotGet(humaAPI, nil)

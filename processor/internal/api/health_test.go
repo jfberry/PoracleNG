@@ -43,7 +43,7 @@ func TestHandleHealthReturnsCapabilities(t *testing.T) {
 
 	// Every capability documented in the Capabilities struct should
 	// appear in the response. New keys land here automatically.
-	expected := []string{"buttons", "snapshots", "autocreate", "tomlDts", "buttonResponseObject", "derivedDtsTypes"}
+	expected := []string{"buttons", "snapshots", "autocreate", "tomlDts", "buttonResponseObject", "derivedDtsTypes", "costume"}
 	for _, k := range expected {
 		v, ok := got.Capabilities[k]
 		if !ok {

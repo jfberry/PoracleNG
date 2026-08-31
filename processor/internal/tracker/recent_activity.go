@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-const recentActivityTTL = 6 * time.Hour
+// RecentActivityTTL is the recency window: an id stays "active" for this long
+// after it was last seen. Exported so the activity API can report the window it
+// is serving rather than clients hardcoding it.
+const RecentActivityTTL = 6 * time.Hour
 
 // RecentActivity tracks recently-seen IDs across several webhook-derived
 // categories (raid bosses, max battle bosses, quest rewards, invasion grunts).
@@ -174,6 +177,46 @@ func (r *RecentActivity) RecentForms(pokemonID int) []int {
 	return r.active(inner) // reuse the existing recency window logic
 }
 
+// allByPokemon returns the recency-windowed ids for every pokemon in m,
+// pruning expired entries and dropping any pokemon left with none. Takes the
+// lock once for the whole walk; callers must NOT already hold r.mu (sync.Mutex
+// is not reentrant, and this is why it does not simply loop over the
+// Recent*(pokemonID) accessors, which lock internally via active()).
+func (r *RecentActivity) allByPokemon(m map[int]map[int]time.Time) map[int][]int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cutoff := r.now().Add(-RecentActivityTTL)
+	out := make(map[int][]int, len(m))
+	for pokemonID, inner := range m {
+		ids := make([]int, 0, len(inner))
+		for id, ts := range inner {
+			if ts.Before(cutoff) {
+				delete(inner, id)
+				continue
+			}
+			ids = append(ids, id)
+		}
+		if len(ids) == 0 {
+			// Every entry for this pokemon aged out; drop the empty inner map
+			// so the outer map does not accumulate them.
+			delete(m, pokemonID)
+			continue
+		}
+		out[pokemonID] = ids
+	}
+	return out
+}
+
+// AllCostumes / AllForms / AllRaidCostumes / AllRaidForms are the whole-map
+// counterparts of the Recent*(pokemonID) accessors, for callers that need every
+// pokemon at once rather than one lookup at a time (the activity API).
+func (r *RecentActivity) AllCostumes() map[int][]int { return r.allByPokemon(r.costumesByPokemon) }
+func (r *RecentActivity) AllForms() map[int][]int    { return r.allByPokemon(r.formsByPokemon) }
+func (r *RecentActivity) AllRaidCostumes() map[int][]int {
+	return r.allByPokemon(r.raidCostumesByPokemon)
+}
+func (r *RecentActivity) AllRaidForms() map[int][]int { return r.allByPokemon(r.raidFormsByPokemon) }
+
 func (r *RecentActivity) record(m map[int]time.Time, id int) {
 	if id <= 0 {
 		return
@@ -186,7 +229,7 @@ func (r *RecentActivity) record(m map[int]time.Time, id int) {
 func (r *RecentActivity) active(m map[int]time.Time) []int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	cutoff := r.now().Add(-recentActivityTTL)
+	cutoff := r.now().Add(-RecentActivityTTL)
 	ids := make([]int, 0, len(m))
 	for id, ts := range m {
 		if ts.Before(cutoff) {

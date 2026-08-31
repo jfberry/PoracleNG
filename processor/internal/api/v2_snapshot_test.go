@@ -189,8 +189,8 @@ func TestV2Snapshot_TypeKeysAndInvasionIncidentSplit(t *testing.T) {
 	if len(inv) != 1 || len(inc) != 1 {
 		t.Fatalf("expected 1 invasion + 1 incident, got %d + %d", len(inv), len(inc))
 	}
-	if tid, _ := inv[0]["type_id"].(float64); int(tid) != 11 {
-		t.Fatalf("invasion rule should carry type_id=11, got %v", inv[0])
+	if gt, _ := inv[0]["grunt_type"].(string); gt != "grass" {
+		t.Fatalf("invasion rule should carry grunt_type=grass, got %v", inv[0])
 	}
 	if _, ok := inv[0]["display_type"]; ok {
 		t.Fatalf("invasion rule must not carry display_type: %v", inv[0])

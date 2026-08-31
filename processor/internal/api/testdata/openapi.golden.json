@@ -559,6 +559,25 @@
         ],
         "type": "object"
       },
+      "CostumeEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Costume id (game-master), the value stored in a tracking rule's costume field",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Display name in the requested locale, falling back to the raw masterfile name when the costume_<id> key is untranslated",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
       "Def": {
         "additionalProperties": false,
         "properties": {
@@ -1654,8 +1673,17 @@
           "grunt": {
             "type": "string"
           },
+          "grunt_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
           "secondReward": {
             "type": "boolean"
+          },
+          "short_name": {
+            "type": "string"
           },
           "thirdReward": {
             "type": "boolean"
@@ -1665,6 +1693,9 @@
           }
         },
         "required": [
+          "grunt_type",
+          "name",
+          "short_name",
           "type",
           "gender",
           "grunt",
@@ -2391,10 +2422,10 @@
         "additionalProperties": false,
         "properties": {
           "day": {
-            "description": "Day of week (0=Sunday … 6=Saturday)",
+            "description": "ISO day of week (1=Monday … 7=Sunday)",
             "format": "int64",
-            "maximum": 6,
-            "minimum": 0,
+            "maximum": 7,
+            "minimum": 1,
             "type": "integer"
           },
           "end_hours": {
@@ -2436,6 +2467,160 @@
           "day",
           "hours",
           "mins"
+        ],
+        "type": "object"
+      },
+      "V2ActivityBody": {
+        "additionalProperties": false,
+        "properties": {
+          "costumes": {
+            "description": "Costume ids seen on wild pokemon, grouped by pokemon, ascending by pokemon_id",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "forms": {
+            "description": "Form ids seen on wild pokemon, grouped by pokemon",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "invasion_grunts": {
+            "description": "Grunt ids (game-master) seen as invasions",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "max_battle_bosses": {
+            "description": "Pokédex ids seen as max battle bosses",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_candy": {
+            "description": "Pokédex ids seen as quest candy rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_items": {
+            "description": "Item ids seen as quest rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_mega": {
+            "description": "Pokédex ids seen as quest mega energy rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_pokemon": {
+            "description": "Pokédex ids seen as quest encounter rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_xl": {
+            "description": "Pokédex ids seen as quest XL candy rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "raid_bosses": {
+            "description": "Pokédex ids seen as raid bosses",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "raid_costumes": {
+            "description": "Costume ids seen on raid bosses, grouped by pokemon",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "raid_forms": {
+            "description": "Form ids seen on raid bosses, grouped by pokemon",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "window_secs": {
+            "description": "Recency window in seconds: an id appears here if it was seen within this many seconds",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_secs",
+          "raid_bosses",
+          "max_battle_bosses",
+          "quest_pokemon",
+          "quest_items",
+          "quest_candy",
+          "quest_mega",
+          "quest_xl",
+          "invasion_grunts",
+          "costumes",
+          "forms",
+          "raid_costumes",
+          "raid_forms"
         ],
         "type": "object"
       },
@@ -2484,6 +2669,24 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "V2AddProfileOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/V2ProfileResponse",
+            "description": "The created profile. Omitted only when the post-insert read-back failed; profile_no is still authoritative."
+          },
+          "profile_no": {
+            "description": "The profile_no assigned to the new profile — the LOWEST FREE number, which the caller cannot predict",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "profile_no"
         ],
         "type": "object"
       },
@@ -2718,6 +2921,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -2747,6 +2952,7 @@
                 "level": {
                   "description": "Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers.",
                   "format": "int64",
+                  "maximum": 90,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -2842,6 +3048,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -2871,6 +3079,7 @@
                 "level": {
                   "description": "Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers.",
                   "format": "int64",
+                  "maximum": 90,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -2966,6 +3175,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -2995,6 +3206,7 @@
                 "level": {
                   "description": "Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers.",
                   "format": "int64",
+                  "maximum": 90,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -3104,6 +3316,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3189,6 +3403,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3274,6 +3490,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3374,6 +3592,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3484,6 +3704,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3594,6 +3816,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3708,11 +3932,14 @@
                 "display_type": {
                   "description": "Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3791,11 +4018,14 @@
                 "display_type": {
                   "description": "Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3874,11 +4104,14 @@
                 "display_type": {
                   "description": "Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3972,6 +4205,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -3985,7 +4220,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -4001,9 +4236,14 @@
                   ]
                 },
                 "grunt_id": {
-                  "description": "Game-master grunt id; resolves to its type name and implies its own gender. One-of mode field. Mutually exclusive with type_id/everything/boss; gender not allowed. (On read-back a grunt_id rule is reported as type_id+gender, faithful to what is stored.)",
+                  "description": "Game-master grunt id; resolves to that grunt's name and implies its own gender. One-of mode field. Mutually exclusive with the others; gender not allowed. Read-back reports the rule as grunt_type, because that is what is stored — see grunt_type.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
+                },
+                "grunt_type": {
+                  "description": "The stored targeting value, and the ONE targeting field every read emits. Accepts any grunt name the bot accepts: a pokemon type (\"water\"), a named grunt (\"giovanni\", \"blanche\", \"mixed\", \"npc_0\"), or a catch-all (\"everything\", \"boss\"). type_id and grunt_id are input conveniences that resolve to one of these. Pokestop-event names are not valid here — use /incident. Enumerate valid names from GET /api/masterdata/grunts. One-of mode field; may be combined with gender.",
+                  "type": "string"
                 },
                 "override_areas": {
                   "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
@@ -4037,8 +4277,10 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
+                  "maximum": 18,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "uid": {
@@ -4079,6 +4321,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4092,7 +4336,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -4108,9 +4352,14 @@
                   ]
                 },
                 "grunt_id": {
-                  "description": "Game-master grunt id; resolves to its type name and implies its own gender. One-of mode field. Mutually exclusive with type_id/everything/boss; gender not allowed. (On read-back a grunt_id rule is reported as type_id+gender, faithful to what is stored.)",
+                  "description": "Game-master grunt id; resolves to that grunt's name and implies its own gender. One-of mode field. Mutually exclusive with the others; gender not allowed. Read-back reports the rule as grunt_type, because that is what is stored — see grunt_type.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
+                },
+                "grunt_type": {
+                  "description": "The stored targeting value, and the ONE targeting field every read emits. Accepts any grunt name the bot accepts: a pokemon type (\"water\"), a named grunt (\"giovanni\", \"blanche\", \"mixed\", \"npc_0\"), or a catch-all (\"everything\", \"boss\"). type_id and grunt_id are input conveniences that resolve to one of these. Pokestop-event names are not valid here — use /incident. Enumerate valid names from GET /api/masterdata/grunts. One-of mode field; may be combined with gender.",
+                  "type": "string"
                 },
                 "override_areas": {
                   "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
@@ -4144,8 +4393,10 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
+                  "maximum": 18,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "uid": {
@@ -4186,6 +4437,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4199,7 +4452,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -4215,9 +4468,14 @@
                   ]
                 },
                 "grunt_id": {
-                  "description": "Game-master grunt id; resolves to its type name and implies its own gender. One-of mode field. Mutually exclusive with type_id/everything/boss; gender not allowed. (On read-back a grunt_id rule is reported as type_id+gender, faithful to what is stored.)",
+                  "description": "Game-master grunt id; resolves to that grunt's name and implies its own gender. One-of mode field. Mutually exclusive with the others; gender not allowed. Read-back reports the rule as grunt_type, because that is what is stored — see grunt_type.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
+                },
+                "grunt_type": {
+                  "description": "The stored targeting value, and the ONE targeting field every read emits. Accepts any grunt name the bot accepts: a pokemon type (\"water\"), a named grunt (\"giovanni\", \"blanche\", \"mixed\", \"npc_0\"), or a catch-all (\"everything\", \"boss\"). type_id and grunt_id are input conveniences that resolve to one of these. Pokestop-event names are not valid here — use /incident. Enumerate valid names from GET /api/masterdata/grunts. One-of mode field; may be combined with gender.",
+                  "type": "string"
                 },
                 "override_areas": {
                   "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
@@ -4251,8 +4509,10 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
+                  "maximum": 18,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "uid": {
@@ -4300,6 +4560,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4383,6 +4645,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4466,6 +4730,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4560,6 +4826,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4583,6 +4851,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4598,6 +4867,8 @@
                 "level": {
                   "description": "Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -4606,6 +4877,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4631,6 +4903,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -4691,6 +4964,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4714,6 +4989,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4729,6 +5005,8 @@
                 "level": {
                   "description": "Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -4737,6 +5015,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4762,6 +5041,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -4822,6 +5102,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4845,6 +5127,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4860,6 +5143,8 @@
                 "level": {
                   "description": "Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -4868,6 +5153,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4893,6 +5179,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -4964,6 +5251,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4979,6 +5268,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -4987,6 +5277,7 @@
                 "min_spawn_avg": {
                   "description": "Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5012,6 +5303,7 @@
                 "pokemon_id": {
                   "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5065,6 +5357,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5080,6 +5374,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5088,6 +5383,7 @@
                 "min_spawn_avg": {
                   "description": "Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5113,6 +5409,7 @@
                 "pokemon_id": {
                   "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5166,6 +5463,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5181,6 +5480,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5189,6 +5489,7 @@
                 "min_spawn_avg": {
                   "description": "Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5214,6 +5515,7 @@
                 "pokemon_id": {
                   "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5267,6 +5569,8 @@
                 "atk": {
                   "description": "Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5282,6 +5586,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5290,6 +5595,8 @@
                 "def": {
                   "description": "Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5302,6 +5609,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5317,6 +5626,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5338,6 +5648,8 @@
                 "max_atk": {
                   "description": "Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5346,6 +5658,8 @@
                 "max_cp": {
                   "description": "Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5354,6 +5668,8 @@
                 "max_def": {
                   "description": "Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5362,6 +5678,8 @@
                 "max_iv": {
                   "description": "Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5370,6 +5688,8 @@
                 "max_level": {
                   "description": "Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5378,6 +5698,8 @@
                 "max_rarity": {
                   "description": "Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5386,6 +5708,8 @@
                 "max_size": {
                   "description": "Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5394,6 +5718,8 @@
                 "max_sta": {
                   "description": "Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5402,6 +5728,7 @@
                 "max_weight": {
                   "description": "Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5410,6 +5737,8 @@
                 "min_cp": {
                   "description": "Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5418,6 +5747,8 @@
                 "min_iv": {
                   "description": "Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5426,6 +5757,8 @@
                 "min_level": {
                   "description": "Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5434,6 +5767,7 @@
                 "min_time": {
                   "description": "Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5442,6 +5776,7 @@
                 "min_weight": {
                   "description": "Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5467,11 +5802,14 @@
                 "pokemon_id": {
                   "description": "Pokédex id (required)",
                   "format": "int64",
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5480,6 +5818,8 @@
                 "pvp_ranking_cap": {
                   "description": "PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5488,6 +5828,8 @@
                 "pvp_ranking_evolution": {
                   "description": "Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0).",
                   "format": "int64",
+                  "maximum": 3,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5510,6 +5852,7 @@
                 "pvp_ranking_min_cp": {
                   "description": "PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5518,6 +5861,8 @@
                 "pvp_ranking_worst": {
                   "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5526,6 +5871,8 @@
                 "rarity": {
                   "description": "Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5534,6 +5881,8 @@
                 "size": {
                   "description": "Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5542,6 +5891,8 @@
                 "sta": {
                   "description": "Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5585,6 +5936,8 @@
                 "atk": {
                   "description": "Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5600,6 +5953,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5608,6 +5962,8 @@
                 "def": {
                   "description": "Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5620,6 +5976,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5635,6 +5993,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5656,6 +6015,8 @@
                 "max_atk": {
                   "description": "Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5664,6 +6025,8 @@
                 "max_cp": {
                   "description": "Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5672,6 +6035,8 @@
                 "max_def": {
                   "description": "Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5680,6 +6045,8 @@
                 "max_iv": {
                   "description": "Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5688,6 +6055,8 @@
                 "max_level": {
                   "description": "Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5696,6 +6065,8 @@
                 "max_rarity": {
                   "description": "Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5704,6 +6075,8 @@
                 "max_size": {
                   "description": "Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5712,6 +6085,8 @@
                 "max_sta": {
                   "description": "Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5720,6 +6095,7 @@
                 "max_weight": {
                   "description": "Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5728,6 +6104,8 @@
                 "min_cp": {
                   "description": "Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5736,6 +6114,8 @@
                 "min_iv": {
                   "description": "Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5744,6 +6124,8 @@
                 "min_level": {
                   "description": "Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5752,6 +6134,7 @@
                 "min_time": {
                   "description": "Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5760,6 +6143,7 @@
                 "min_weight": {
                   "description": "Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5785,11 +6169,14 @@
                 "pokemon_id": {
                   "description": "Pokédex id (required)",
                   "format": "int64",
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5798,6 +6185,8 @@
                 "pvp_ranking_cap": {
                   "description": "PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5806,6 +6195,8 @@
                 "pvp_ranking_evolution": {
                   "description": "Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0).",
                   "format": "int64",
+                  "maximum": 3,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5828,6 +6219,7 @@
                 "pvp_ranking_min_cp": {
                   "description": "PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5836,6 +6228,8 @@
                 "pvp_ranking_worst": {
                   "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5844,6 +6238,8 @@
                 "rarity": {
                   "description": "Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5852,6 +6248,8 @@
                 "size": {
                   "description": "Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -5860,6 +6258,8 @@
                 "sta": {
                   "description": "Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5903,6 +6303,8 @@
                 "atk": {
                   "description": "Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5918,6 +6320,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5926,6 +6329,8 @@
                 "def": {
                   "description": "Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5938,6 +6343,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5953,6 +6360,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5974,6 +6382,8 @@
                 "max_atk": {
                   "description": "Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5982,6 +6392,8 @@
                 "max_cp": {
                   "description": "Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5990,6 +6402,8 @@
                 "max_def": {
                   "description": "Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -5998,6 +6412,8 @@
                 "max_iv": {
                   "description": "Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6006,6 +6422,8 @@
                 "max_level": {
                   "description": "Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6014,6 +6432,8 @@
                 "max_rarity": {
                   "description": "Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6022,6 +6442,8 @@
                 "max_size": {
                   "description": "Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6030,6 +6452,8 @@
                 "max_sta": {
                   "description": "Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6038,6 +6462,7 @@
                 "max_weight": {
                   "description": "Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6046,6 +6471,8 @@
                 "min_cp": {
                   "description": "Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6054,6 +6481,8 @@
                 "min_iv": {
                   "description": "Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6062,6 +6491,8 @@
                 "min_level": {
                   "description": "Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6070,6 +6501,7 @@
                 "min_time": {
                   "description": "Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6078,6 +6510,7 @@
                 "min_weight": {
                   "description": "Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6103,11 +6536,14 @@
                 "pokemon_id": {
                   "description": "Pokédex id (required)",
                   "format": "int64",
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6116,6 +6552,8 @@
                 "pvp_ranking_cap": {
                   "description": "PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6124,6 +6562,8 @@
                 "pvp_ranking_evolution": {
                   "description": "Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0).",
                   "format": "int64",
+                  "maximum": 3,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6146,6 +6586,7 @@
                 "pvp_ranking_min_cp": {
                   "description": "PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6154,6 +6595,8 @@
                 "pvp_ranking_worst": {
                   "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6162,6 +6605,8 @@
                 "rarity": {
                   "description": "Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6170,6 +6615,8 @@
                 "size": {
                   "description": "Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6178,6 +6625,8 @@
                 "sta": {
                   "description": "Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6251,6 +6700,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6365,6 +6816,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6479,6 +6932,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6592,6 +7047,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6604,6 +7060,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6619,6 +7077,7 @@
                 "evolution": {
                   "description": "Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6634,6 +7093,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6649,6 +7109,8 @@
                 "level": {
                   "description": "Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6657,6 +7119,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6682,6 +7145,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6757,6 +7221,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6769,6 +7234,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6784,6 +7251,7 @@
                 "evolution": {
                   "description": "Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6799,6 +7267,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6814,6 +7283,8 @@
                 "level": {
                   "description": "Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6822,6 +7293,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6847,6 +7319,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6922,6 +7395,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6934,6 +7408,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6949,6 +7425,7 @@
                 "evolution": {
                   "description": "Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6964,6 +7441,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -6979,6 +7457,8 @@
                 "level": {
                   "description": "Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -6987,6 +7467,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7012,6 +7493,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -7122,6 +7604,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7151,6 +7635,7 @@
                 "level": {
                   "description": "Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers.",
                   "format": "int64",
+                  "maximum": 90,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -7258,6 +7743,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7356,6 +7843,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7468,11 +7957,14 @@
                 "display_type": {
                   "description": "Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7564,6 +8056,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7577,7 +8071,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -7593,9 +8087,14 @@
                   ]
                 },
                 "grunt_id": {
-                  "description": "Game-master grunt id; resolves to its type name and implies its own gender. One-of mode field. Mutually exclusive with type_id/everything/boss; gender not allowed. (On read-back a grunt_id rule is reported as type_id+gender, faithful to what is stored.)",
+                  "description": "Game-master grunt id; resolves to that grunt's name and implies its own gender. One-of mode field. Mutually exclusive with the others; gender not allowed. Read-back reports the rule as grunt_type, because that is what is stored — see grunt_type.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
+                },
+                "grunt_type": {
+                  "description": "The stored targeting value, and the ONE targeting field every read emits. Accepts any grunt name the bot accepts: a pokemon type (\"water\"), a named grunt (\"giovanni\", \"blanche\", \"mixed\", \"npc_0\"), or a catch-all (\"everything\", \"boss\"). type_id and grunt_id are input conveniences that resolve to one of these. Pokestop-event names are not valid here — use /incident. Enumerate valid names from GET /api/masterdata/grunts. One-of mode field; may be combined with gender.",
+                  "type": "string"
                 },
                 "override_areas": {
                   "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
@@ -7629,8 +8128,10 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
+                  "maximum": 18,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "uid": {
@@ -7676,6 +8177,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7768,6 +8271,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7791,6 +8296,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7806,6 +8312,8 @@
                 "level": {
                   "description": "Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -7814,6 +8322,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7839,6 +8348,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -7908,6 +8418,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7923,6 +8435,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7931,6 +8444,7 @@
                 "min_spawn_avg": {
                   "description": "Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -7956,6 +8470,7 @@
                 "pokemon_id": {
                   "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8007,6 +8522,8 @@
                 "atk": {
                   "description": "Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8022,6 +8539,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8030,6 +8548,8 @@
                 "def": {
                   "description": "Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8042,6 +8562,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8057,6 +8579,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8078,6 +8601,8 @@
                 "max_atk": {
                   "description": "Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8086,6 +8611,8 @@
                 "max_cp": {
                   "description": "Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8094,6 +8621,8 @@
                 "max_def": {
                   "description": "Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8102,6 +8631,8 @@
                 "max_iv": {
                   "description": "Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8110,6 +8641,8 @@
                 "max_level": {
                   "description": "Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8118,6 +8651,8 @@
                 "max_rarity": {
                   "description": "Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8126,6 +8661,8 @@
                 "max_size": {
                   "description": "Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8134,6 +8671,8 @@
                 "max_sta": {
                   "description": "Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8142,6 +8681,7 @@
                 "max_weight": {
                   "description": "Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8150,6 +8690,8 @@
                 "min_cp": {
                   "description": "Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8158,6 +8700,8 @@
                 "min_iv": {
                   "description": "Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8166,6 +8710,8 @@
                 "min_level": {
                   "description": "Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8174,6 +8720,7 @@
                 "min_time": {
                   "description": "Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8182,6 +8729,7 @@
                 "min_weight": {
                   "description": "Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8207,11 +8755,14 @@
                 "pokemon_id": {
                   "description": "Pokédex id (required)",
                   "format": "int64",
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8220,6 +8771,8 @@
                 "pvp_ranking_cap": {
                   "description": "PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8228,6 +8781,8 @@
                 "pvp_ranking_evolution": {
                   "description": "Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0).",
                   "format": "int64",
+                  "maximum": 3,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8250,6 +8805,7 @@
                 "pvp_ranking_min_cp": {
                   "description": "PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8258,6 +8814,8 @@
                 "pvp_ranking_worst": {
                   "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8266,6 +8824,8 @@
                 "rarity": {
                   "description": "Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8274,6 +8834,8 @@
                 "size": {
                   "description": "Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8282,6 +8844,8 @@
                 "sta": {
                   "description": "Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8353,6 +8917,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8464,6 +9030,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8476,6 +9043,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8491,6 +9060,7 @@
                 "evolution": {
                   "description": "Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8506,6 +9076,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8521,6 +9092,8 @@
                 "level": {
                   "description": "Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8529,6 +9102,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -8554,6 +9128,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -8653,6 +9228,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -8682,6 +9259,7 @@
           "level": {
             "description": "Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers.",
             "format": "int64",
+            "maximum": 90,
             "minimum": 1,
             "type": "integer"
           },
@@ -8764,6 +9342,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -8835,6 +9415,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -8921,6 +9503,69 @@
         ],
         "type": "object"
       },
+      "V2HumanSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_disable": {
+            "description": "Whether an admin has disabled this account; such a user must re-register",
+            "type": "boolean"
+          },
+          "current_profile_no": {
+            "description": "The profile currently active for this human",
+            "format": "int64",
+            "type": "integer"
+          },
+          "enabled": {
+            "description": "Whether the user has alerts switched on (the !start/!stop flag)",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Human id (Discord/Telegram id, or webhook name)",
+            "type": "string"
+          },
+          "language": {
+            "description": "Alert language code, empty when the user has not chosen one",
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name",
+            "type": "string"
+          },
+          "type": {
+            "description": "Registration type, e.g. discord:user, discord:channel, webhook, telegram:user",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "enabled",
+          "admin_disable",
+          "language",
+          "current_profile_no"
+        ],
+        "type": "object"
+      },
+      "V2HumansListOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "humans": {
+            "description": "Matching humans, ascending by id",
+            "items": {
+              "$ref": "#/components/schemas/V2HumanSummary"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "humans"
+        ],
+        "type": "object"
+      },
       "V2IncidentRule": {
         "additionalProperties": false,
         "properties": {
@@ -8934,11 +9579,14 @@
           "display_type": {
             "description": "Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)",
             "format": "int64",
+            "minimum": 0,
             "type": "integer"
           },
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -9005,6 +9653,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -9018,7 +9668,7 @@
             ]
           },
           "everything": {
-            "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+            "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
             "type": "boolean"
           },
           "gender": {
@@ -9034,9 +9684,14 @@
             ]
           },
           "grunt_id": {
-            "description": "Game-master grunt id; resolves to its type name and implies its own gender. One-of mode field. Mutually exclusive with type_id/everything/boss; gender not allowed. (On read-back a grunt_id rule is reported as type_id+gender, faithful to what is stored.)",
+            "description": "Game-master grunt id; resolves to that grunt's name and implies its own gender. One-of mode field. Mutually exclusive with the others; gender not allowed. Read-back reports the rule as grunt_type, because that is what is stored — see grunt_type.",
             "format": "int64",
+            "minimum": 0,
             "type": "integer"
+          },
+          "grunt_type": {
+            "description": "The stored targeting value, and the ONE targeting field every read emits. Accepts any grunt name the bot accepts: a pokemon type (\"water\"), a named grunt (\"giovanni\", \"blanche\", \"mixed\", \"npc_0\"), or a catch-all (\"everything\", \"boss\"). type_id and grunt_id are input conveniences that resolve to one of these. Pokestop-event names are not valid here — use /incident. Enumerate valid names from GET /api/masterdata/grunts. One-of mode field; may be combined with gender.",
+            "type": "string"
           },
           "override_areas": {
             "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
@@ -9070,8 +9725,10 @@
             ]
           },
           "type_id": {
-            "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+            "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
             "format": "int64",
+            "maximum": 18,
+            "minimum": 1,
             "type": "integer"
           }
         },
@@ -9111,6 +9768,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9140,6 +9799,7 @@
                 "level": {
                   "description": "Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers.",
                   "format": "int64",
+                  "maximum": 90,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -9247,6 +9907,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9345,6 +10007,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9457,11 +10121,14 @@
                 "display_type": {
                   "description": "Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9553,6 +10220,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9566,7 +10235,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -9582,9 +10251,14 @@
                   ]
                 },
                 "grunt_id": {
-                  "description": "Game-master grunt id; resolves to its type name and implies its own gender. One-of mode field. Mutually exclusive with type_id/everything/boss; gender not allowed. (On read-back a grunt_id rule is reported as type_id+gender, faithful to what is stored.)",
+                  "description": "Game-master grunt id; resolves to that grunt's name and implies its own gender. One-of mode field. Mutually exclusive with the others; gender not allowed. Read-back reports the rule as grunt_type, because that is what is stored — see grunt_type.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": "integer"
+                },
+                "grunt_type": {
+                  "description": "The stored targeting value, and the ONE targeting field every read emits. Accepts any grunt name the bot accepts: a pokemon type (\"water\"), a named grunt (\"giovanni\", \"blanche\", \"mixed\", \"npc_0\"), or a catch-all (\"everything\", \"boss\"). type_id and grunt_id are input conveniences that resolve to one of these. Pokestop-event names are not valid here — use /incident. Enumerate valid names from GET /api/masterdata/grunts. One-of mode field; may be combined with gender.",
+                  "type": "string"
                 },
                 "override_areas": {
                   "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
@@ -9618,8 +10292,10 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
+                  "maximum": 18,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "uid": {
@@ -9665,6 +10341,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9757,6 +10435,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9780,6 +10460,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9795,6 +10476,8 @@
                 "level": {
                   "description": "Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -9803,6 +10486,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9828,6 +10512,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -9897,6 +10582,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9912,6 +10599,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9920,6 +10608,7 @@
                 "min_spawn_avg": {
                   "description": "Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -9945,6 +10634,7 @@
                 "pokemon_id": {
                   "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -9996,6 +10686,8 @@
                 "atk": {
                   "description": "Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10011,6 +10703,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10019,6 +10712,8 @@
                 "def": {
                   "description": "Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10031,6 +10726,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10046,6 +10743,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10067,6 +10765,8 @@
                 "max_atk": {
                   "description": "Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10075,6 +10775,8 @@
                 "max_cp": {
                   "description": "Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10083,6 +10785,8 @@
                 "max_def": {
                   "description": "Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10091,6 +10795,8 @@
                 "max_iv": {
                   "description": "Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10099,6 +10805,8 @@
                 "max_level": {
                   "description": "Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10107,6 +10815,8 @@
                 "max_rarity": {
                   "description": "Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10115,6 +10825,8 @@
                 "max_size": {
                   "description": "Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10123,6 +10835,8 @@
                 "max_sta": {
                   "description": "Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10131,6 +10845,7 @@
                 "max_weight": {
                   "description": "Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10139,6 +10854,8 @@
                 "min_cp": {
                   "description": "Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 9000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10147,6 +10864,8 @@
                 "min_iv": {
                   "description": "Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10155,6 +10874,8 @@
                 "min_level": {
                   "description": "Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 55,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10163,6 +10884,7 @@
                 "min_time": {
                   "description": "Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10171,6 +10893,7 @@
                 "min_weight": {
                   "description": "Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10196,11 +10919,14 @@
                 "pokemon_id": {
                   "description": "Pokédex id (required)",
                   "format": "int64",
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10209,6 +10935,8 @@
                 "pvp_ranking_cap": {
                   "description": "PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 100,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10217,6 +10945,8 @@
                 "pvp_ranking_evolution": {
                   "description": "Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0).",
                   "format": "int64",
+                  "maximum": 3,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10239,6 +10969,7 @@
                 "pvp_ranking_min_cp": {
                   "description": "PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10247,6 +10978,8 @@
                 "pvp_ranking_worst": {
                   "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 4096,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10255,6 +10988,8 @@
                 "rarity": {
                   "description": "Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 6,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10263,6 +10998,8 @@
                 "size": {
                   "description": "Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 5,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10271,6 +11008,8 @@
                 "sta": {
                   "description": "Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 15,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10342,6 +11081,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10453,6 +11194,7 @@
                 "costume": {
                   "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10465,6 +11207,8 @@
                 "distance": {
                   "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10480,6 +11224,7 @@
                 "evolution": {
                   "description": "Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10495,6 +11240,7 @@
                 "form": {
                   "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10510,6 +11256,8 @@
                 "level": {
                   "description": "Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused).",
                   "format": "int64",
+                  "maximum": 90,
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10518,6 +11266,7 @@
                 "move": {
                   "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
                   "format": "int64",
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -10543,6 +11292,7 @@
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
+                  "minimum": 1,
                   "type": [
                     "integer",
                     "null"
@@ -10692,6 +11442,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -10759,6 +11511,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -10782,6 +11536,7 @@
           "form": {
             "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -10797,6 +11552,8 @@
           "level": {
             "description": "Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused).",
             "format": "int64",
+            "maximum": 90,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -10805,6 +11562,7 @@
           "move": {
             "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -10830,6 +11588,7 @@
           "pokemon_id": {
             "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
             "format": "int64",
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -10933,6 +11692,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -10948,6 +11709,7 @@
           "form": {
             "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -10956,6 +11718,7 @@
           "min_spawn_avg": {
             "description": "Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -10981,6 +11744,7 @@
           "pokemon_id": {
             "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11003,12 +11767,40 @@
         },
         "type": "object"
       },
+      "V2PokemonIDs": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Ids seen on this pokemon within the window, ascending",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pokemon_id": {
+            "description": "Pokédex id",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pokemon_id",
+          "ids"
+        ],
+        "type": "object"
+      },
       "V2PokemonRule": {
         "additionalProperties": false,
         "properties": {
           "atk": {
             "description": "Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 15,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11024,6 +11816,7 @@
           "costume": {
             "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11032,6 +11825,8 @@
           "def": {
             "description": "Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 15,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11040,6 +11835,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11055,6 +11852,7 @@
           "form": {
             "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11076,6 +11874,8 @@
           "max_atk": {
             "description": "Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 15,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11084,6 +11884,8 @@
           "max_cp": {
             "description": "Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 9000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11092,6 +11894,8 @@
           "max_def": {
             "description": "Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 15,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11100,6 +11904,8 @@
           "max_iv": {
             "description": "Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 100,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11108,6 +11914,8 @@
           "max_level": {
             "description": "Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 55,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11116,6 +11924,8 @@
           "max_rarity": {
             "description": "Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 6,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11124,6 +11934,8 @@
           "max_size": {
             "description": "Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 5,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11132,6 +11944,8 @@
           "max_sta": {
             "description": "Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 15,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11140,6 +11954,7 @@
           "max_weight": {
             "description": "Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11148,6 +11963,8 @@
           "min_cp": {
             "description": "Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 9000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11156,6 +11973,8 @@
           "min_iv": {
             "description": "Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 100,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11164,6 +11983,8 @@
           "min_level": {
             "description": "Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 55,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11172,6 +11993,7 @@
           "min_time": {
             "description": "Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11180,6 +12002,7 @@
           "min_weight": {
             "description": "Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11205,11 +12028,14 @@
           "pokemon_id": {
             "description": "Pokédex id (required)",
             "format": "int64",
+            "minimum": 1,
             "type": "integer"
           },
           "pvp_ranking_best": {
             "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 4096,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11218,6 +12044,8 @@
           "pvp_ranking_cap": {
             "description": "PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 100,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11226,6 +12054,8 @@
           "pvp_ranking_evolution": {
             "description": "Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0).",
             "format": "int64",
+            "maximum": 3,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11248,6 +12078,7 @@
           "pvp_ranking_min_cp": {
             "description": "PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11256,6 +12087,8 @@
           "pvp_ranking_worst": {
             "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 4096,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11264,6 +12097,8 @@
           "rarity": {
             "description": "Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 6,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11272,6 +12107,8 @@
           "size": {
             "description": "Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 5,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11280,6 +12117,8 @@
           "sta": {
             "description": "Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 15,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11402,6 +12241,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11492,6 +12333,7 @@
           "costume": {
             "description": "Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11500,6 +12342,8 @@
           "distance": {
             "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard.",
             "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11515,6 +12359,7 @@
           "evolution": {
             "description": "Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11530,6 +12375,7 @@
           "form": {
             "description": "Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11545,6 +12391,8 @@
           "level": {
             "description": "Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused).",
             "format": "int64",
+            "maximum": 90,
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11553,6 +12401,7 @@
           "move": {
             "description": "Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard.",
             "format": "int64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
@@ -11578,6 +12427,7 @@
           "pokemon_id": {
             "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
             "format": "int64",
+            "minimum": 1,
             "type": [
               "integer",
               "null"
@@ -11666,7 +12516,40 @@
         "additionalProperties": false,
         "properties": {
           "areas": {
-            "description": "Requested area names; intersected with the human's allowed areas (invalid/duplicate entries dropped)",
+            "description": "Requested area names. Matched case-insensitively against the fences this human may select; duplicates are collapsed and anything unmatched comes back in the rejected list rather than being dropped silently.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trusted": {
+            "description": "Set true to select fences that are not userSelectable — for a server-side client that has already authorised the change (e.g. the user drew the fence). Honoured because the caller holds the API secret. Unknown fence names are still rejected.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "areas"
+        ],
+        "type": "object"
+      },
+      "V2SetAreasOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "areas": {
+            "description": "The areas now stored, lowercased and deduped",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "rejected": {
+            "description": "Requested names that were NOT stored — unknown fences, or fences this human may not select. Empty when everything applied.",
             "items": {
               "type": "string"
             },
@@ -11677,7 +12560,8 @@
           }
         },
         "required": [
-          "areas"
+          "areas",
+          "rejected"
         ],
         "type": "object"
       },
@@ -11777,19 +12661,17 @@
         "additionalProperties": false,
         "properties": {
           "active_hours": {
-            "description": "New active-hours schedule ([] clears it). Validated against the strict schema.",
+            "description": "New active-hours schedule ([] clears it, omitted leaves it unchanged). Validated against the strict schema.",
             "items": {
               "$ref": "#/components/schemas/V2ActiveHourEntry"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
+          },
+          "name": {
+            "description": "New profile name. Omit to leave it unchanged.",
+            "type": "string"
           }
         },
-        "required": [
-          "active_hours"
-        ],
         "type": "object"
       },
       "ValidationIssue": {
@@ -13502,10 +14384,70 @@
         ]
       }
     },
+    "/masterdata/costumes": {
+      "get": {
+        "description": "Returns costumes keyed by costume id (an empty object when game data is unavailable). `?locale=` selects the language (default `en`); a costume with no translation in that locale falls back to the raw masterfile name rather than the bare translation key.",
+        "operationId": "get-masterdata-costumes",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "locale",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/CostumeEntry"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "All costumes with localised names",
+        "tags": [
+          "masterdata"
+        ]
+      }
+    },
     "/masterdata/grunts": {
       "get": {
-        "description": "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). Keys are arbitrary grunt ids; each value is a poracle2Grunt (type, gender, grunt category, per-slot reward flags, encounters).",
+        "description": "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). Each value carries `grunt_type` — the canonical string an invasion tracking rule stores and the one targeting field a v2 invasion read emits — plus `name` and `short_name` (the display name and its abbreviated form), the `type` and `grunt` halves, gender, per-slot reward flags and encounters. `?locale=` selects the language (default `en`): `name` resolves via grunt_<id> and `short_name` via grunt_a_<id>, which gamelocale ships already composed as type + category + gender. `type` and `grunt` resolve via poke_type_<id> and character_category_<id> and remain available for clients that want to compose their own label. Index on `grunt_type`, not on the map key: several grunt ids share one grunt_type.",
         "operationId": "get-masterdata-grunts",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "locale",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -13536,7 +14478,7 @@
             "poracleSecret": []
           }
         ],
-        "summary": "Grunt types",
+        "summary": "Grunt types with localised names",
         "tags": [
           "masterdata"
         ]
@@ -14375,7 +15317,101 @@
         ]
       }
     },
+    "/v2/activity": {
+      "get": {
+        "description": "Everything the processor has seen within `window_secs`, in one response: raid and max battle bosses, quest reward ids, invasion grunts, and the costumes/forms seen on wild pokemon and raid bosses. Intended for populating pickers with what is actually live rather than the whole masterfile. Resolve ids to names via /api/masterdata/monsters, /api/masterdata/costumes and /api/masterdata/grunts. An empty list means nothing of that kind was seen recently — NOT that the server lacks support; use the /health capability flags for that. Data is in-memory and does not survive a restart.",
+        "operationId": "v2-get-activity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ActivityBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Recently-seen bosses, rewards, costumes and forms",
+        "tags": [
+          "v2-activity"
+        ]
+      }
+    },
     "/v2/humans": {
+      "get": {
+        "description": "Lists humans on this instance, ascending by id. `?type=` narrows to one registration type; `?id=a,b,c` fetches a specific set in one request (unknown ids are omitted, not an error). Combining them intersects. Returns a summary per human — use GET /v2/humans/{id} for the full resource.",
+        "operationId": "v2-list-humans",
+        "parameters": [
+          {
+            "description": "Filter to one registration type, e.g. webhook or discord:user. Omit for every type.",
+            "explode": false,
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "description": "Filter to one registration type, e.g. webhook or discord:user. Omit for every type.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated ids to fetch, e.g. id=123,456 — the same form as the bulk tracking delete's uid=. Unknown ids are omitted rather than erroring. Omit to list everything.",
+            "explode": false,
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "description": "Comma-separated ids to fetch, e.g. id=123,456 — the same form as the bulk tracking delete's uid=. Unknown ids are omitted rather than erroring. Omit to list everything.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2HumansListOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "List registered humans",
+        "tags": [
+          "v2-humans"
+        ]
+      },
       "post": {
         "description": "Creates a new user/channel/webhook with an optional community membership and a default profile. Returns the created human resource.",
         "operationId": "v2-create-human",
@@ -14423,6 +15459,53 @@
       }
     },
     "/v2/humans/{id}": {
+      "delete": {
+        "description": "Removes the human along with every tracking rule, profile and summary schedule they own. Irreversible. 404 if the human does not exist. Triggers a state reload.",
+        "operationId": "v2-delete-human",
+        "parameters": [
+          {
+            "description": "Human id (the owning user)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Delete a human and all their data",
+        "tags": [
+          "v2-humans"
+        ]
+      },
       "get": {
         "description": "Returns the full human resource. blocked_alerts is a read-only derived field. 404 if the human does not exist.",
         "operationId": "v2-get-human",
@@ -14628,7 +15711,7 @@
         ]
       },
       "post": {
-        "description": "Intersects the requested areas with what the human is allowed to select (userSelectable for non-admins, community-filtered when area_security is enabled), dedups, lowercases, and stores the result. Triggers a state reload. 404 if the human does not exist.",
+        "description": "Stores the requested areas, lowercased and deduped, after matching them against the fences this human may select (userSelectable for non-admins, community-filtered when area_security is enabled). Names that do not match come back in `rejected` rather than being discarded silently. Set `trusted: true` to select non-userSelectable fences on behalf of a user whose client has already authorised the change; unknown names are still rejected. Triggers a state reload. 404 if the human does not exist.",
         "operationId": "v2-set-human-areas",
         "parameters": [
           {
@@ -14657,7 +15740,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                  "$ref": "#/components/schemas/V2SetAreasOutputBody"
                 }
               }
             },
@@ -14858,7 +15941,7 @@
     },
     "/v2/humans/{id}/language": {
       "post": {
-        "description": "Validated against the configured available_languages (case-insensitive) when restricted; otherwise any code is accepted. Triggers a state reload. 404 if the human does not exist; 422 if the language is empty or unavailable.",
+        "description": "Validated against the configured available_languages (case-insensitive) when the operator has restricted them; otherwise against the set of languages this server actually has translations for, so unrestricted does not mean unvalidated. NOTE: the code is stored lowercased, so a client that sends \"DE\" reads back \"de\" — compare case-insensitively. Triggers a state reload. 404 if the human does not exist; 422 if the language is empty or unavailable.",
         "operationId": "v2-set-human-language",
         "parameters": [
           {
@@ -15594,7 +16677,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                  "$ref": "#/components/schemas/V2AddProfileOutputBody"
                 }
               }
             },
@@ -15682,7 +16765,7 @@
         ]
       },
       "patch": {
-        "description": "Replaces the profile's active-hours schedule. The schedule is validated against the strict schema (numeric bounds + step/end cross-field, no cross-midnight); an empty [] clears the schedule. 422 on an invalid schedule; 404 if the human does not exist. Triggers a state reload.",
+        "description": "Partial update: send `name`, `active_hours`, or both — omitted fields are left unchanged. The schedule is validated against the strict schema (numeric bounds + step/end cross-field, no cross-midnight); an empty [] clears it. 422 on an invalid schedule or a body with neither field; 404 if the human does not exist. Triggers a state reload.",
         "operationId": "v2-update-human-profile",
         "parameters": [
           {
@@ -15744,7 +16827,7 @@
             "poracleSecret": []
           }
         ],
-        "summary": "Update a profile's active_hours",
+        "summary": "Update a profile's name and/or active_hours",
         "tags": [
           "v2-profiles"
         ]

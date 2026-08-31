@@ -40,7 +40,15 @@ import (
 // This type is reusable: a future v2 summaries-schedule endpoint shares the same
 // shape and the same validateV2ActiveHours guard.
 type v2ActiveHourEntry struct {
-	Day      int  `json:"day" minimum:"0" maximum:"6" doc:"Day of week (0=Sunday … 6=Saturday)"`
+	// ISO 8601 weekday numbering, matching what the scheduler actually reads:
+	// cmd/processor/profiles.go's isoDow maps Go's time.Weekday to Monday=1 …
+	// Sunday=7, and the stored entry is compared against that directly. The
+	// schema previously declared 0–6, so Sunday was unexpressible and day=0
+	// was stored happily but matched no weekday and never fired (#208). The
+	// bot (activeHoursDayKeys, indexed Day-1 from Monday) and v1 already
+	// agreed with the scheduler; only the v2 schema and the migration guide
+	// were wrong.
+	Day      int  `json:"day" minimum:"1" maximum:"7" doc:"ISO day of week (1=Monday … 7=Sunday)"`
 	Hours    int  `json:"hours" minimum:"0" maximum:"23" doc:"Start hour (0–23)"`
 	Mins     int  `json:"mins" minimum:"0" maximum:"59" doc:"Start minute (0–59)"`
 	Step     int  `json:"step,omitempty" minimum:"0" doc:"Step in hours; >0 makes this a range entry, 0/absent = single-fire"`
@@ -255,6 +263,16 @@ type v2AddProfileInput struct {
 	Body v2AddProfileBody
 }
 
+// v2AddProfileOutput reports the created profile. profile_no is always present;
+// profile carries the full resource and is omitted only if the read-back after
+// the insert failed.
+type v2AddProfileOutput struct {
+	Body struct {
+		ProfileNo int                `json:"profile_no" doc:"The profile_no assigned to the new profile — the LOWEST FREE number, which the caller cannot predict"`
+		Profile   *v2ProfileResponse `json:"profile,omitempty" doc:"The created profile. Omitted only when the post-insert read-back failed; profile_no is still authoritative."`
+	}
+}
+
 func registerV2ProfileAdd(api huma.API, deps *TrackingDeps, tag []string, sec []map[string][]string) {
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-add-human-profile", Method: "POST", Path: "/v2/humans/{id}/profiles",
@@ -263,7 +281,7 @@ func registerV2ProfileAdd(api huma.API, deps *TrackingDeps, tag []string, sec []
 			"schema (numeric bounds + step/end cross-field, no cross-midnight) and stored as JSON. 422 if the name is empty or " +
 			"active_hours is invalid; 404 if the human does not exist. Triggers a state reload.",
 		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
-	}, func(_ context.Context, in *v2AddProfileInput) (*statusOKOutput, error) {
+	}, func(_ context.Context, in *v2AddProfileInput) (*v2AddProfileOutput, error) {
 		if _, err := resolveFullHuman(deps, in.ID); err != nil {
 			return nil, err
 		}
@@ -274,19 +292,48 @@ func registerV2ProfileAdd(api huma.API, deps *TrackingDeps, tag []string, sec []
 		if err != nil {
 			return nil, err
 		}
-		if err := deps.Humans.AddProfile(in.ID, in.Body.Name, activeHours); err != nil {
+		profileNo, err := deps.Humans.AddProfile(in.ID, in.Body.Name, activeHours)
+		if err != nil {
 			log.Errorf("v2 profiles: add %s: %s", in.ID, err)
 			return nil, huma.Error500InternalServerError("database error")
 		}
 		reloadState(deps)
-		return okStatus(), nil
+
+		// Report the profile we actually created. The store assigns the lowest
+		// FREE profile_no, which the caller cannot predict, so returning only
+		// {"status":"ok"} forced a snapshot/create/re-read/diff dance against
+		// names that are not unique (#213).
+		out := &v2AddProfileOutput{}
+		out.Body.ProfileNo = profileNo
+		profiles, err := deps.Humans.GetProfiles(in.ID)
+		if err != nil {
+			// The profile IS created; only the read-back failed. Report the
+			// number rather than failing the whole call.
+			log.Errorf("v2 profiles: read back %s/%d after add: %s", in.ID, profileNo, err)
+			return out, nil
+		}
+		for _, p := range profiles {
+			if p.ProfileNo == profileNo {
+				created := profileToV2Response(p)
+				out.Body.Profile = &created
+				break
+			}
+		}
+		return out, nil
 	})
 }
 
 // --- update active_hours ----------------------------------------------------
 
+// v2UpdateProfileBody is a genuine PATCH: every field is optional and only the
+// ones present are written. Sending exactly one of them leaves the other alone.
+//
+// active_hours is a POINTER to the slice so "absent" (leave the schedule) is
+// distinguishable from "[]" (clear the schedule) — the distinction a rename
+// needs.
 type v2UpdateProfileBody struct {
-	ActiveHours []v2ActiveHourEntry `json:"active_hours" doc:"New active-hours schedule ([] clears it). Validated against the strict schema."`
+	Name        *string              `json:"name,omitempty" doc:"New profile name. Omit to leave it unchanged."`
+	ActiveHours *[]v2ActiveHourEntry `json:"active_hours,omitempty" doc:"New active-hours schedule ([] clears it, omitted leaves it unchanged). Validated against the strict schema."`
 }
 
 type v2UpdateProfileInput struct {
@@ -298,22 +345,40 @@ type v2UpdateProfileInput struct {
 func registerV2ProfileUpdate(api huma.API, deps *TrackingDeps, tag []string, sec []map[string][]string) {
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-update-human-profile", Method: "PATCH", Path: "/v2/humans/{id}/profiles/{profile_no}",
-		Summary: "Update a profile's active_hours",
-		Description: "Replaces the profile's active-hours schedule. The schedule is validated against the strict schema (numeric bounds " +
-			"+ step/end cross-field, no cross-midnight); an empty [] clears the schedule. 422 on an invalid schedule; 404 if the " +
-			"human does not exist. Triggers a state reload.",
+		Summary: "Update a profile's name and/or active_hours",
+		Description: "Partial update: send `name`, `active_hours`, or both — omitted fields are left unchanged. The schedule is " +
+			"validated against the strict schema (numeric bounds + step/end cross-field, no cross-midnight); an empty [] clears " +
+			"it. 422 on an invalid schedule or a body with neither field; 404 if the human does not exist. Triggers a state reload.",
 		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2UpdateProfileInput) (*statusOKOutput, error) {
 		if _, err := resolveFullHuman(deps, in.ID); err != nil {
 			return nil, err
 		}
-		activeHours, err := marshalV2ActiveHours(in.Body.ActiveHours)
-		if err != nil {
-			return nil, err
+		// A PATCH carrying nothing to change is a client bug; saying so beats
+		// answering "ok" to a request that wrote nothing — which is exactly
+		// what v1's rename path does (#213).
+		if in.Body.Name == nil && in.Body.ActiveHours == nil {
+			return nil, huma.Error422UnprocessableEntity("provide name, active_hours, or both")
 		}
-		if err := deps.Humans.UpdateProfileHours(in.ID, in.ProfileNo, activeHours); err != nil {
-			log.Errorf("v2 profiles: update %s/%d: %s", in.ID, in.ProfileNo, err)
-			return nil, huma.Error500InternalServerError("database error")
+
+		if in.Body.ActiveHours != nil {
+			activeHours, err := marshalV2ActiveHours(*in.Body.ActiveHours)
+			if err != nil {
+				return nil, err
+			}
+			if err := deps.Humans.UpdateProfileHours(in.ID, in.ProfileNo, activeHours); err != nil {
+				log.Errorf("v2 profiles: update hours %s/%d: %s", in.ID, in.ProfileNo, err)
+				return nil, huma.Error500InternalServerError("database error")
+			}
+		}
+		if in.Body.Name != nil {
+			if *in.Body.Name == "" {
+				return nil, huma.Error422UnprocessableEntity("name must not be empty")
+			}
+			if err := deps.Humans.UpdateProfileName(in.ID, in.ProfileNo, *in.Body.Name); err != nil {
+				log.Errorf("v2 profiles: rename %s/%d: %s", in.ID, in.ProfileNo, err)
+				return nil, huma.Error500InternalServerError("database error")
+			}
 		}
 		reloadState(deps)
 		return okStatus(), nil

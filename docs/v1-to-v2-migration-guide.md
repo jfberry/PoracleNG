@@ -143,7 +143,7 @@ is **not** a sentinel to avoid.
 - **pokemon** — `pvp_ranking_evolution` (int mega/temp-evolution discriminator: `0` base, `1` Mega,
   `2` Mega X, `3` Mega Y) is new on v2.
 - **`active_hours`** (profile PATCH and `POST /api/summaries/{id}/{alertType}`) — now a validated
-  typed array of `{day 0–6, hours 0–23, mins 0–59, optional step/end_hours/end_mins}` entries,
+  typed array of `{day 1–7 (ISO: 1=Monday … 7=Sunday), hours 0–23, mins 0–59, optional step/end_hours/end_mins}` entries,
   strict ints, no cross-midnight ranges. v1's freeform JSON passthrough is gone.
 
 ### Response shapes

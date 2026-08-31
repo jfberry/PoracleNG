@@ -131,7 +131,9 @@ func HandleAddProfile(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			if err := deps.Humans.AddProfile(id, req.Name, activeHours); err != nil {
+			// v1 is frozen: it does not report the assigned profile_no. See
+			// #213 and the v2 create, which does.
+			if _, err := deps.Humans.AddProfile(id, req.Name, activeHours); err != nil {
 				log.Errorf("Profiles API: add profile: %s", err)
 				trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 				return

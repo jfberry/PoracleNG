@@ -657,7 +657,11 @@ func main() {
 	// Masterdata reads (migrated to huma, in place — typed maps re-marshalled to
 	// the same JSON the gin handlers produced).
 	api.RegisterMasterdataMonsters(humaAPI, proc.enricher.GameData, proc.enricher.Translations)
-	api.RegisterMasterdataGrunts(humaAPI, proc.enricher.GameData)
+	api.RegisterMasterdataGrunts(humaAPI, proc.enricher.GameData, proc.enricher.Translations)
+	api.RegisterMasterdataCostumes(humaAPI, proc.enricher.GameData, proc.enricher.Translations)
+	// Recently-seen bosses/rewards/costumes/forms, for clients populating
+	// pickers with what is live rather than the whole masterfile.
+	api.RegisterV2Activity(humaAPI, proc.recentActivity)
 
 	// Snapshot inspection (migrated to huma, in place) — admin-only via the
 	// api_secret middleware. Returns 503 if [snapshots] enabled = false; 404 on

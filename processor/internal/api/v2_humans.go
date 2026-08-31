@@ -338,8 +338,10 @@ func registerV2HumanLanguage(api huma.API, deps *TrackingDeps, tag []string, sec
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-set-human-language", Method: "POST", Path: "/v2/humans/{id}/language",
 		Summary: "Set a human's language",
-		Description: "Validated against the configured available_languages (case-insensitive) when restricted; otherwise any code is accepted. " +
-			"Triggers a state reload. 404 if the human does not exist; 422 if the language is empty or unavailable.",
+		Description: "Validated against the configured available_languages (case-insensitive) when the operator has restricted them; " +
+			"otherwise against the set of languages this server actually has translations for, so unrestricted does not mean " +
+			"unvalidated. NOTE: the code is stored lowercased, so a client that sends \"DE\" reads back \"de\" — compare " +
+			"case-insensitively. Triggers a state reload. 404 if the human does not exist; 422 if the language is empty or unavailable.",
 		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2LanguageInput) (*statusOKOutput, error) {
 		if _, err := resolveFullHuman(deps, in.ID); err != nil {
@@ -365,6 +367,25 @@ func registerV2HumanLanguage(api huma.API, deps *TrackingDeps, tag []string, sec
 				return nil, huma.Error422UnprocessableEntity("language is not available")
 			}
 			language = matched
+		} else if deps.Translations != nil {
+			// Unrestricted: still validate against what the server can actually
+			// translate into. Storing a code with no translations produces a
+			// user whose alerts silently fall back for every string (#216).
+			// An empty bundle means "cannot tell" — accept rather than reject
+			// everything.
+			if loaded := deps.Translations.Locales(); len(loaded) > 0 {
+				known := false
+				for _, code := range loaded {
+					if strings.EqualFold(code, language) {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return nil, huma.Error422UnprocessableEntity(
+						"unknown language: this server has no translations for " + language)
+				}
+			}
 		}
 
 		if err := deps.Humans.SetLanguage(in.ID, language); err != nil {
@@ -485,7 +506,23 @@ func registerV2HumanCheckLocation(api huma.API, deps *TrackingDeps, tag []string
 // --- set areas -------------------------------------------------------------
 
 type v2SetAreasBody struct {
-	Areas []string `json:"areas" required:"true" doc:"Requested area names; intersected with the human's allowed areas (invalid/duplicate entries dropped)"`
+	Areas []string `json:"areas" required:"true" doc:"Requested area names. Matched case-insensitively against the fences this human may select; duplicates are collapsed and anything unmatched comes back in the rejected list rather than being dropped silently."`
+	// The API secret is what distinguishes a server-side client from an end
+	// user, so a caller that holds it may assert that a request is already
+	// authorised on the user's behalf. This lifts the userSelectable filter
+	// ONLY — an unknown fence name is still rejected, so a typo cannot become
+	// a stored area that matches nothing. See #215.
+	Trusted bool `json:"trusted,omitempty" doc:"Set true to select fences that are not userSelectable — for a server-side client that has already authorised the change (e.g. the user drew the fence). Honoured because the caller holds the API secret. Unknown fence names are still rejected."`
+}
+
+// v2SetAreasOutput reports the outcome of a set-areas call. v1 answered 200
+// with no body detail while quietly discarding names, so a caller could not
+// tell a fully-applied request from a partly-ignored one (#215).
+type v2SetAreasOutput struct {
+	Body struct {
+		Areas    []string `json:"areas" doc:"The areas now stored, lowercased and deduped"`
+		Rejected []string `json:"rejected" doc:"Requested names that were NOT stored — unknown fences, or fences this human may not select. Empty when everything applied."`
+	}
 }
 
 type v2SetAreasInput struct {
@@ -497,50 +534,34 @@ func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-set-human-areas", Method: "POST", Path: "/v2/humans/{id}/areas",
 		Summary: "Set a human's selected areas",
-		Description: "Intersects the requested areas with what the human is allowed to select (userSelectable for non-admins, " +
-			"community-filtered when area_security is enabled), dedups, lowercases, and stores the result. Triggers a state reload. " +
-			"404 if the human does not exist.",
+		Description: "Stores the requested areas, lowercased and deduped, after matching them against the fences this human may " +
+			"select (userSelectable for non-admins, community-filtered when area_security is enabled). Names that do not match " +
+			"come back in `rejected` rather than being discarded silently. Set `trusted: true` to select non-userSelectable " +
+			"fences on behalf of a user whose client has already authorised the change; unknown names are still rejected. " +
+			"Triggers a state reload. 404 if the human does not exist.",
 		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
-	}, func(_ context.Context, in *v2SetAreasInput) (*statusOKOutput, error) {
+	}, func(_ context.Context, in *v2SetAreasInput) (*v2SetAreasOutput, error) {
 		human, err := resolveFullHuman(deps, in.ID)
 		if err != nil {
 			return nil, err
 		}
 
-		// Mirror v1 HandleSetAreas: lowercase requested, build allowed set,
-		// intersect+dedup, store.
-		requested := make([]string, len(in.Body.Areas))
-		for i, a := range in.Body.Areas {
-			requested[i] = strings.ToLower(a)
-		}
-
-		st := deps.StateMgr.Get()
-		admin := isAdmin(deps, in.ID)
-
-		var allowedAreas []string
-		for _, f := range st.Fences {
-			if !admin && !f.UserSelectable {
-				continue
-			}
-			allowedAreas = append(allowedAreas, strings.ToLower(f.Name))
-		}
-		if deps.Config.Area.Enabled && !admin && human.AreaRestriction != nil {
-			allowedAreas = community.FilterAreas(
-				deps.Config.Area.Communities, human.CommunityMembership, allowedAreas)
-		}
-
-		allowedSet := make(map[string]bool, len(allowedAreas))
-		for _, a := range allowedAreas {
-			allowedSet[strings.ToLower(a)] = true
-		}
+		allowedSet := settableAreaSet(deps, human, isAdmin(deps, in.ID), in.Body.Trusted)
 
 		seen := make(map[string]bool)
 		newAreas := []string{}
-		for _, a := range requested {
-			if allowedSet[a] && !seen[a] {
-				seen[a] = true
-				newAreas = append(newAreas, a)
+		rejected := []string{}
+		for _, raw := range in.Body.Areas {
+			a := strings.ToLower(raw)
+			if !allowedSet[a] {
+				rejected = append(rejected, raw)
+				continue
 			}
+			if seen[a] {
+				continue
+			}
+			seen[a] = true
+			newAreas = append(newAreas, a)
 		}
 
 		if err := deps.Humans.SetArea(in.ID, human.CurrentProfileNo, newAreas); err != nil {
@@ -548,11 +569,64 @@ func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec
 			return nil, huma.Error500InternalServerError("database error")
 		}
 		reloadState(deps)
-		return okStatus(), nil
+
+		out := &v2SetAreasOutput{}
+		out.Body.Areas = newAreas
+		out.Body.Rejected = rejected
+		return out, nil
 	})
 }
 
 // --- shared helpers --------------------------------------------------------
+
+// settableAreaSet is THE definition of "which fences may this human be given",
+// shared by set-areas (#215) and per-rule override_areas validation (#211) so
+// the two cannot drift apart.
+//
+// Membership in the set always requires the fence to EXIST. On top of that:
+//   - admins, and trusted callers, may select any fence;
+//   - everyone else is limited to userSelectable fences;
+//   - area_security, when enabled, further narrows to the human's communities.
+//
+// trusted is an assertion by a caller holding the API secret that the change
+// is already authorised on the user's behalf — it lifts userSelectable, never
+// the existence check.
+func settableAreaNames(deps *TrackingDeps, human *store.Human, admin, trusted bool) []string {
+	if deps.StateMgr == nil {
+		return nil
+	}
+	st := deps.StateMgr.Get()
+	if st == nil {
+		return nil
+	}
+	unrestricted := admin || trusted
+
+	var allowed []string
+	for _, f := range st.Fences {
+		if !unrestricted && !f.UserSelectable {
+			continue
+		}
+		allowed = append(allowed, strings.ToLower(f.Name))
+	}
+	if deps.Config != nil && deps.Config.Area.Enabled && !unrestricted &&
+		human != nil && human.AreaRestriction != nil {
+		allowed = community.FilterAreas(
+			deps.Config.Area.Communities, human.CommunityMembership, allowed)
+	}
+	return allowed
+}
+
+// settableAreaSet keys settableAreaNames for the set-areas path, which stores
+// names lowercased. (The per-rule override path keys the same policy with
+// normalizeAreaKey instead, because that is how it stores.)
+func settableAreaSet(deps *TrackingDeps, human *store.Human, admin, trusted bool) map[string]bool {
+	names := settableAreaNames(deps, human, admin, trusted)
+	set := make(map[string]bool, len(names))
+	for _, a := range names {
+		set[strings.ToLower(a)] = true
+	}
+	return set
+}
 
 // lowerFenceNames returns the lowercased names of every fence (the "all areas"
 // baseline both the available-areas and set-areas paths start from).
@@ -571,6 +645,8 @@ func RegisterV2Humans(humaAPI huma.API, deps *TrackingDeps) {
 	sec := []map[string][]string{{"poracleSecret": {}}}
 
 	registerV2HumanCreate(humaAPI, deps, tag, sec)
+	registerV2HumansList(humaAPI, deps, tag, sec)
+	registerV2HumanDelete(humaAPI, deps, tag, sec)
 	registerV2HumanGet(humaAPI, deps, tag, sec)
 	registerV2HumanAreasGet(humaAPI, deps, tag, sec)
 	registerV2HumanEnable(humaAPI, deps, tag, sec)

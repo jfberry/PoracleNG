@@ -22,16 +22,16 @@ import (
 // pokemon_id, move, evolution all default to 9000 (the "any / by level"
 // sentinel the engine uses), per the field audit maxbattle table.
 type v2MaxbattleRule struct {
-	PokemonID *int    `json:"pokemon_id,omitempty" nullable:"true" doc:"Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level."`
-	Level     *int    `json:"level,omitempty" nullable:"true" doc:"Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused)."`
-	Form      *int    `json:"form,omitempty" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
-	Move      *int    `json:"move,omitempty" nullable:"true" doc:"Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
+	PokemonID *int    `json:"pokemon_id,omitempty" minimum:"1" nullable:"true" doc:"Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level."`
+	Level     *int    `json:"level,omitempty" minimum:"1" maximum:"90" nullable:"true" doc:"Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused)."`
+	Form      *int    `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
+	Move      *int    `json:"move,omitempty" minimum:"0" nullable:"true" doc:"Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
 	Gmax      *bool   `json:"gmax,omitempty" nullable:"true" doc:"Match Gigantamax only. Omit to match regardless (default false). Returned as null when false."`
 	Evolution *int    `json:"evolution,omitempty" nullable:"true" doc:"Evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
 	StationID *string `json:"station_id,omitempty" nullable:"true" doc:"Restrict to a specific power-spot station id. Omit (or empty/null) to match any station (stored as null). Returned as null when unset."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`

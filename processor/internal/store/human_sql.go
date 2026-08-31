@@ -376,15 +376,15 @@ func (s *SQLHumanStore) SwitchProfile(id string, profileNo int) (bool, error) {
 	return true, nil
 }
 
-func (s *SQLHumanStore) AddProfile(id string, name string, activeHours string) error {
+func (s *SQLHumanStore) AddProfile(id string, name string, activeHours string) (int, error) {
 	var profiles []profileRow
 	if err := s.db.Select(&profiles, `SELECT * FROM profiles WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("select profiles for %s: %w", id, err)
+		return 0, fmt.Errorf("select profiles for %s: %w", id, err)
 	}
 
 	var human humanRow
 	if err := s.db.Get(&human, `SELECT `+humanRowColumns+` FROM humans WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("select human %s for add profile: %w", id, err)
+		return 0, fmt.Errorf("select human %s for add profile: %w", id, err)
 	}
 
 	newProfileNo := 1
@@ -411,9 +411,9 @@ func (s *SQLHumanStore) AddProfile(id string, name string, activeHours string) e
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		id, newProfileNo, name, human.Area, human.Latitude, human.Longitude, activeHours)
 	if err != nil {
-		return fmt.Errorf("insert profile %s/%d: %w", id, newProfileNo, err)
+		return 0, fmt.Errorf("insert profile %s/%d: %w", id, newProfileNo, err)
 	}
-	return nil
+	return newProfileNo, nil
 }
 
 func (s *SQLHumanStore) DeleteProfile(id string, profileNo int) error {
@@ -531,6 +531,15 @@ func (s *SQLHumanStore) UpdateProfileHours(id string, profileNo int, activeHours
 		activeHours, id, profileNo)
 	if err != nil {
 		return fmt.Errorf("update profile hours %s/%d: %w", id, profileNo, err)
+	}
+	return nil
+}
+
+func (s *SQLHumanStore) UpdateProfileName(id string, profileNo int, name string) error {
+	_, err := s.db.Exec(
+		`UPDATE profiles SET name = ? WHERE id = ? AND profile_no = ?`, name, id, profileNo)
+	if err != nil {
+		return fmt.Errorf("update profile name %s/%d: %w", id, profileNo, err)
 	}
 	return nil
 }

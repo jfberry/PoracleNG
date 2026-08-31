@@ -186,8 +186,8 @@ func TestV2Incident_CrossTypeIsolation(t *testing.T) {
 	if len(invRules) != 1 {
 		t.Fatalf("invasion list: expected 1, got %d", len(invRules))
 	}
-	if _, ok := invRules[0]["type_id"]; !ok {
-		t.Fatalf("invasion list entry should carry type_id: %v", invRules[0])
+	if gt, _ := invRules[0]["grunt_type"].(string); gt != "grass" {
+		t.Fatalf("invasion list entry should carry grunt_type: %v", invRules[0])
 	}
 
 	// incident list → only the incident (showcase).

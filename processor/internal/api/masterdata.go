@@ -1,11 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
 // poracle2Monster matches the poracle-v2 monsters.json format that PoracleWeb expects.
@@ -40,8 +42,12 @@ type poracle2Evo struct {
 	CandyCost int `json:"candyCost"`
 }
 
-// buildGruntsResponse converts processor Grunt data to the poracle-v2 grunts.json format.
-func buildGruntsResponse(gd *gamedata.GameData) map[string]*poracle2Grunt {
+// buildGruntsResponse converts processor Grunt data to the poracle-v2 grunts.json
+// format, with names in the requested locale.
+//
+// tr may be nil, in which case the English masterfile-derived names are used —
+// the shape this endpoint served before it learned about locales.
+func buildGruntsResponse(gd *gamedata.GameData, tr *i18n.Translator) map[string]*poracle2Grunt {
 	if gd == nil {
 		return make(map[string]*poracle2Grunt)
 	}
@@ -57,16 +63,25 @@ func buildGruntsResponse(gd *gamedata.GameData) map[string]*poracle2Grunt {
 	for _, id := range ids {
 		g := gd.Grunts[id]
 
-		// Derive the "type" string from the template. This matches the alerter's
-		// grunts.json format where "type" is an English name like "Bug", "Mixed", etc.
-		typeName := gamedata.TypeNameFromTemplate(g.Template)
-		// Capitalize the first letter for display.
-		if len(typeName) > 0 {
-			typeName = strings.ToUpper(typeName[:1]) + typeName[1:]
-		}
+		// gruntType is the canonical stored string an invasion tracking rule
+		// holds, and the one field every v2 invasion read emits (#209). Without
+		// it a client cannot map a rule back to a display name.
+		gruntType := gamedata.TypeNameFromTemplate(g.Template)
 
-		// Derive the "grunt" category name from the template.
+		// "type" is the distinguishing half of the display name: the localised
+		// pokemon type for typed grunts, else the template-derived name. That
+		// fallback is what keeps Blanche, Candela and Spark apart — they all
+		// share category 1 ("Team Leader"), so the category alone cannot.
+		// Mirrors enrichment's gruntTypeName chain in invasion.go.
+		typeName := gruntDisplayType(g, gruntType, tr)
+
+		// "grunt" is the category half: Grunt, Giovanni, Team Leader, ...
 		gruntName := gruntCategoryName(g)
+		if tr != nil {
+			if localised := tr.T(g.CategoryKey()); localised != g.CategoryKey() && localised != "" {
+				gruntName = localised
+			}
+		}
 
 		// Build encounter lists in the poracle-v2 format.
 		encounters := poracle2Encounters{
@@ -76,6 +91,9 @@ func buildGruntsResponse(gd *gamedata.GameData) map[string]*poracle2Grunt {
 		}
 
 		result[strconv.Itoa(id)] = &poracle2Grunt{
+			GruntType:    gruntType,
+			Name:         gruntDisplayName(id, typeName, gruntName, tr),
+			ShortName:    gruntShortName(id, tr),
 			Type:         typeName,
 			Gender:       g.Gender,
 			Grunt:        gruntName,
@@ -90,6 +108,17 @@ func buildGruntsResponse(gd *gamedata.GameData) map[string]*poracle2Grunt {
 }
 
 type poracle2Grunt struct {
+	// GruntType is the canonical stored grunt_type string (lowercased,
+	// template-derived) — the value an invasion tracking rule holds and the
+	// one targeting field a v2 invasion read emits.
+	GruntType string `json:"grunt_type"`
+	// Name is the complete display name in the requested locale, from the
+	// gamelocale grunt_<id> key: already composed as type + category + gender
+	// ("Dark - Grunt (Female)" / "Unlicht - Rüpel (Weiblich)"), and shipped
+	// for 415 grunts across 16 locales. ShortName is the abbreviated form
+	// (grunt_a_<id>, e.g. "Dark ♀") for compact pickers.
+	Name         string             `json:"name"`
+	ShortName    string             `json:"short_name"`
 	Type         string             `json:"type"`
 	Gender       int                `json:"gender"`
 	Grunt        string             `json:"grunt"`
@@ -144,4 +173,58 @@ func gruntCategoryName(g *gamedata.Grunt) string {
 	default:
 		return "Unset"
 	}
+}
+
+// gruntDisplayType resolves the distinguishing half of a grunt's display name:
+// the localised pokemon type when the grunt has one, else the template-derived
+// name title-cased. Mirrors the gruntTypeName chain in enrichment/invasion.go.
+func gruntDisplayType(g *gamedata.Grunt, gruntType string, tr *i18n.Translator) string {
+	if tr != nil {
+		if key := g.TypeKey(); key != "" {
+			if localised := tr.T(key); localised != key && localised != "" {
+				return localised
+			}
+		}
+	}
+	if gruntType == "" {
+		return ""
+	}
+	return strings.ToUpper(gruntType[:1]) + gruntType[1:]
+}
+
+// gruntDisplayName resolves a grunt's full display name.
+//
+// gamelocale already ships this, composed and translated, as grunt_<id> — the
+// type, category and gender in one string, for 415 grunts across 16 locales.
+// Prefer it; compose from the halves only when the key is absent, which is
+// what keeps a grunt outside that set from rendering as a bare "grunt_123".
+func gruntDisplayName(id int, typeName, categoryName string, tr *i18n.Translator) string {
+	if tr != nil {
+		key := fmt.Sprintf("grunt_%d", id)
+		if v := tr.T(key); v != key && v != "" {
+			return v
+		}
+	}
+	switch {
+	case typeName != "" && categoryName != "":
+		return typeName + " - " + categoryName
+	case categoryName != "":
+		return categoryName
+	default:
+		return typeName
+	}
+}
+
+// gruntShortName resolves the abbreviated display name (grunt_a_<id>, e.g.
+// "Dark ♀"). Empty when the locale has no short form — a client should fall
+// back to Name rather than treat empty as an error.
+func gruntShortName(id int, tr *i18n.Translator) string {
+	if tr == nil {
+		return ""
+	}
+	key := fmt.Sprintf("grunt_a_%d", id)
+	if v := tr.T(key); v != key && v != "" {
+		return v
+	}
+	return ""
 }

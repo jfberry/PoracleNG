@@ -15,8 +15,10 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -58,8 +60,19 @@ func newV2PokemonTestAPI(t *testing.T) (*gin.Engine, *store.MockTrackingStore[db
 		},
 	}
 
+	// Live fences, so override_areas validation has something to validate
+	// against. Production carries no AreaLogic, so StateMgr is the only
+	// source of the permitted set (#211).
+	fences := []geofence.Fence{
+		humanSquareFence("alpha", 10, 10, 1),
+		humanSquareFence("beta", 20, 20, 1),
+	}
+	mgr := state.NewManager()
+	mgr.Set(&state.State{Fences: fences, Geofence: geofence.NewSpatialIndex(fences)})
+
 	deps := &TrackingDeps{
 		Humans:   humans,
+		StateMgr: mgr,
 		Tracking: &store.TrackingStores{Monsters: monsterStore},
 		Config:   &config.Config{},
 		RowText: &rowtext.Generator{
@@ -781,5 +794,122 @@ func TestV2Pokemon_AcceptsValidPVPLeagues(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("league %d should be accepted, got %d: %s", league, w.Code, w.Body.String())
 		}
+	}
+}
+
+// --- #211: override_areas must actually be validated ------------------------
+
+// validateOverrideFields has always contained an override_areas check, but it
+// only runs when oc.permitted is non-nil, and permitted is nil whenever
+// deps.AreaLogic is nil — which it always is in production (main.go never sets
+// it). The check was dead code on every tracking write, v1 and v2, for all 11
+// types, so a rule could be scoped to a fence that does not exist and would
+// simply never match.
+func TestV2Pokemon_RejectsUnknownOverrideArea(t *testing.T) {
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true",
+		`[{"pokemon_id":25,"override_areas":["nosuchfence"]}]`)
+	if w.Code != http.StatusBadRequest && w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 4xx for an unknown override area, got %d: %s", w.Code, w.Body.String())
+	}
+	if n := len(monsterStore.AllRows()); n != 0 {
+		t.Errorf("a rejected rule must not be stored; store has %d rows", n)
+	}
+}
+
+func TestV2Pokemon_AcceptsKnownOverrideArea(t *testing.T) {
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true",
+		`[{"pokemon_id":25,"override_areas":["alpha"]}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a known area, got %d: %s", w.Code, w.Body.String())
+	}
+	if n := len(monsterStore.AllRows()); n != 1 {
+		t.Fatalf("expected the rule stored, store has %d rows", n)
+	}
+}
+
+// Storage normalises underscores to spaces (normalizeOverrideAreas) while the
+// permitted set is keyed on raw lowercased fence names. Validating without the
+// same normalisation would reject a name that would have stored and matched
+// perfectly well.
+func TestV2Pokemon_OverrideAreaNormalisationMatchesStorage(t *testing.T) {
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	// Fence is named "alpha"; underscores and case must not change the verdict.
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true",
+		`[{"pokemon_id":25,"override_areas":["ALPHA"]}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a case-variant known area, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := monsterStore.AllRows()
+	if len(rows) != 1 || len(rows[0].OverrideAreas) != 1 || rows[0].OverrideAreas[0] != "alpha" {
+		t.Errorf("stored override_areas = %+v, want normalised [alpha]", rows)
+	}
+}
+
+// --- #211: value bounds -----------------------------------------------------
+
+// v2 is strict about SHAPE (unknown fields and query params are 422) but was
+// not strict about VALUES, which is surprising in the other direction. A rule
+// with min_iv 200 was accepted, stored and read back verbatim; IV is 0-100, so
+// it could never match, with no warning at write time and nothing to see at
+// run time. It surfaced only when a screenshot read "IV 200-100%".
+func TestV2Pokemon_RejectsOutOfRangeFilterValues(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"min_iv above 100", `{"pokemon_id":25,"min_iv":200}`},
+		{"min_iv below 0", `{"pokemon_id":25,"min_iv":-5}`},
+		{"max_iv above 100", `{"pokemon_id":25,"max_iv":250}`},
+		{"min_level above 55", `{"pokemon_id":25,"min_level":99}`},
+		{"max_level above 55", `{"pokemon_id":25,"max_level":99}`},
+		{"atk above 15", `{"pokemon_id":25,"atk":16}`},
+		{"def below 0", `{"pokemon_id":25,"def":-1}`},
+		{"sta above 15", `{"pokemon_id":25,"sta":99}`},
+		{"max_atk above 15", `{"pokemon_id":25,"max_atk":16}`},
+		{"max_rarity above 6", `{"pokemon_id":25,"max_rarity":9}`},
+		{"max_size above 5", `{"pokemon_id":25,"max_size":9}`},
+		{"pvp_ranking_evolution above 3", `{"pokemon_id":25,"pvp_ranking_evolution":7}`},
+		{"negative distance", `{"pokemon_id":25,"distance":-1}`},
+		{"pokemon_id zero", `{"pokemon_id":0}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+			defer restore()
+
+			w := v2DoReq(t, r, http.MethodPost,
+				"/api/v2/humans/u1/tracking/pokemon?silent=true", "["+tc.body+"]")
+			if w.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
+			}
+			if n := len(monsterStore.AllRows()); n != 0 {
+				t.Errorf("a rejected rule must not be stored; store has %d rows", n)
+			}
+		})
+	}
+}
+
+// The bounds must not reject legitimate edge values.
+func TestV2Pokemon_AcceptsBoundaryFilterValues(t *testing.T) {
+	body := `[{"pokemon_id":25,"min_iv":0,"max_iv":100,"min_level":0,"max_level":55,` +
+		`"atk":0,"def":15,"sta":15,"max_atk":15,"max_rarity":6,"max_size":5,` +
+		`"pvp_ranking_evolution":3,"distance":0}]`
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for boundary values, got %d: %s", w.Code, w.Body.String())
+	}
+	if n := len(monsterStore.AllRows()); n != 1 {
+		t.Errorf("expected the rule stored, got %d rows", n)
 	}
 }

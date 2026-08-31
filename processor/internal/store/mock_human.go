@@ -333,15 +333,20 @@ func (m *MockHumanStore) SwitchProfile(id string, profileNo int) (bool, error) {
 	return false, nil
 }
 
-func (m *MockHumanStore) AddProfile(id string, name string, activeHours string) error {
+func (m *MockHumanStore) AddProfile(id string, name string, activeHours string) (int, error) {
 	m.record("AddProfile")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	newNo := 1
+	// Lowest FREE profile_no, matching SQLHumanStore — not max+1. The two
+	// diverged, so a test could assert the wrong number and still pass here
+	// while production assigned another (#213).
+	taken := make(map[int]bool, len(m.profiles[id]))
 	for _, p := range m.profiles[id] {
-		if p.ProfileNo >= newNo {
-			newNo = p.ProfileNo + 1
-		}
+		taken[p.ProfileNo] = true
+	}
+	newNo := 1
+	for taken[newNo] {
+		newNo++
 	}
 	m.profiles[id] = append(m.profiles[id], Profile{
 		ID:          id,
@@ -349,7 +354,7 @@ func (m *MockHumanStore) AddProfile(id string, name string, activeHours string) 
 		Name:        name,
 		ActiveHours: activeHours,
 	})
-	return nil
+	return newNo, nil
 }
 
 func (m *MockHumanStore) DeleteProfile(id string, profileNo int) error {
@@ -395,6 +400,19 @@ func (m *MockHumanStore) UpdateProfileHours(id string, profileNo int, activeHour
 		if p.ProfileNo == profileNo {
 			m.profiles[id][i].ActiveHours = activeHours
 			break
+		}
+	}
+	return nil
+}
+
+func (m *MockHumanStore) UpdateProfileName(id string, profileNo int, name string) error {
+	m.record("UpdateProfileName")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.profiles[id] {
+		if m.profiles[id][i].ProfileNo == profileNo {
+			m.profiles[id][i].Name = name
+			return nil
 		}
 	}
 	return nil
