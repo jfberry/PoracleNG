@@ -213,3 +213,61 @@ func RegisterGeocode(api huma.API, geocoder ForwardGeocoder) {
 		return &geocodeForwardOutput{Body: results}, nil
 	})
 }
+
+// ReverseGeocoder resolves coordinates to an address in a given language.
+// *geocoding.Geocoder satisfies this; a minimal interface keeps the Register
+// signature testable.
+type ReverseGeocoder interface {
+	GetAddressForLanguage(lat, lon float64, language string) *geocoding.Address
+}
+
+// geocodeReverseInput carries the coordinate and optional language.
+//
+// Bounds are on the schema so an impossible coordinate is a 422 naming the
+// field rather than a lookup that quietly resolves nothing.
+type geocodeReverseInput struct {
+	Lat      float64 `query:"lat" required:"true" minimum:"-90" maximum:"90" doc:"Latitude"`
+	Lon      float64 `query:"lon" required:"true" minimum:"-180" maximum:"180" doc:"Longitude"`
+	Language string  `query:"language" doc:"Language for the resolved address, e.g. de. Omit for the server default. Results are cached per language."`
+}
+
+type geocodeReverseOutput struct {
+	Body *geocoding.Address
+}
+
+// RegisterGeocodeReverse registers GET /api/geocode/reverse.
+//
+// Reverse geocoding existed internally but only forward was exposed, so a
+// client that moved to this API for search still had to call the provider
+// directly for reverse — the same coupling the endpoint removes, on the other
+// half of the feature.
+//
+// Unlike forward, this path is served through the geocoder's cache (pogreb on
+// disk plus an in-memory TTL layer, keyed per language), so a repeat lookup of
+// a coordinate a user has already seen costs nothing.
+func RegisterGeocodeReverse(api huma.API, geocoder ReverseGeocoder) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-geocode-reverse", Method: "GET", Path: "/geocode/reverse",
+		Summary: "Reverse geocode lookup", Tags: []string{"geocode"},
+		Description: "Resolves coordinates to an address via the configured geocoding provider, in `language` when given. " +
+			"Served through the geocoder's cache. 404 when the coordinate resolves to nothing — including when " +
+			"`[geocoding] forward_only` is set, which disables reverse lookups entirely. 503 when no geocoder is configured.",
+		Security: []map[string][]string{{"poracleSecret": {}}},
+	}, func(_ context.Context, in *geocodeReverseInput) (*geocodeReverseOutput, error) {
+		// Guard both interface-nil and a typed-nil *geocoding.Geocoder, which
+		// is what proc.enricher.Geocoder holds when geocoding is disabled.
+		if geocoder == nil {
+			return nil, huma.Error503ServiceUnavailable("geocoder not configured")
+		}
+		if g, ok := geocoder.(*geocoding.Geocoder); ok && g == nil {
+			return nil, huma.Error503ServiceUnavailable("geocoder not configured")
+		}
+		addr := geocoder.GetAddressForLanguage(in.Lat, in.Lon, in.Language)
+		if addr == nil {
+			// Nothing failed — the coordinate has no address, or reverse is
+			// switched off. Either way there is no resource here.
+			return nil, huma.Error404NotFound("no address for those coordinates")
+		}
+		return &geocodeReverseOutput{Body: addr}, nil
+	})
+}
