@@ -216,7 +216,7 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 // untrackOptions exposes one sub-command per tracking type. Each sub-command
 // has a single autocomplete-backed "tracking" option whose value is the
 // database UID of the rule the user wants to remove. The sub-command name
-// IS the tracking subtype — both the slash dispatcher (findUntrackSubtype)
+// IS the tracking subtype — both the slash dispatcher (subCommandName)
 // and the autocomplete lister read it directly to scope the choice list.
 func untrackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	subs := []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"}
@@ -275,16 +275,17 @@ func infoOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	}
 }
 
-// areaOptions exposes /area add, /area remove, /area list (every area the
+// areaOptions exposes /area add, /area remove (both take a comma-separated
+// list — the picker composes one), /area list (every area the
 // user could subscribe to, with ✓ marks for the ones they already have),
 // /area overview (overview map of selected areas), and /area show (list of
 // selected area names).
 func areaOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
 		subCommand(bundle, "area.add", "add", "Add an area to your tracking",
-			stringOpt(bundle, "area.add.area", "area", "Area to add", true, true)),
+			stringOpt(bundle, "area.add.area", "area", "Areas to add (comma-separated)", true, true)),
 		subCommand(bundle, "area.remove", "remove", "Remove an area from your tracking",
-			stringOpt(bundle, "area.remove.area", "area", "Area to remove", true, true)),
+			stringOpt(bundle, "area.remove.area", "area", "Areas to remove (comma-separated)", true, true)),
 		subCommand(bundle, "area.show", "show", "Show your selected areas"),
 		subCommand(bundle, "area.list", "list", "List every area available to you (✓ = already added)"),
 		subCommand(bundle, "area.overview", "overview", "Map overview of every area available to you"),

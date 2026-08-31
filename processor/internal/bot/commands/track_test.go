@@ -823,3 +823,40 @@ func TestTrack_EverythingBare_StillRejected(t *testing.T) {
 	require.NotEmpty(t, replies)
 	assert.Equal(t, "🙅", replies[0].React, "bare everything should be rejected: %s", replies[0].Text)
 }
+
+// The `area:` override accepts both spellings of a multi-area list: one
+// comma-separated token (what the /track areas: picker emits) and the
+// parameter repeated. Both land as the same override_areas set.
+func TestTrack_AreaOverrideAcceptsCommasAndRepeats(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"comma list", []string{"25", "iv100", "area:london,paris"}},
+		{"repeated param", []string{"25", "iv100", "area:london", "area:paris"}},
+		{"mixed", []string{"25", "iv100", "area:london", "area:paris,london"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _ := newTestTrackCtx(t)
+			cmd := &TrackCommand{}
+			replies := cmd.Run(ctx, tc.args)
+			if !anyReact(replies, "✅") {
+				t.Fatalf("expected success react, got %+v", replies)
+			}
+			rows := ctx.Tracking.Monsters.(*store.MockTrackingStore[db.MonsterTrackingAPI]).AllRows()
+			if len(rows) != 1 {
+				t.Fatalf("expected 1 stored rule, got %d", len(rows))
+			}
+			got := map[string]bool{}
+			for _, a := range rows[0].OverrideAreas {
+				got[strings.ToLower(a)] = true
+			}
+			if !got["london"] || !got["paris"] {
+				t.Fatalf("override_areas = %v, want both london and paris", rows[0].OverrideAreas)
+			}
+			if len(rows[0].OverrideAreas) != 2 {
+				t.Fatalf("override_areas = %v, want exactly 2 entries (no duplicates)", rows[0].OverrideAreas)
+			}
+		})
+	}
+}
