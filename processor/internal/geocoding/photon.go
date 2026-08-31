@@ -286,10 +286,15 @@ func (p *Photon) Forward(query string) ([]ForwardResult, error) {
 		components := photonComponents(f.Properties)
 		city := components["city"]
 		out = append(out, ForwardResult{
-			Latitude:  f.Geometry.Coordinates[1],
-			Longitude: f.Geometry.Coordinates[0],
-			City:      city,
-			Country:   components["country"],
+			Latitude:     f.Geometry.Coordinates[1],
+			Longitude:    f.Geometry.Coordinates[0],
+			Name:         f.Properties.Name,
+			StreetNumber: f.Properties.HouseNumber,
+			StreetName:   f.Properties.Street,
+			City:         city,
+			State:        f.Properties.State,
+			Zipcode:      f.Properties.Postcode,
+			Country:      components["country"],
 		})
 	}
 	return out, nil

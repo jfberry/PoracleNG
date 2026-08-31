@@ -385,6 +385,7 @@ func main() {
 	api.RegisterStatsShiny(humaAPI, proc.stats.ExportShinyStats)
 	api.RegisterStatsShinyPossible(humaAPI, proc.stats.ExportShinyPossible)
 	api.RegisterGeocode(humaAPI, proc.enricher.Geocoder)
+	api.RegisterGeocodeReverse(humaAPI, proc.enricher.Geocoder)
 
 	// poracle-test (migrated to huma, in place — same path, same {"status":"ok"}
 	// body, open `webhook` request part, problem+json errors).
