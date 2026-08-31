@@ -86,6 +86,13 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 				continue
 			}
 			validTypes[canonical] = canonical
+			// The parser replaces underscores with spaces in unquoted tokens,
+			// so `!invasion npc_0` arrives here as "npc 0". Without this alias
+			// every underscore-named grunt (the 24 npc_* and
+			// player_team_leader) is unreachable unless the user quotes it.
+			if spaced := strings.ReplaceAll(canonical, "_", " "); spaced != canonical {
+				validTypes[spaced] = canonical
+			}
 
 			// Simplified leader/executive names
 			tmpl := strings.ToLower(grunt.Template)

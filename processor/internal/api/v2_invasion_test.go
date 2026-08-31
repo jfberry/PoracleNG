@@ -39,6 +39,9 @@ func newV2InvasionGameData() *gamedata.GameData {
 			// reachable from the bot but from NO grunt_id.
 			4: {ID: 4, Gender: 1, Template: "CHARACTER_GRUNT_MALE"},
 			6: {ID: 6, Gender: 2, Template: "CHARACTER_GRUNT_FEMALE"},
+			// Underscore-named grunts: the shapes legacy rows hold with spaces.
+			500: {ID: 500, Gender: 0, Template: "CHARACTER_EVENT_NPC_0"},
+			40:  {ID: 40, Gender: 0, Template: "CHARACTER_PLAYER_TEAM_LEADER"},
 		},
 		Util: &gamedata.UtilData{
 			PokestopEvent: map[int]gamedata.EventInfo{
@@ -733,5 +736,61 @@ func TestV2Invasion_EventNameRejectedAsGruntType(t *testing.T) {
 		`[{"grunt_type":"showcase"}]`)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for an event name on the invasion endpoint, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- space-separated legacy names -------------------------------------------
+
+// The bot's parser replaces underscores with spaces in unquoted tokens, so
+// rows written before the canonical set used underscores hold "npc 0" where
+// TypeNameFromTemplate now produces "npc_0". Such a row reads back verbatim
+// and used to 422 on the way in, which made GET -> PUT not quite total.
+//
+// They are dead either way — matching/invasion.go compares the stored value
+// against ResolveGruntTypeName, which returns the underscore form — so
+// normalising on write repairs the rule as well as closing the round trip.
+func TestV2Invasion_AcceptsSpaceSeparatedLegacyName(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"player team leader"}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a legacy space-separated name, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "player_team_leader" {
+		t.Fatalf("stored = %+v, want the normalised underscore form", rows)
+	}
+}
+
+// A stored legacy row must survive GET -> PUT, landing on the repaired form.
+func TestV2Invasion_LegacyRowRoundTripsToRepairedForm(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	is.Insert(&db.InvasionTrackingAPI{ID: "u1", ProfileNo: 1, GruntType: "npc 0"})
+
+	rules := invRules(t, r)
+	gt, _ := rules[0]["grunt_type"].(string)
+	if gt != "npc 0" {
+		t.Fatalf("read emitted %q, want the stored value verbatim", gt)
+	}
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"npc 0"}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-posting the emitted value = %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// Normalisation must not invent names: a genuinely unknown value still 422s.
+func TestV2Invasion_NormalisationStillRejectsUnknown(t *testing.T) {
+	r, _, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"grunt_type":"no such grunt"}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for an unknown name, got %d: %s", w.Code, w.Body.String())
 	}
 }

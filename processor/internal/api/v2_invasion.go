@@ -181,7 +181,10 @@ func translateV2Invasion(deps *TrackingDeps, humanID string, profileNo int, oc o
 		gender = invasionGenderEnum.resolveStored(req.Gender)
 
 	case req.GruntType != nil:
-		name := strings.ToLower(strings.TrimSpace(*req.GruntType))
+		// Normalise the spelling first: legacy rows hold "npc 0" where the
+		// canonical set holds "npc_0". Storing the normalised form repairs the
+		// rule as well as accepting it — the space form has never matched.
+		name := gamedata.NormaliseGruntTypeName(*req.GruntType)
 		if !canonicalGruntTypes(gd)[name] {
 			if isEventGruntType(name, gd) {
 				return db.InvasionTrackingAPI{}, huma.Error422UnprocessableEntity(
@@ -282,10 +285,13 @@ func gruntTypeName(gd *gamedata.GameData, grunt *gamedata.Grunt) string {
 }
 
 // v2InvasionToRule converts a stored InvasionTrackingAPI back into the strict v2
-// rule shape. "everything"/"boss" map to their flags; any other (non-event)
-// grunt_type maps to {type_id, gender} via the reverse type-name map. (grunt_id
-// mode resolved to a type name on write, so it is read back as type_id+gender —
-// faithful to what is stored.)
+// rule shape.
+//
+// It emits exactly ONE targeting field — grunt_type, the value the row actually
+// stores — for every rule, the "everything"/"boss" catch-alls included. type_id
+// and grunt_id are write-side conveniences that resolve to a grunt_type on the
+// way in and are never emitted. gender rides alongside for the name-shaped
+// rules and is nulled at its 'any' wildcard.
 func v2InvasionToRule(gd *gamedata.GameData, row *db.InvasionTrackingAPI) v2InvasionRule {
 	rule := v2InvasionRule{
 		Distance:              ptrUnless(row.Distance, 0),
@@ -297,9 +303,18 @@ func v2InvasionToRule(gd *gamedata.GameData, row *db.InvasionTrackingAPI) v2Inva
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),
 	}
 
-	// Emit exactly one targeting field: what the rule is STORED as. Every value
-	// this can emit is a value translateV2Invasion accepts, so GET → PUT always
-	// round-trips (#209).
+	// Emit exactly one targeting field: what the rule is STORED as.
+	//
+	// Every value this codebase can WRITE reads back as a value
+	// translateV2Invasion accepts, so GET → PUT round-trips (#209).
+	//
+	// Legacy data is the caveat. A row written before the canonical set used
+	// underscores may hold a space-separated name ("npc 0", "player team
+	// leader"). translateV2Invasion normalises those on the way in, so they
+	// round-trip too — but they round-trip to the UNDERSCORE form, which is a
+	// different string from the one that was read. A client diffing read
+	// against write will see that change; it is a repair, not a drift (see
+	// normaliseGruntTypeInput).
 	name := strings.ToLower(row.GruntType)
 	rule.GruntType = &name
 	if name != "everything" && name != "boss" {
