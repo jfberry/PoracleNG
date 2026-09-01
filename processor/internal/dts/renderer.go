@@ -429,6 +429,14 @@ func (r *Renderer) renderForUsers(
 				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, platform, language, templateID),
 			)
 			rawMessage = fallbackMessageRaw(templateType, platform, templateID, language)
+		} else if renderedMessageIsEmpty(rawMessage) {
+			log.Errorf("[%s] dts: template %s/%s/%s/%s rendered an empty message for user %s — falling back to default message (raw: %s)",
+				logReference, templateType, platform, language, templateID, user.ID, rendered)
+			r.notice(
+				fmt.Sprintf("dts.empty:%s:%s:%s:%s", templateType, platform, language, templateID),
+				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` rendered an empty message — falling back to default message.", templateType, platform, language, templateID),
+			)
+			rawMessage = emptyRenderFallbackRaw(templateType, platform, templateID, language)
 		}
 
 		// Append ping to content
@@ -633,6 +641,14 @@ func (r *Renderer) renderGrouped(
 				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, key.platform, key.language, key.templateID),
 			)
 			rawMessage = fallbackMessageRaw(templateType, key.platform, key.templateID, key.language)
+		} else if renderedMessageIsEmpty(rawMessage) {
+			log.Errorf("[%s] dts: template %s/%s/%s/%s rendered an empty message for group (%s/%s/%s) — falling back to default message (raw: %s)",
+				logReference, templateType, key.platform, key.language, key.templateID, key.platform, key.templateID, key.language, rendered)
+			r.notice(
+				fmt.Sprintf("dts.empty:%s:%s:%s:%s", templateType, key.platform, key.language, key.templateID),
+				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` rendered an empty message — falling back to default message.", templateType, key.platform, key.language, key.templateID),
+			)
+			rawMessage = emptyRenderFallbackRaw(templateType, key.platform, key.templateID, key.language)
 		}
 
 		emojiSlice := extractEmojiSlice(view)
@@ -819,6 +835,57 @@ func appendPingToRaw(raw json.RawMessage, ping string) json.RawMessage {
 func fallbackMessageRaw(templateType, platform, templateID, language string) json.RawMessage {
 	obj := map[string]string{
 		"content": fmt.Sprintf("Template not found: %s/%s/%s/%s", templateType, platform, templateID, language),
+	}
+	b, _ := json.Marshal(obj)
+	return b
+}
+
+// renderedMessageIsEmpty reports whether a rendered (valid-JSON) message
+// carries no deliverable content on any platform. Discord rejects such
+// messages with 50006 ("Cannot send an empty message"), and enough of those
+// in a row trips the delivery queue's consecutive-failure auto-disable — so
+// they must be caught at render time, like invalid JSON. A message counts as
+// non-empty if any content-bearing field the senders read is populated:
+// content (non-whitespace), embed/embeds/components (Discord), or
+// sticker/photo/location/venue (Telegram).
+func renderedMessageIsEmpty(raw json.RawMessage) bool {
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		// Not an object — invalid JSON is the other guard's job.
+		return false
+	}
+	if s, ok := m["content"].(string); ok && strings.TrimSpace(s) != "" {
+		return false
+	}
+	if e, ok := m["embed"].(map[string]any); ok && len(e) > 0 {
+		return false
+	}
+	if a, ok := m["embeds"].([]any); ok && len(a) > 0 {
+		return false
+	}
+	if a, ok := m["components"].([]any); ok && len(a) > 0 {
+		return false
+	}
+	if s, ok := m["sticker"].(string); ok && s != "" {
+		return false
+	}
+	if s, ok := m["photo"].(string); ok && s != "" {
+		return false
+	}
+	if b, ok := m["location"].(bool); ok && b {
+		return false
+	}
+	if v, ok := m["venue"].(map[string]any); ok && len(v) > 0 {
+		return false
+	}
+	return true
+}
+
+// emptyRenderFallbackRaw returns the substitute message for a template that
+// rendered valid JSON with no deliverable content.
+func emptyRenderFallbackRaw(templateType, platform, templateID, language string) json.RawMessage {
+	obj := map[string]string{
+		"content": fmt.Sprintf("Template rendered empty: %s/%s/%s/%s", templateType, platform, templateID, language),
 	}
 	b, _ := json.Marshal(obj)
 	return b
