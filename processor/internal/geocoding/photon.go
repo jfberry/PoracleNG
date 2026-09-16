@@ -285,16 +285,29 @@ func (p *Photon) Forward(query string) ([]ForwardResult, error) {
 		}
 		components := photonComponents(f.Properties)
 		city := components["city"]
+		// Read country BEFORE composing: formatOpenCage mutates components and
+		// deletes "country" when the provider is configured with
+		// includeCountry=false, which would blank the field here.
+		country := components["country"]
+		countryCode := strings.ToUpper(strings.TrimSpace(f.Properties.CountryCode))
+
 		out = append(out, ForwardResult{
-			Latitude:     f.Geometry.Coordinates[1],
-			Longitude:    f.Geometry.Coordinates[0],
+			Latitude:  f.Geometry.Coordinates[1],
+			Longitude: f.Geometry.Coordinates[0],
+			// Photon returns no single formatted string, so compose one the
+			// same way Reverse does — via the OpenCage country templates —
+			// rather than inventing a second, less aware format. Without it
+			// Photon is the one provider leaving displayName empty, and it is
+			// the provider most likely to be configured by whoever adopts
+			// this endpoint first.
+			DisplayName:  p.formatOpenCage(components, countryCode),
 			Name:         f.Properties.Name,
 			StreetNumber: f.Properties.HouseNumber,
 			StreetName:   f.Properties.Street,
 			City:         city,
 			State:        f.Properties.State,
 			Zipcode:      f.Properties.Postcode,
-			Country:      components["country"],
+			Country:      country,
 		})
 	}
 	return out, nil

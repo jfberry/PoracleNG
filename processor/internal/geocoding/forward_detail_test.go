@@ -3,6 +3,7 @@ package geocoding
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -126,5 +127,66 @@ func TestGoogleForwardKeepsAddressDetail(t *testing.T) {
 	}
 	if got.Latitude != 38.8977 {
 		t.Errorf("Latitude = %v, want 38.8977", got.Latitude)
+	}
+}
+
+// displayName is what a picker actually renders — row label, the value a
+// search box takes on selection, the address line. Nominatim copies
+// display_name and Google copies formatted_address; Photon has no single
+// formatted string, so it was the one provider leaving the field empty. That
+// is the provider most likely to be configured by whoever adopts this, since
+// Photon is what prompted the request.
+func TestPhotonForwardComposesDisplayName(t *testing.T) {
+	const body = `{"features":[{"geometry":{"coordinates":[-77.0365,38.8977]},
+		"properties":{"name":"White House","housenumber":"1600","street":"Pennsylvania Avenue Northwest",
+		              "city":"Washington","state":"District of Columbia","postcode":"20500",
+		              "countrycode":"US","country":"United States"}}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	results, err := NewPhoton(srv.URL, 2*time.Second, true).Forward("1600 Pennsylvania Ave")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("want 1 result, got %d", len(results))
+	}
+	got := results[0].DisplayName
+	if got == "" {
+		t.Fatal("DisplayName is empty; Photon must compose one like it already does for reverse")
+	}
+	// Composed, not a bare field copy: it has to carry enough to tell two
+	// hits on the same street apart.
+	for _, want := range []string{"1600", "Pennsylvania Avenue Northwest", "Washington"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("DisplayName = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// formatOpenCage mutates the components map — it deletes "country" when the
+// provider is configured with includeCountry=false. Composing the display name
+// before reading Country would therefore blank the Country field.
+func TestPhotonForwardKeepsCountryWhenNotIncludedInDisplayName(t *testing.T) {
+	const body = `{"features":[{"geometry":{"coordinates":[-77.0365,38.8977]},
+		"properties":{"street":"Pennsylvania Avenue Northwest","city":"Washington",
+		              "countrycode":"US","country":"United States"}}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	// includeCountry=false is the case that deletes the key.
+	results, err := NewPhoton(srv.URL, 2*time.Second, false).Forward("x")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	if results[0].Country != "United States" {
+		t.Errorf("Country = %q, want it preserved even when omitted from displayName", results[0].Country)
+	}
+	if results[0].DisplayName == "" {
+		t.Error("DisplayName should still be composed with includeCountry=false")
 	}
 }
