@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/guregu/null/v6"
 	"sort"
 	"strings"
 
@@ -23,6 +24,14 @@ type v2HumanSummary struct {
 	AdminDisable     bool   `json:"admin_disable" doc:"Whether an admin has disabled this account; such a user must re-register"`
 	Language         string `json:"language" doc:"Alert language code, empty when the user has not chosen one"`
 	CurrentProfileNo int    `json:"current_profile_no" doc:"The profile currently active for this human"`
+
+	// The admin-grid columns. Already selected by humanRowColumns for the
+	// single GET, so including them here is the same projection rather than
+	// extra query work — and fetching them per-id is not viable on an instance
+	// with a few thousand humans (#229).
+	LastChecked  null.Time `json:"last_checked" doc:"When reconciliation last verified this destination. Null if never checked — admins sort on this to find dormant accounts."`
+	DisabledDate null.Time `json:"disabled_date" doc:"When the destination was disabled. Null while enabled; pairs with admin_disable so a disabled account shows when."`
+	Notes        string    `json:"notes" doc:"Free-form operator notes."`
 }
 
 type v2HumansListInput struct {
@@ -87,6 +96,9 @@ func registerV2HumansList(api huma.API, deps *TrackingDeps, tag []string, sec []
 				AdminDisable:     h.AdminDisable,
 				Language:         h.Language,
 				CurrentProfileNo: h.CurrentProfileNo,
+				LastChecked:      h.LastChecked,
+				DisabledDate:     h.DisabledDate,
+				Notes:            h.Notes,
 			})
 		}
 		// Store order is unspecified (the mock and SQL differ); sort so

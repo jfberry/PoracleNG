@@ -509,9 +509,13 @@ type v2SetAreasBody struct {
 	Areas []string `json:"areas" required:"true" doc:"Requested area names. Matched case-insensitively against the fences this human may select; duplicates are collapsed and anything unmatched comes back in the rejected list rather than being dropped silently."`
 	// The API secret is what distinguishes a server-side client from an end
 	// user, so a caller that holds it may assert that a request is already
-	// authorised on the user's behalf. This lifts the userSelectable filter
-	// ONLY — an unknown fence name is still rejected, so a typo cannot become
-	// a stored area that matches nothing. See #215.
+	// authorised on the user's behalf.
+	//
+	// This lifts the userSelectable filter ONLY. An unknown fence name is
+	// still rejected, so a typo cannot become a stored area that matches
+	// nothing; and when area_security is enabled the community restriction
+	// still applies, so a trusted call cannot hand a user another community's
+	// areas. Only admin lifts that. See #215, #228.
 	Trusted bool `json:"trusted,omitempty" doc:"Set true to select fences that are not userSelectable — for a server-side client that has already authorised the change (e.g. the user drew the fence). Honoured because the caller holds the API secret. Unknown fence names are still rejected."`
 }
 
@@ -526,8 +530,14 @@ type v2SetAreasOutput struct {
 }
 
 type v2SetAreasInput struct {
-	ID   string `path:"id" doc:"Human id (the owning user)"`
-	Body v2SetAreasBody
+	ID string `path:"id" doc:"Human id (the owning user)"`
+	// Profile targeting mirrors the tracking endpoints and set-location.
+	// Without it set-areas wrote the active profile only, so dropping an area
+	// from EVERY profile — what a client does when a user deletes a fence they
+	// had drawn — had no API form at all.
+	Profile     int  `query:"profile" default:"-1" doc:"Profile number to write; defaults to the human's active profile. Mutually exclusive with all_profiles."`
+	AllProfiles bool `query:"all_profiles" doc:"Write the same areas to EVERY profile the human owns. Use when a fence has been deleted and must be dropped everywhere. Mutually exclusive with profile."`
+	Body        v2SetAreasBody
 }
 
 func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec []map[string][]string) {
@@ -538,12 +548,18 @@ func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec
 			"select (userSelectable for non-admins, community-filtered when area_security is enabled). Names that do not match " +
 			"come back in `rejected` rather than being discarded silently. Set `trusted: true` to select non-userSelectable " +
 			"fences on behalf of a user whose client has already authorised the change; unknown names are still rejected. " +
+			"Writes the human's active profile by default; `?profile=` targets another and `?all_profiles=true` writes every " +
+			"profile the human owns (the two are mutually exclusive). " +
 			"Triggers a state reload. 404 if the human does not exist.",
 		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2SetAreasInput) (*v2SetAreasOutput, error) {
 		human, err := resolveFullHuman(deps, in.ID)
 		if err != nil {
 			return nil, err
+		}
+
+		if in.AllProfiles && in.Profile != profileSentinel {
+			return nil, huma.Error422UnprocessableEntity("profile and all_profiles are mutually exclusive")
 		}
 
 		allowedSet := settableAreaSet(deps, human, isAdmin(deps, in.ID), in.Body.Trusted)
@@ -564,9 +580,27 @@ func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec
 			newAreas = append(newAreas, a)
 		}
 
-		if err := deps.Humans.SetArea(in.ID, human.CurrentProfileNo, newAreas); err != nil {
-			log.Errorf("v2 humans: set areas %s: %s", in.ID, err)
-			return nil, huma.Error500InternalServerError("database error")
+		targets := []int{human.CurrentProfileNo}
+		switch {
+		case in.AllProfiles:
+			profiles, err := deps.Humans.GetProfiles(in.ID)
+			if err != nil {
+				log.Errorf("v2 humans: list profiles for %s: %s", in.ID, err)
+				return nil, huma.Error500InternalServerError("database error")
+			}
+			targets = make([]int, 0, len(profiles))
+			for _, p := range profiles {
+				targets = append(targets, p.ProfileNo)
+			}
+		case in.Profile != profileSentinel:
+			targets = []int{in.Profile}
+		}
+
+		for _, profileNo := range targets {
+			if err := deps.Humans.SetArea(in.ID, profileNo, newAreas); err != nil {
+				log.Errorf("v2 humans: set areas %s/%d: %s", in.ID, profileNo, err)
+				return nil, huma.Error500InternalServerError("database error")
+			}
 		}
 		reloadState(deps)
 
@@ -599,16 +633,26 @@ func settableAreaNames(deps *TrackingDeps, human *store.Human, admin, trusted bo
 	if st == nil {
 		return nil
 	}
-	unrestricted := admin || trusted
-
+	// The two filters are deliberately NOT folded together.
+	//
+	// trusted lifts userSelectable only: it is a server-side client asserting
+	// "this user drew this fence, so let them select it". That assertion says
+	// nothing about which community the user belongs to, and area_security is
+	// the operator's restriction rather than the fence author's. Folding both
+	// behind one flag made trusted hand the human every fence on the instance,
+	// which made it unusable for the one path it exists for — saving a
+	// selection holding both admin areas and the user's own drawn fences
+	// (#228).
+	//
+	// admin lifts both, which is deliberate and unchanged.
 	var allowed []string
 	for _, f := range st.Fences {
-		if !unrestricted && !f.UserSelectable {
+		if !admin && !trusted && !f.UserSelectable {
 			continue
 		}
 		allowed = append(allowed, strings.ToLower(f.Name))
 	}
-	if deps.Config != nil && deps.Config.Area.Enabled && !unrestricted &&
+	if deps.Config != nil && deps.Config.Area.Enabled && !admin &&
 		human != nil && human.AreaRestriction != nil {
 		allowed = community.FilterAreas(
 			deps.Config.Area.Communities, human.CommunityMembership, allowed)

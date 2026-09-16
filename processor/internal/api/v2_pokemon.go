@@ -19,7 +19,13 @@ import (
 // Defaults documented in each field's doc string come from the field audit
 // pokemon table.
 type v2PokemonRule struct {
-	PokemonID int `json:"pokemon_id" required:"true" minimum:"1" doc:"Pokédex id (required)"`
+	// Omitted/null is the catch-all: the matcher keeps a pokemon_id=0 bucket
+	// that it checks before the by-id lookup, so such a rule matches every
+	// spawn. That is a first-class feature — !track everything creates it and
+	// everything_flag_permissions governs who may — and blank-means-wildcard
+	// is how v2 expresses it, as on invasion. A required minimum:1 made the
+	// rule unwritable while the read still emitted it (#227).
+	PokemonID *int `json:"pokemon_id,omitempty" nullable:"true" minimum:"0" doc:"Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all."`
 
 	Form *int `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
 
@@ -121,7 +127,7 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 		Ping:                  "", // server-managed
 		Template:              template,
 		Distance:              distance,
-		PokemonID:             req.PokemonID,
+		PokemonID:             valueOr(req.PokemonID, 0),
 		Form:                  valueOr(req.Form, 0),
 		Costume:               valueOr(req.Costume, 9000),
 		MinIV:                 valueOr(req.MinIV, -1),
@@ -166,7 +172,7 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 	gender := genderEnum.fromStored(row.Gender)
 	return v2PokemonRule{
-		PokemonID:             row.PokemonID,
+		PokemonID:             ptrUnless(row.PokemonID, 0),
 		Form:                  ptrUnless(row.Form, 0),
 		Costume:               ptrUnless(row.Costume, 9000),
 		MinIV:                 ptrUnless(row.MinIV, -1),
@@ -185,13 +191,13 @@ func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 		MinWeight:             ptrUnless(row.MinWeight, 0),
 		MaxWeight:             ptrUnless(row.MaxWeight, 9000000),
 		MinTime:               ptrUnless(row.MinTime, 0),
-		Rarity:                ptrUnless(row.Rarity, -1),
+		Rarity:                ptrUnlessAny(row.Rarity, -1, 0),
 		MaxRarity:             ptrUnless(row.MaxRarity, 6),
-		Size:                  ptrUnless(row.Size, -1),
+		Size:                  ptrUnlessAny(row.Size, -1, 0),
 		MaxSize:               ptrUnless(row.MaxSize, 5),
 		PVPRankingLeague:      ptrUnless(row.PVPRankingLeague, 0),
-		PVPRankingBest:        ptrUnless(row.PVPRankingBest, 1),
-		PVPRankingWorst:       ptrUnless(row.PVPRankingWorst, 4096),
+		PVPRankingBest:        ptrUnlessAny(row.PVPRankingBest, 1, 0),
+		PVPRankingWorst:       ptrUnlessAny(row.PVPRankingWorst, 4096, 0),
 		PVPRankingMinCP:       ptrUnless(row.PVPRankingMinCP, 0),
 		PVPRankingCap:         ptrUnless(row.PVPRankingCap, 0),
 		PVPRankingEvolution:   ptrUnless(row.PVPRankingEvolution, 0),
@@ -245,4 +251,21 @@ func RegisterV2TrackingPokemon(api huma.API, deps *TrackingDeps) {
 			return d.RowText.MonsterRowText(tr, toMonsterTracking(row))
 		},
 	})
+}
+
+// ptrUnlessAny is ptrUnless for fields with more than one "no filter" value.
+//
+// It exists for legacy rows. pvp_ranking_best, pvp_ranking_worst, rarity and
+// size each have a canonical wildcard, but rows predating it hold a 0, which
+// is not a valid rank or tier and which the schema bounds refuse. Emitting
+// that 0 gave a client a rule it could read and render but not save. Reporting
+// the wildcard instead round-trips, and writing it back stores the canonical
+// value — a repair rather than a preservation (#227).
+func ptrUnlessAny[T comparable](v T, wildcards ...T) *T {
+	for _, w := range wildcards {
+		if v == w {
+			return nil
+		}
+	}
+	return &v
 }
