@@ -192,10 +192,15 @@ func (n *Nominatim) Forward(query string) ([]ForwardResult, error) {
 		lon, _ := strconv.ParseFloat(r.Lon, 64)
 		city := firstNonEmpty(r.Address.City, r.Address.Town, r.Address.Village, r.Address.Hamlet)
 		out = append(out, ForwardResult{
-			Latitude:  lat,
-			Longitude: lon,
-			City:      city,
-			Country:   r.Address.Country,
+			Latitude:     lat,
+			Longitude:    lon,
+			DisplayName:  r.DisplayName,
+			StreetNumber: r.Address.HouseNumber,
+			StreetName:   r.Address.Road,
+			City:         city,
+			State:        r.Address.State,
+			Zipcode:      r.Address.Postcode,
+			Country:      r.Address.Country,
 		})
 	}
 	return out, nil

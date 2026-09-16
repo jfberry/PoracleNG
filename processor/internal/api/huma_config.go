@@ -38,7 +38,7 @@ type poracleWebResponse struct {
 	Locale                       string           `json:"locale" doc:"Default server locale"`
 	MaxDistance                  int              `json:"maxDistance" doc:"Maximum allowed tracking distance (m)"`
 	Prefix                       string           `json:"prefix" doc:"Discord command prefix"`
-	Provider                     string           `json:"provider" doc:"Geocoding provider type (nominatim || photon)"`
+	Provider                     string           `json:"provider" doc:"Geocoding provider type: nominatim | photon | google. Empty when no geocoder is configured — do not infer that from providerURL, which google does not use."`
 	ProviderURL                  string           `json:"providerURL" doc:"Geocoding provider URL"`
 	PvpCaps                      []int            `json:"pvpCaps" doc:"Configured PVP level caps"`
 	PvpFilterGreatMinCP          int              `json:"pvpFilterGreatMinCP" doc:"Minimum CP floor for great-league PVP filters"`

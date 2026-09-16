@@ -77,6 +77,88 @@
         ],
         "type": "object"
       },
+      "Address": {
+        "additionalProperties": false,
+        "properties": {
+          "addr": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "county": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "flag": {
+            "type": "string"
+          },
+          "formattedAddress": {
+            "type": "string"
+          },
+          "latitude": {
+            "format": "double",
+            "type": "number"
+          },
+          "longitude": {
+            "format": "double",
+            "type": "number"
+          },
+          "neighbourhood": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "streetName": {
+            "type": "string"
+          },
+          "streetNumber": {
+            "type": "string"
+          },
+          "suburb": {
+            "type": "string"
+          },
+          "town": {
+            "type": "string"
+          },
+          "village": {
+            "type": "string"
+          },
+          "zipcode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "formattedAddress",
+          "displayName",
+          "country",
+          "countryCode",
+          "state",
+          "city",
+          "zipcode",
+          "streetName",
+          "streetNumber",
+          "neighbourhood",
+          "county",
+          "suburb",
+          "town",
+          "village",
+          "addr",
+          "flag",
+          "latitude",
+          "longitude"
+        ],
+        "type": "object"
+      },
       "AdminRolesResult": {
         "additionalProperties": false,
         "properties": {
@@ -1223,6 +1305,9 @@
           "country": {
             "type": "string"
           },
+          "displayName": {
+            "type": "string"
+          },
           "latitude": {
             "format": "double",
             "type": "number"
@@ -1230,6 +1315,21 @@
           "longitude": {
             "format": "double",
             "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "streetName": {
+            "type": "string"
+          },
+          "streetNumber": {
+            "type": "string"
+          },
+          "zipcode": {
+            "type": "string"
           }
         },
         "required": [
@@ -1825,7 +1925,7 @@
             "type": "string"
           },
           "provider": {
-            "description": "Geocoding provider type (nominatim || photon)",
+            "description": "Geocoding provider type: nominatim | photon | google. Empty when no geocoder is configured — do not infer that from providerURL, which google does not use.",
             "type": "string"
           },
           "providerURL": {
@@ -13914,6 +14014,83 @@
           }
         ],
         "summary": "Forward geocode lookup",
+        "tags": [
+          "geocode"
+        ]
+      }
+    },
+    "/geocode/reverse": {
+      "get": {
+        "description": "Resolves coordinates to an address via the configured geocoding provider, in `language` when given. Served through the geocoder's cache. 404 when the coordinate resolves to nothing — including when `[geocoding] forward_only` is set, which disables reverse lookups entirely. 503 when no geocoder is configured.",
+        "operationId": "get-geocode-reverse",
+        "parameters": [
+          {
+            "description": "Latitude",
+            "explode": false,
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "description": "Latitude",
+              "format": "double",
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Longitude",
+            "explode": false,
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "Longitude",
+              "format": "double",
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Language for the resolved address, e.g. de. Omit for the server default. Results are cached per language.",
+            "explode": false,
+            "in": "query",
+            "name": "language",
+            "schema": {
+              "description": "Language for the resolved address, e.g. de. Omit for the server default. Results are cached per language.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Address"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Reverse geocode lookup",
         "tags": [
           "geocode"
         ]
