@@ -274,7 +274,7 @@ func normalizeAreaKey(s string) string {
 // override_areas check never ran on any tracking write — v1 or v2, all 11
 // types. Falling back to the live state's fences is what makes it real; this
 // mirrors what v2_mutes.go already does for area-scoped mutes (#211).
-func newOverrideContext(deps *TrackingDeps, humanID string) (overrideContext, string, int) {
+func newOverrideContext(deps *TrackingDeps, humanID string, trusted bool) (overrideContext, string, int) {
 	if deps.Humans == nil {
 		return overrideContext{}, "", 0
 	}
@@ -295,7 +295,7 @@ func newOverrideContext(deps *TrackingDeps, humanID string) (overrideContext, st
 		}
 	} else if deps.StateMgr != nil {
 		// Production path: same policy, sourced from the live fences.
-		names = settableAreaNames(deps, human, admin, false)
+		names = settableAreaNames(deps, human, admin, trusted)
 	} else {
 		return overrideContext{human: human}, "", 0
 	}

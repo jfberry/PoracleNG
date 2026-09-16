@@ -2,6 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"time"
+
+	"github.com/guregu/null/v6"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -66,6 +69,7 @@ func newV2HumansTestAPI(t *testing.T, cfg *config.Config) (*gin.Engine, *store.M
 	fences := []geofence.Fence{
 		humanSquareFence("alpha", 10, 10, 1),
 		humanSquareFence("beta", 20, 20, 1),
+		humanSquareFence("gamma", 40, 40, 1),
 		// A user-drawn private fence: served by the client, deliberately kept
 		// out of the bot's !area picker (#215).
 		privateFence("private", 30, 30, 1),
@@ -201,8 +205,8 @@ func TestV2Humans_AreasGet_AllWhenUnrestricted(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	areas := v2RulesArray(t, v2DecodeBody(t, w), "areas")
-	if len(areas) != 3 {
-		t.Fatalf("expected 3 available areas, got %d: %v", len(areas), areas)
+	if len(areas) != 4 {
+		t.Fatalf("expected 4 available areas, got %d: %v", len(areas), areas)
 	}
 	// The listing reports every fence with its userSelectable flag, so a
 	// client can tell which ones need trusted:true to set (#215).
@@ -785,5 +789,180 @@ func TestV2Humans_Language_LowercasesWhatItStores(t *testing.T) {
 	}
 	if h, _ := humans.Get("u1"); h.Language != "de" {
 		t.Errorf("stored language = %q, want lowercased %q", h.Language, "de")
+	}
+}
+
+// --- #229: the list must back an admin grid ---------------------------------
+
+// The list projection omitted last_checked, disabled_date and notes, which the
+// admin user grid renders as columns. Fetching them per-id is not an option at
+// 2333 humans, so those three columns were the only reason a client still
+// mapped the humans table directly. They are already selected by
+// humanRowColumns for the single GET, so this is the same projection rather
+// than new query work.
+func TestV2Humans_List_CarriesAdminGridColumns(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+	checked := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	humans.AddHuman(&store.Human{
+		ID: "u9", Type: "discord:user", Name: "Dormant", Enabled: false,
+		AdminDisable: true,
+		LastChecked:  null.TimeFrom(checked),
+		DisabledDate: null.TimeFrom(checked),
+		Notes:        "asked to be paused",
+	})
+
+	got := listHumans(t, r, "?id=u9")
+	if len(got.Humans) != 1 {
+		t.Fatalf("listed %d, want 1", len(got.Humans))
+	}
+
+	// Decode again as raw JSON so absent keys are distinguishable from zero.
+	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans?id=u9", "")
+	var raw struct {
+		Humans []map[string]any `json:"humans"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	h := raw.Humans[0]
+	for _, k := range []string{"last_checked", "disabled_date", "notes"} {
+		if _, ok := h[k]; !ok {
+			t.Errorf("list item missing %q; keys: %v", k, h)
+		}
+	}
+	if h["notes"] != "asked to be paused" {
+		t.Errorf("notes = %v, want the stored note", h["notes"])
+	}
+}
+
+// A human never checked and never disabled must report null rather than a zero
+// timestamp, or an admin grid sorts 0001-01-01 to the top.
+func TestV2Humans_List_NullTimestampsStayNull(t *testing.T) {
+	r, _, _ := newV2HumansTestAPI(t, nil)
+
+	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans?id=u1", "")
+	var raw struct {
+		Humans []map[string]any `json:"humans"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v := raw.Humans[0]["last_checked"]; v != nil {
+		t.Errorf("last_checked = %v, want null for a never-checked human", v)
+	}
+}
+
+// --- #228: trusted must not lift the community restriction ------------------
+
+// newAreaSecurityAPI builds a fixture with area_security on: the human belongs
+// to one community whose allowed areas are alpha and beta, while "private" is
+// a non-userSelectable fence and "gamma" belongs to nobody's community.
+func newAreaSecurityAPI(t *testing.T) (*gin.Engine, *store.MockHumanStore) {
+	t.Helper()
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{
+		{Name: "coast", AllowedAreas: []string{"alpha", "beta", "private"}},
+	}
+	r, humans, _ := newV2HumansTestAPI(t, cfg)
+
+	h, _ := humans.Get("u1")
+	h.CommunityMembership = []string{"coast"}
+	h.AreaRestriction = []string{"alpha", "beta", "private"}
+	humans.AddHuman(h)
+	return r, humans
+}
+
+// trusted exists so a server-side client can assert "the user drew this fence,
+// so let them select it". Its doc comment says it lifts the userSelectable
+// filter ONLY. It also skipped community.FilterAreas, so a trusted call handed
+// the human every fence on the instance — which makes the flag unusable for
+// the one path that needs it: saving a selection containing both admin areas
+// (which must stay community-filtered) and the user's own drawn fences.
+func TestV2Humans_SetAreas_TrustedDoesNotLiftCommunityRestriction(t *testing.T) {
+	r, _ := newAreaSecurityAPI(t)
+
+	// gamma is a real fence but outside this human's community.
+	code, got := setAreas(t, r, `{"areas":["alpha","gamma"],"trusted":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	for _, a := range got.Areas {
+		if a == "gamma" {
+			t.Errorf("trusted stored %q, which is outside the human's community; "+
+				"trusted lifts userSelectable only. areas=%v rejected=%v", a, got.Areas, got.Rejected)
+		}
+	}
+	if len(got.Rejected) != 1 || got.Rejected[0] != "gamma" {
+		t.Errorf("rejected = %v, want [gamma]", got.Rejected)
+	}
+}
+
+// The case trusted was built for must keep working: a non-userSelectable fence
+// that IS inside the human's community.
+func TestV2Humans_SetAreas_TrustedStillLiftsUserSelectableWithinCommunity(t *testing.T) {
+	r, _ := newAreaSecurityAPI(t)
+
+	code, got := setAreas(t, r, `{"areas":["private"],"trusted":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 1 || got.Areas[0] != "private" {
+		t.Errorf("areas = %v rejected = %v, want the in-community private fence stored",
+			got.Areas, got.Rejected)
+	}
+}
+
+// --- setAreas profile targeting ---------------------------------------------
+
+// setAreas wrote human.CurrentProfileNo only, so a client could not target
+// another profile — and removing an area from EVERY profile, which is what
+// happens when a user deletes a fence they had drawn, had no API form at all
+// and still needed a direct database write. ?profile= mirrors the convention
+// the tracking endpoints and setLocation already use.
+func TestV2Humans_SetAreas_TargetsNamedProfile(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+	humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 1, Name: "Default"})
+	humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 2, Name: "Weekend"})
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/areas?profile=2", `{"areas":["alpha"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := humans.AreaForProfile("u1", 2); len(got) != 1 || got[0] != "alpha" {
+		t.Errorf("profile 2 areas = %v, want [alpha]", got)
+	}
+	// The active profile must be untouched.
+	if got := humans.AreaForProfile("u1", 1); len(got) != 0 {
+		t.Errorf("profile 1 areas = %v, want untouched", got)
+	}
+}
+
+// all_profiles is the shape that actually answers "the user deleted a fence,
+// drop it everywhere" in one call.
+func TestV2Humans_SetAreas_AllProfiles(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+	humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 1, Name: "Default"})
+	humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 2, Name: "Weekend"})
+	humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 3, Name: "Holiday"})
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/areas?all_profiles=true", `{"areas":["beta"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	for _, no := range []int{1, 2, 3} {
+		if got := humans.AreaForProfile("u1", no); len(got) != 1 || got[0] != "beta" {
+			t.Errorf("profile %d areas = %v, want [beta]", no, got)
+		}
+	}
+}
+
+// Asking for both is a client bug, not something to guess at.
+func TestV2Humans_SetAreas_ProfileAndAllProfilesConflict(t *testing.T) {
+	r, _, _ := newV2HumansTestAPI(t, nil)
+	w := v2DoReq(t, r, http.MethodPost,
+		"/api/v2/humans/u1/areas?profile=2&all_profiles=true", `{"areas":["alpha"]}`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for profile + all_profiles, got %d: %s", w.Code, w.Body.String())
 	}
 }

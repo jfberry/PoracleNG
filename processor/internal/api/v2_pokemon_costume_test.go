@@ -24,7 +24,7 @@ func TestV2Pokemon_CostumeWriteMapper(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			req := &v2PokemonRule{PokemonID: 25, Costume: c.costume}
+			req := &v2PokemonRule{PokemonID: new(25), Costume: c.costume}
 			row, err := translateV2Pokemon(&TrackingDeps{}, "u1", 1, overrideContext{}, req)
 			if err != nil {
 				t.Fatalf("translateV2Pokemon returned error: %v", err)
