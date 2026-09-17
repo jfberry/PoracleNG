@@ -562,10 +562,11 @@ type TuningConfig struct {
 	RenderQueueSize            int `toml:"render_queue_size"`
 
 	// Delivery tuning
-	ConcurrentDiscordDestinations  int `toml:"concurrent_discord_destinations"`
-	ConcurrentTelegramDestinations int `toml:"concurrent_telegram_destinations"`
-	ConcurrentDiscordWebhooks      int `toml:"concurrent_discord_webhooks"`
-	DeliveryQueueSize              int `toml:"delivery_queue_size"`
+	ConcurrentDiscordDestinations  int  `toml:"concurrent_discord_destinations"`
+	ConcurrentTelegramDestinations int  `toml:"concurrent_telegram_destinations"`
+	ConcurrentDiscordWebhooks      int  `toml:"concurrent_discord_webhooks"`
+	DeliveryQueueSize              int  `toml:"delivery_queue_size"`
+	DeliveryQueueDropOnFull        bool `toml:"delivery_queue_drop_on_full"`
 
 	// Validation hook tuning (see [validation])
 	ValidationTimeoutMs     int `toml:"validation_timeout_ms"`     // per-call HTTP timeout (default 1500)
@@ -829,6 +830,7 @@ func Load(baseDir string) (*Config, error) {
 			ConcurrentTelegramDestinations: 10,
 			ConcurrentDiscordWebhooks:      10,
 			DeliveryQueueSize:              200,
+			DeliveryQueueDropOnFull:        false,
 			ValidationTimeoutMs:            1500,
 			ValidationMaxConcurrent:        16,
 		},

@@ -326,7 +326,7 @@ var (
 	})
 	DeliveryLaneBackpressure = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "poracle_delivery_lane_backpressure_total",
-		Help: "Send enqueues that blocked on a full lane",
+		Help: "Send enqueues that encountered a full destination lane",
 	})
 	DeliveryCleanDeleteDropped = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "poracle_delivery_clean_delete_dropped_total",

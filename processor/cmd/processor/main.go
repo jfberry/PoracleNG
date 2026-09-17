@@ -203,6 +203,7 @@ func main() {
 				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
 				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
 				ConcurrentTelegram: cfg.Tuning.ConcurrentTelegramDestinations,
+				DropOnFull:         cfg.Tuning.DeliveryQueueDropOnFull,
 				OnDisabled: func(target, name, jobType string) {
 					proc.disableUserForDeliveryFailure(target, name, jobType)
 				},

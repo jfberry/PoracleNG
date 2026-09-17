@@ -45,6 +45,9 @@ type QueueConfig struct {
 	// PerRouteBuffer is the buffered capacity of each destination's lane
 	// (from [tuning] delivery_queue_size). <=0 defaults to 200.
 	PerRouteBuffer int
+	// DropOnFull drops new sends when their destination lane is full instead
+	// of blocking the producer. The default false preserves backpressure.
+	DropOnFull bool
 	// OnDisabled is invoked when a target hits the failure threshold.
 	// Implementation should: disable the user in DB, notify them, post shame.
 	OnDisabled func(target, name, jobType string)
@@ -78,6 +81,7 @@ type FairQueue struct {
 	lanes       map[string]*lane
 	stopped     bool
 	perRouteBuf int
+	dropOnFull  bool
 
 	// idleTimeout defaults to laneIdleTimeout; it's a per-instance field (not a
 	// mutable global) solely so tests can shorten it without racing live
@@ -97,7 +101,7 @@ type FairQueue struct {
 	rateLimiter    *ratelimit.Limiter
 	rateLimitHooks RateLimitHooks
 
-	// backpressure counts send enqueues that blocked on a full lane.
+	// backpressure counts send enqueues that encountered a full lane.
 	// lastBackpressureLog throttles the corresponding warn log to once per 5s
 	// (unix nanoseconds, read/written via CompareAndSwap).
 	backpressure        atomic.Int64
@@ -127,6 +131,7 @@ func NewFairQueue(senders map[string]Sender, tracker *MessageTracker, cfg QueueC
 		cancel:            cancel,
 		lanes:             make(map[string]*lane),
 		perRouteBuf:       perRouteBuf,
+		dropOnFull:        cfg.DropOnFull,
 		idleTimeout:       laneIdleTimeout,
 		failThreshold:     failThreshold,
 		failBlockDuration: 5 * time.Minute,
@@ -137,8 +142,9 @@ func NewFairQueue(senders map[string]Sender, tracker *MessageTracker, cfg QueueC
 }
 
 // enqueue routes a job to its destination lane, spawning the lane + drainer on
-// first use. block=true (sends) applies backpressure: it blocks until the lane
-// has room. block=false (clean-deletes) drops on a full lane and returns false.
+// first use. Sends block on a full lane by default; with DropOnFull enabled,
+// the new send is dropped so one saturated destination cannot block producers.
+// Clean-deletes always drop on a full lane.
 // Returns false if the queue is stopping or the job was dropped.
 func (fq *FairQueue) enqueue(job *Job, block bool) bool {
 	fq.lanesMu.Lock()
@@ -169,8 +175,13 @@ func (fq *FairQueue) enqueue(job *Job, block bool) bool {
 		case l.ch <- job:
 			return true
 		default:
-			// Lane full — record + throttle-log backpressure, then block.
-			fq.recordBackpressure(l.target)
+			fq.recordBackpressure(l.target, fq.dropOnFull)
+			if fq.dropOnFull {
+				fq.lanesMu.Lock()
+				l.pending--
+				fq.lanesMu.Unlock()
+				return false
+			}
 			l.ch <- job
 			return true
 		}
@@ -187,16 +198,20 @@ func (fq *FairQueue) enqueue(job *Job, block bool) bool {
 	}
 }
 
-// recordBackpressure is called when a send blocks on a full lane. It counts the
+// recordBackpressure is called when a send finds a full lane. It counts the
 // event and logs at most once per 5s per queue (naming the target), so a hot
 // lane doesn't flood the log.
-func (fq *FairQueue) recordBackpressure(target string) {
+func (fq *FairQueue) recordBackpressure(target string, dropping bool) {
 	metrics.DeliveryLaneBackpressure.Inc()
 	fq.backpressure.Add(1)
 	now := time.Now().UnixNano()
 	last := fq.lastBackpressureLog.Load()
 	if now-last > int64(5*time.Second) && fq.lastBackpressureLog.CompareAndSwap(last, now) {
-		log.Warnf("delivery: lane full, applying backpressure to sends for %s", target)
+		if dropping {
+			log.Warnf("delivery: lane full, dropping send for %s", target)
+		} else {
+			log.Warnf("delivery: lane full, applying backpressure to sends for %s", target)
+		}
 	}
 }
 
@@ -205,8 +220,8 @@ func (fq *FairQueue) recordCleanDropped(target string) {
 	metrics.DeliveryCleanDeleteDropped.Inc()
 }
 
-// BackpressureCount returns the cumulative count of send enqueues that blocked
-// on a full lane. Used by the [Status] reporter to detect a developing backlog.
+// BackpressureCount returns the cumulative count of send enqueues that found a
+// full lane. Used by the [Status] reporter to detect a developing backlog.
 func (fq *FairQueue) BackpressureCount() int64 { return fq.backpressure.Load() }
 
 // runLane is one destination's drainer: it processes jobs FIFO and reaps itself
