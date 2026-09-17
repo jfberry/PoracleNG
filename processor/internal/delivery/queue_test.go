@@ -1362,6 +1362,115 @@ func TestLanes_CleanDeleteDropsOnFullLane(t *testing.T) {
 	}
 }
 
+// TestLanes_SendDropsOnFullLane proves that one saturated destination cannot
+// block producers or prevent another destination from accepting work.
+func TestLanes_SendDropsOnFullLane(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	sender := &laneMockSender{onSend: func(job *Job) {
+		if job.Target == "full" {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-release
+		}
+	}}
+	senders := map[string]Sender{"discord": sender}
+	fq, _ := newTestFairQueue(t, senders, QueueConfig{
+		ConcurrentDiscord: 2,
+		PerRouteBuffer:    2,
+		DropOnFull:        true,
+	})
+	fq.Start()
+	defer func() { close(release); fq.Stop() }()
+
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "full"}, true) {
+		t.Fatal("expected first send to be accepted")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("destination lane did not start")
+	}
+	for range 2 {
+		if !fq.enqueue(&Job{Type: "discord:channel", Target: "full"}, true) {
+			t.Fatal("expected send to fit in destination buffer")
+		}
+	}
+
+	result := make(chan bool, 1)
+	go func() {
+		result <- fq.enqueue(&Job{Type: "discord:channel", Target: "full"}, true)
+	}()
+	select {
+	case accepted := <-result:
+		if accepted {
+			t.Error("expected send to be dropped when destination lane is full")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("enqueue blocked on a full destination lane")
+	}
+
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "other"}, true) {
+		t.Error("a different destination should remain available")
+	}
+}
+
+func TestLanes_SendBlocksOnFullLaneByDefault(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var releaseOnce sync.Once
+	sender := &laneMockSender{onSend: func(job *Job) {
+		if job.Target == "full" {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-release
+		}
+	}}
+	senders := map[string]Sender{"discord": sender}
+	fq, _ := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 1, PerRouteBuffer: 1})
+	fq.Start()
+	defer func() {
+		releaseOnce.Do(func() { close(release) })
+		fq.Stop()
+	}()
+
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "full"}, true) {
+		t.Fatal("expected first send to be accepted")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("destination lane did not start")
+	}
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "full"}, true) {
+		t.Fatal("expected send to fit in destination buffer")
+	}
+
+	result := make(chan bool, 1)
+	go func() {
+		result <- fq.enqueue(&Job{Type: "discord:channel", Target: "full"}, true)
+	}()
+	select {
+	case <-result:
+		t.Fatal("default enqueue returned instead of applying backpressure")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case accepted := <-result:
+		if !accepted {
+			t.Error("expected blocked send to be accepted after capacity became available")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("blocked enqueue did not resume")
+	}
+}
+
 // TestLaneStats proves LaneStats reports real per-lane aggregates: one lane
 // parked in-flight (the drainer's onSend blocks on release) plus six more
 // buffered behind it in the same lane's channel yields depth 6 (the in-flight

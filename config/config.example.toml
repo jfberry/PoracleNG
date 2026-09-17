@@ -527,6 +527,7 @@ tileserver_cooldown_ms = 30000           # how long circuit breaker stays open b
 render_pool_size = 8                             # concurrent render goroutines
 render_queue_size = 100                          # max buffered render jobs
 delivery_queue_size = 200                        # per-destination lane buffer (memory scales with active destinations)
+delivery_queue_drop_on_full = false              # drop new sends instead of blocking when a destination lane is full
 # Alerter tuning
 max_database_connections = 15            # max database connections (per worker)
 concurrent_matched_processors = 10       # pre-matched payloads processed concurrently
