@@ -5900,9 +5900,9 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id (required). 0 = every pokemon (the !track everything catch-all).",
                   "format": "int64",
-                  "minimum": 1,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
@@ -6267,9 +6267,9 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id (required). 0 = every pokemon (the !track everything catch-all).",
                   "format": "int64",
-                  "minimum": 1,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
@@ -6634,9 +6634,9 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id (required). 0 = every pokemon (the !track everything catch-all).",
                   "format": "int64",
-                  "minimum": 1,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
@@ -8853,9 +8853,9 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id (required). 0 = every pokemon (the !track everything catch-all).",
                   "format": "int64",
-                  "minimum": 1,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
@@ -11017,9 +11017,9 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id (required). 0 = every pokemon (the !track everything catch-all).",
                   "format": "int64",
-                  "minimum": 1,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 "pvp_ranking_best": {
@@ -12126,9 +12126,9 @@
             ]
           },
           "pokemon_id": {
-            "description": "Pokédex id (required)",
+            "description": "Pokédex id (required). 0 = every pokemon (the !track everything catch-all).",
             "format": "int64",
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           },
           "pvp_ranking_best": {

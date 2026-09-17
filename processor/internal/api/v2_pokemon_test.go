@@ -878,7 +878,7 @@ func TestV2Pokemon_RejectsOutOfRangeFilterValues(t *testing.T) {
 		{"max_size above 5", `{"pokemon_id":25,"max_size":9}`},
 		{"pvp_ranking_evolution above 3", `{"pokemon_id":25,"pvp_ranking_evolution":7}`},
 		{"negative distance", `{"pokemon_id":25,"distance":-1}`},
-		{"pokemon_id zero", `{"pokemon_id":0}`},
+		{"pokemon_id negative", `{"pokemon_id":-1}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -894,6 +894,22 @@ func TestV2Pokemon_RejectsOutOfRangeFilterValues(t *testing.T) {
 				t.Errorf("a rejected rule must not be stored; store has %d rows", n)
 			}
 		})
+	}
+}
+
+// pokemon_id 0 is the "everything" catch-all the bot and matcher use.
+func TestV2Pokemon_AcceptsPokemonIDZero(t *testing.T) {
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost,
+		"/api/v2/humans/u1/tracking/pokemon?silent=true", `[{"pokemon_id":0,"min_iv":100}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := monsterStore.AllRows()
+	if len(rows) != 1 || rows[0].PokemonID != 0 {
+		t.Fatalf("expected one stored row with pokemon_id 0, got %+v", rows)
 	}
 }
 

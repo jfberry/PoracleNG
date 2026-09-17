@@ -19,7 +19,7 @@ import (
 // Defaults documented in each field's doc string come from the field audit
 // pokemon table.
 type v2PokemonRule struct {
-	PokemonID int `json:"pokemon_id" required:"true" minimum:"1" doc:"Pokédex id (required)"`
+	PokemonID int `json:"pokemon_id" required:"true" minimum:"0" doc:"Pokédex id (required). 0 = every pokemon (the !track everything catch-all)."`
 
 	Form *int `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
 
