@@ -187,18 +187,31 @@ func main() {
 	if tokens := cfg.Telegram.TelegramTokens(); len(tokens) > 0 {
 		telegramToken = tokens[0]
 	}
+	telegramRateLimitConfig := delivery.TelegramRateLimitConfig{
+		GlobalRatePerSecond: cfg.Tuning.TelegramGlobalRatePerSecond,
+		GlobalBurst:         cfg.Tuning.TelegramGlobalBurst,
+	}
+	var telegramSendLimiter *delivery.TelegramSendRateLimiter
+	if telegramToken != "" {
+		var err error
+		telegramSendLimiter, err = delivery.NewTelegramSendRateLimiter(telegramRateLimitConfig)
+		if err != nil {
+			log.Fatalf("Failed to configure Telegram global send rate limit: %s", err)
+		}
+	}
 
 	if discordToken != "" || telegramToken != "" {
 		var err error
 		proc.dispatcher, err = delivery.NewDispatcher(delivery.DispatcherConfig{
-			DiscordToken:    discordToken,
-			TelegramToken:   telegramToken,
-			UploadImages:    cfg.Discord.UploadEmbedImages,
-			DeleteDelayMs:   cfg.Discord.MessageDeleteDelay,
-			QueueSize:       cfg.Tuning.DeliveryQueueSize,
-			CacheDir:        filepath.Join(cfg.BaseDir, "config", ".cache"),
-			TileProviderURL: cfg.Geocoding.StaticProviderURL,
-			TileInternalURL: cfg.Geocoding.StaticInternalURL,
+			DiscordToken:        discordToken,
+			TelegramToken:       telegramToken,
+			UploadImages:        cfg.Discord.UploadEmbedImages,
+			DeleteDelayMs:       cfg.Discord.MessageDeleteDelay,
+			QueueSize:           cfg.Tuning.DeliveryQueueSize,
+			CacheDir:            filepath.Join(cfg.BaseDir, "config", ".cache"),
+			TileProviderURL:     cfg.Geocoding.StaticProviderURL,
+			TileInternalURL:     cfg.Geocoding.StaticInternalURL,
+			TelegramRateLimiter: telegramSendLimiter,
 			Queue: delivery.QueueConfig{
 				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
 				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
@@ -1175,8 +1188,9 @@ func main() {
 		deps := sharedBotDeps
 		deps.Parser = tgParser
 		tbot, err := telegrambot.New(telegrambot.Config{
-			Token:   telegramTokens[0],
-			BotDeps: deps,
+			Token:       telegramTokens[0],
+			BotDeps:     deps,
+			RateLimiter: telegramSendLimiter,
 		})
 		if err != nil {
 			log.Warnf("Telegram bot failed to start: %v", err)

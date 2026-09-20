@@ -351,10 +351,10 @@ var (
 		Help: "Current in-flight delivery sends per platform",
 	}, []string{"platform"})
 
-	// Discord API rate limit wait time
+	// API rate limit wait time
 	DeliveryRateLimitWait = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "poracle_delivery_rate_limit_wait_seconds",
-		Help:    "Time spent waiting for Discord rate limits",
+		Help:    "Time spent waiting for proactive delivery API rate limits",
 		Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60},
 	}, []string{"platform"})
 
