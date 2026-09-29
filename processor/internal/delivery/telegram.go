@@ -41,8 +41,12 @@ type TelegramSender struct {
 	currentBackoffUntil time.Time        // zero if not backing off
 	nowFunc             func() time.Time // injectable for tests; nil → time.Now
 
+	// Proactive Telegram global send limiting. Applied per actual message-send attempt.
+	apiLimiter *TelegramSendRateLimiter
+
 	// Wire-call concurrency semaphore (nil = unlimited). Held only across a
-	// single HTTP round-trip (see roundTrip), never during 429 backoff.
+	// single HTTP round-trip (see roundTrip), never during proactive limiter
+	// waits or 429 backoff.
 	sem   chan struct{}
 	inFly atomic.Int64
 }
@@ -50,10 +54,29 @@ type TelegramSender struct {
 // NewTelegramSender creates a new Telegram sender.
 func NewTelegramSender(token string) *TelegramSender {
 	return &TelegramSender{
-		token:   token,
-		baseURL: defaultTelegramBaseURL,
-		client:  &http.Client{Timeout: 30 * time.Second},
+		token:      token,
+		baseURL:    defaultTelegramBaseURL,
+		client:     &http.Client{Timeout: 30 * time.Second},
+		apiLimiter: defaultTelegramSendRateLimiter(),
 	}
+}
+
+// SetRateLimits replaces the proactive Telegram message-send limiter. Call once
+// during construction, before concurrent sends begin.
+func (ts *TelegramSender) SetRateLimits(cfg TelegramRateLimitConfig) error {
+	limiter, err := NewTelegramSendRateLimiter(cfg)
+	if err != nil {
+		return err
+	}
+	ts.apiLimiter = limiter
+	return nil
+}
+
+// SetRateLimiter injects an already-constructed limiter. Use this when multiple
+// outbound Telegram paths share the same bot token and therefore the same
+// global send quota. Call before concurrent use.
+func (ts *TelegramSender) SetRateLimiter(limiter *TelegramSendRateLimiter) {
+	ts.apiLimiter = limiter
 }
 
 // SetConcurrency sizes the wire-call semaphore. n<=0 is clamped to 1 (never
@@ -136,7 +159,9 @@ func (ts *TelegramSender) Snapshot() TelegramRateSnapshot {
 // Platform returns the platform identifier.
 func (ts *TelegramSender) Platform() string { return "telegram" }
 
-// WaitForRateLimit is a no-op for Telegram — rate limiting is handled inline via 429 retry.
+// WaitForRateLimit stays a no-op at the delivery-job layer. Telegram proactive
+// limiting happens inside roundTrip so every actual message-send call (including
+// each component of a multi-part send and every retry) consumes its own token.
 func (ts *TelegramSender) WaitForRateLimit(target string) {}
 
 // telegramMessage holds the parsed fields from a Telegram job message.
@@ -531,18 +556,36 @@ func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, topicID 
 	return ts.callWithRetry(ctx, "sendVenue", body, logRef)
 }
 
-// roundTrip posts ONE Telegram request while holding a concurrency slot, and
-// releases the slot before returning so the caller's 429/5xx backoff runs
-// slot-free. Returns the response body and status.
-func (ts *TelegramSender) roundTrip(ctx context.Context, method string, jsonBody []byte) ([]byte, int, error) {
-	if ts.sem != nil {
+// roundTrip optionally acquires a proactive Telegram send permit, plus a
+// wire-call slot, then posts ONE request. The send path enables the permit;
+// edit/delete paths do not. A send token is committed only once the HTTP slot is available, so slow requests cannot let
+// queued goroutines pre-consume tokens and later burst onto the wire. Limiter
+// sleeps never hold the semaphore; 429/5xx backoff also happens after release.
+func (ts *TelegramSender) roundTrip(ctx context.Context, method string, jsonBody []byte, rateLimitSend bool) ([]byte, int, error) {
+	acquireHTTP := func(ctx context.Context) (func(), error) {
+		if ts.sem == nil {
+			return func() {}, nil
+		}
 		select {
 		case ts.sem <- struct{}{}:
-			defer func() { <-ts.sem }()
+			return func() { <-ts.sem }, nil
 		case <-ctx.Done():
-			return nil, 0, ctx.Err()
+			return nil, ctx.Err()
 		}
 	}
+
+	var releaseHTTP func()
+	var err error
+	if ts.apiLimiter != nil && rateLimitSend {
+		releaseHTTP, err = ts.apiLimiter.WaitForPermit(ctx, acquireHTTP)
+	} else {
+		releaseHTTP, err = acquireHTTP(ctx)
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	defer releaseHTTP()
+
 	ts.inFly.Add(1)
 	metrics.DeliveryInFlight.WithLabelValues("telegram").Inc()
 	defer func() {
@@ -562,13 +605,13 @@ func (ts *TelegramSender) roundTrip(ctx context.Context, method string, jsonBody
 	return respBody, resp.StatusCode, nil
 }
 
-// callWithRetry posts to a Telegram API method with retry logic.
+// callWithRetry posts one of the message-send methods with retry logic.
+// Every attempt consumes a proactive global send token.
 func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body map[string]any, logRef string) (int, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return 0, fmt.Errorf("marshaling request body: %w", err)
 	}
-
 	const maxRetries = 5
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -579,7 +622,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 			}
 		}
 
-		respBody, status, err := ts.roundTrip(ctx, method, jsonBody)
+		respBody, status, err := ts.roundTrip(ctx, method, jsonBody, true)
 		if err != nil {
 			if status != 0 {
 				return 0, fmt.Errorf("reading response body: %w", err)
@@ -651,7 +694,8 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 
 // doPostWithRetry posts to the Telegram API with 429 Retry-After backoff and
 // transport/5xx retry — the rate-limit handling clean-deletes and edits need
-// but the single-shot doPost lacks. It does NOT interpret 4xx (unlike the send
+// but the single-shot doPost lacks. Edit/delete attempts do not consume the
+// proactive message-send quota. It does NOT interpret 4xx (unlike the send
 // path's callWithRetry, which retries any non-2xx): a delete/edit 400 usually
 // means "message already gone", which the callers map to success rather than
 // retrying. Returns the final response body and status after retries.
@@ -660,7 +704,6 @@ func (ts *TelegramSender) doPostWithRetry(ctx context.Context, method string, bo
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshaling request body: %w", err)
 	}
-
 	const maxRetries = 5
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -671,7 +714,7 @@ func (ts *TelegramSender) doPostWithRetry(ctx context.Context, method string, bo
 			}
 		}
 
-		respBody, status, err := ts.roundTrip(ctx, method, jsonBody)
+		respBody, status, err := ts.roundTrip(ctx, method, jsonBody, false)
 		if err != nil {
 			if status != 0 {
 				return nil, status, fmt.Errorf("reading response body: %w", err)

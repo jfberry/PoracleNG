@@ -26,12 +26,24 @@ func requestCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 30*time.Second)
 }
 
+// waitForTelegramRateLimit applies the shared bot-token global quota to one
+// outbound message send.
+func waitForTelegramRateLimit(ctx context.Context, limiter RateLimiter) error {
+	if limiter == nil {
+		return nil
+	}
+	return limiter.Wait(ctx)
+}
+
 // sendTopicMessage posts a plain text reply, optionally threaded into a
 // forum topic. Used everywhere the polling bot wants to reply with no
 // parse mode.
 func (b *Bot) sendTopicMessage(chatID int64, threadID int, text string) (*models.Message, error) {
 	ctx, cancel := requestCtx()
 	defer cancel()
+	if err := waitForTelegramRateLimit(ctx, b.rateLimiter); err != nil {
+		return nil, err
+	}
 	return b.api.SendMessage(ctx, &gotgbot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
@@ -48,6 +60,9 @@ func (b *Bot) sendTopicMessage(chatID int64, threadID int, text string) (*models
 func (b *Bot) sendMarkdownToTopic(chatID int64, threadID int, text string) error {
 	ctx, cancel := requestCtx()
 	defer cancel()
+	if err := waitForTelegramRateLimit(ctx, b.rateLimiter); err != nil {
+		return err
+	}
 	_, err := b.api.SendMessage(ctx, &gotgbot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
@@ -62,6 +77,9 @@ func (b *Bot) sendMarkdownToTopic(chatID int64, threadID int, text string) error
 func (b *Bot) sendPhotoURLToTopic(chatID int64, threadID int, photoURL, caption string) error {
 	ctx, cancel := requestCtx()
 	defer cancel()
+	if err := waitForTelegramRateLimit(ctx, b.rateLimiter); err != nil {
+		return err
+	}
 	_, err := b.api.SendPhoto(ctx, &gotgbot.SendPhotoParams{
 		ChatID:              chatID,
 		MessageThreadID:     threadID,
@@ -77,6 +95,9 @@ func (b *Bot) sendPhotoURLToTopic(chatID int64, threadID int, photoURL, caption 
 func (b *Bot) sendDocumentBytesToTopic(chatID int64, threadID int, filename string, data []byte, caption string) error {
 	ctx, cancel := requestCtx()
 	defer cancel()
+	if err := waitForTelegramRateLimit(ctx, b.rateLimiter); err != nil {
+		return err
+	}
 	_, err := b.api.SendDocument(ctx, &gotgbot.SendDocumentParams{
 		ChatID:              chatID,
 		MessageThreadID:     threadID,
