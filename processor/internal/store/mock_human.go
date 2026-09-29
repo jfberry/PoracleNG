@@ -144,12 +144,32 @@ func (m *MockHumanStore) SetLocation(id string, profileNo int, lat, lon float64)
 	return nil
 }
 
+// SetArea mirrors SQLHumanStore: it writes humans.area AND the named
+// profile's area. The mock previously ignored profileNo entirely, so a test
+// could not tell a per-profile write from a global one.
 func (m *MockHumanStore) SetArea(id string, profileNo int, areas []string) error {
 	m.record("SetArea")
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if h, ok := m.humans[id]; ok {
 		h.Area = areas
+	}
+	for i := range m.profiles[id] {
+		if m.profiles[id][i].ProfileNo == profileNo {
+			m.profiles[id][i].Area = areas
+		}
+	}
+	return nil
+}
+
+// AreaForProfile returns the areas stored against one profile. Test helper.
+func (m *MockHumanStore) AreaForProfile(id string, profileNo int) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, p := range m.profiles[id] {
+		if p.ProfileNo == profileNo {
+			return p.Area
+		}
 	}
 	return nil
 }
