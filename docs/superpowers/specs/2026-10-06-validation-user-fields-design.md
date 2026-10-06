@@ -1,6 +1,6 @@
 # Validation hook: per-user DTS fields
 
-Status: proposed — open for comment
+Status: proposed — open for comment in jfberry/PoracleNG#244
 Date: 2026-10-06
 
 ## Summary
