@@ -5900,10 +5900,13 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
-                  "minimum": 1,
-                  "type": "integer"
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
@@ -6019,7 +6022,6 @@
                 }
               },
               "required": [
-                "pokemon_id",
                 "uid"
               ],
               "type": "object"
@@ -6267,10 +6269,13 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
-                  "minimum": 1,
-                  "type": "integer"
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
@@ -6386,7 +6391,6 @@
                 }
               },
               "required": [
-                "pokemon_id",
                 "uid"
               ],
               "type": "object"
@@ -6634,10 +6638,13 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
-                  "minimum": 1,
-                  "type": "integer"
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
@@ -6753,7 +6760,6 @@
                 }
               },
               "required": [
-                "pokemon_id",
                 "uid"
               ],
               "type": "object"
@@ -8853,10 +8859,13 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
-                  "minimum": 1,
-                  "type": "integer"
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
@@ -8972,7 +8981,6 @@
                 }
               },
               "required": [
-                "pokemon_id",
                 "uid"
               ],
               "type": "object"
@@ -9615,6 +9623,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "disabled_date": {
+            "description": "When the destination was disabled. Null while enabled; pairs with admin_disable so a disabled account shows when.",
+            "type": "string"
+          },
           "enabled": {
             "description": "Whether the user has alerts switched on (the !start/!stop flag)",
             "type": "boolean"
@@ -9627,8 +9639,16 @@
             "description": "Alert language code, empty when the user has not chosen one",
             "type": "string"
           },
+          "last_checked": {
+            "description": "When reconciliation last verified this destination. Null if never checked — admins sort on this to find dormant accounts.",
+            "type": "string"
+          },
           "name": {
             "description": "Display name",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Free-form operator notes.",
             "type": "string"
           },
           "type": {
@@ -9643,7 +9663,10 @@
           "enabled",
           "admin_disable",
           "language",
-          "current_profile_no"
+          "current_profile_no",
+          "last_checked",
+          "disabled_date",
+          "notes"
         ],
         "type": "object"
       },
@@ -11017,10 +11040,13 @@
                   ]
                 },
                 "pokemon_id": {
-                  "description": "Pokédex id (required)",
+                  "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
-                  "minimum": 1,
-                  "type": "integer"
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 },
                 "pvp_ranking_best": {
                   "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
@@ -11136,7 +11162,6 @@
                 }
               },
               "required": [
-                "pokemon_id",
                 "uid"
               ],
               "type": "object"
@@ -12126,10 +12151,13 @@
             ]
           },
           "pokemon_id": {
-            "description": "Pokédex id (required)",
+            "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
             "format": "int64",
-            "minimum": 1,
-            "type": "integer"
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "pvp_ranking_best": {
             "description": "Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard.",
@@ -12239,9 +12267,6 @@
             ]
           }
         },
-        "required": [
-          "pokemon_id"
-        ],
         "type": "object"
       },
       "V2ProfileResponse": {
@@ -15888,7 +15913,7 @@
         ]
       },
       "post": {
-        "description": "Stores the requested areas, lowercased and deduped, after matching them against the fences this human may select (userSelectable for non-admins, community-filtered when area_security is enabled). Names that do not match come back in `rejected` rather than being discarded silently. Set `trusted: true` to select non-userSelectable fences on behalf of a user whose client has already authorised the change; unknown names are still rejected. Triggers a state reload. 404 if the human does not exist.",
+        "description": "Stores the requested areas, lowercased and deduped, after matching them against the fences this human may select (userSelectable for non-admins, community-filtered when area_security is enabled). Names that do not match come back in `rejected` rather than being discarded silently. Set `trusted: true` to select non-userSelectable fences on behalf of a user whose client has already authorised the change; unknown names are still rejected. Writes the human's active profile by default; `?profile=` targets another and `?all_profiles=true` writes every profile the human owns (the two are mutually exclusive). Triggers a state reload. 404 if the human does not exist.",
         "operationId": "v2-set-human-areas",
         "parameters": [
           {
@@ -15899,6 +15924,28 @@
             "schema": {
               "description": "Human id (the owning user)",
               "type": "string"
+            }
+          },
+          {
+            "description": "Profile number to write; defaults to the human's active profile. Mutually exclusive with all_profiles.",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number to write; defaults to the human's active profile. Mutually exclusive with all_profiles.",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Write the same areas to EVERY profile the human owns. Use when a fence has been deleted and must be dropped everywhere. Mutually exclusive with profile.",
+            "explode": false,
+            "in": "query",
+            "name": "all_profiles",
+            "schema": {
+              "description": "Write the same areas to EVERY profile the human owns. Use when a fence has been deleted and must be dropped everywhere. Mutually exclusive with profile.",
+              "type": "boolean"
             }
           }
         ],
@@ -17541,6 +17588,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -17829,6 +17886,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -18087,6 +18154,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -18377,6 +18454,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -18635,6 +18722,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -18925,6 +19022,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -19183,6 +19290,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -19473,6 +19590,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -19731,6 +19858,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -20021,6 +20158,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -20279,6 +20426,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -20569,6 +20726,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -20827,6 +20994,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -21117,6 +21294,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -21375,6 +21562,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -21665,6 +21862,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -21923,6 +22130,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -22213,6 +22430,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -22471,6 +22698,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -22761,6 +22998,16 @@
               "description": "Apply without sending the confirmation push",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -23019,6 +23266,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
@@ -23307,6 +23564,16 @@
             "name": "silent",
             "schema": {
               "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
               "type": "boolean"
             }
           }
