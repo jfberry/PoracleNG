@@ -322,6 +322,7 @@ var configSchema = []ConfigSection{
 			{Name: "cache_detail", Type: "int", Default: 3, Description: "Decimal places of lat/lon for geocoding cache key rounding (3 or 4 for 100x more detail)"},
 			{Name: "intersection_users", Type: "string[]", Default: []string{}, Description: "GeoNames usernames for the {{intersection}} field (nearest street intersection). Empty disables it. Shares the geocoding cache; uses GeoNames credits per uncached lookup. Requires a restart to take effect", HotReload: false},
 			{Name: "forward_only", Type: "bool", Default: false, Description: "Disable reverse geocoding — only forward lookups will be performed"},
+			{Name: "local_language", Type: "string", Default: "", Description: "Language of the local place names (e.g. pl). Lookups in this language are sent without a language so the provider returns its native names. Needed for Photon prebuilt indexes, which only accept default/en/de/fr", Advanced: true},
 			{Name: "static_provider", Type: "select", Default: "none", Description: "Static map tile provider for generating map images in alerts", Options: []ConfigSelectOption{
 				{Value: "none", Label: "None", Description: "Disable static map tiles"},
 				{Value: "tileservercache", Label: "TileserverCache", Description: "SwiftTileserverCache (recommended, self-hosted)"},

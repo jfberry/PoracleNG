@@ -164,6 +164,41 @@ func TestGeocoderLanguageAffectsProviderAndCacheKey(t *testing.T) {
 	}
 }
 
+func TestGeocoderLocalLanguageUsesProviderDefault(t *testing.T) {
+	cache, err := NewCache(t.TempDir(), 24*time.Hour, 100)
+	if err != nil {
+		t.Fatalf("NewCache: %v", err)
+	}
+	defer cache.Close()
+
+	addrTmpl, err := CompileAddressTemplate("{{{city}}}")
+	if err != nil {
+		t.Fatalf("CompileAddressTemplate: %v", err)
+	}
+	provider := &languageProvider{}
+	g := &Geocoder{
+		provider: provider,
+		cache:    cache,
+		config: Config{
+			CacheDetail:      3,
+			LocalLanguage:    " PL ",
+			FailureThreshold: 5,
+			CooldownMs:       1,
+		},
+		addrTmpl: addrTmpl,
+		breaker:  breaker.New[*Address](breaker.Config{Name: "test", Concurrency: 1}),
+	}
+
+	g.GetAddressForLanguage(54.097, 18.761, "pl")
+	g.GetAddressForLanguage(54.097, 18.761, "") // same provider request, served from cache
+	g.GetAddressForLanguage(54.097, 18.761, "en")
+
+	calls := provider.calls()
+	if len(calls) != 2 || calls[0] != "" || calls[1] != "en" {
+		t.Fatalf("provider languages=%q, want [\"\" \"en\"]", calls)
+	}
+}
+
 func TestCacheKeyForLanguage(t *testing.T) {
 	base := CacheKey(52.517, 13.389, 3)
 	if got := CacheKeyForLanguage(52.517, 13.389, 3, ""); got != base {
