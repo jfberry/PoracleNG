@@ -108,7 +108,7 @@ func (apt *ActivePokemonTracker) GetAffectedPokemon(cellID, userID string, oldWe
 			continue
 		}
 
-		if gamedata.IsAffectedByWeatherChange(p.Types, p.Boosted, newWeather) {
+		if affectedByChange(p, oldWeather, newWeather) {
 			result = append(result, *p)
 			if len(result) >= maxCount {
 				break
@@ -117,6 +117,25 @@ func (apt *ActivePokemonTracker) GetAffectedPokemon(cellID, userID string, oldWe
 	}
 
 	return result
+}
+
+// affectedByChange reports whether a weather change flips p's boost.
+//
+// The boost state before the change is derived from oldWeather and p's types
+// rather than read from p.Boosted. Golbat re-sends pokemon under the new
+// weather quickly, often before the change event is consumed, and each
+// re-send overwrites p.Boosted with the post-change state — so the stored
+// flag would show no flip and the alert would be silently dropped. When the
+// change carries no recognised old weather, the stored flag is the only
+// signal left.
+func affectedByChange(p *ActivePokemon, oldWeather, newWeather int) bool {
+	if _, known := gamedata.WeatherTypeBoost[oldWeather]; !known {
+		return gamedata.IsAffectedByWeatherChange(p.Types, p.Boosted, newWeather)
+	}
+	if len(p.Types) == 0 {
+		return false
+	}
+	return gamedata.IsBoostedByWeather(p.Types, oldWeather) != gamedata.IsBoostedByWeather(p.Types, newWeather)
 }
 
 func (apt *ActivePokemonTracker) cleanupLoop() {

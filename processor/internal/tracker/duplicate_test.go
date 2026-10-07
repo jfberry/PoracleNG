@@ -14,27 +14,47 @@ func TestDuplicateCachePokemon(t *testing.T) {
 	disappear := time.Now().Unix() + 600
 
 	// First time - not duplicate
-	isDup := dc.CheckPokemon("enc1", true, 500, disappear)
+	isDup := dc.CheckPokemon("enc1", 1, true, 500, disappear)
 	if isDup {
 		t.Error("Expected first sighting to not be duplicate")
 	}
 
 	// Same key - duplicate
-	isDup = dc.CheckPokemon("enc1", true, 500, disappear)
+	isDup = dc.CheckPokemon("enc1", 1, true, 500, disappear)
 	if !isDup {
 		t.Error("Expected second sighting to be duplicate")
 	}
 
 	// Different verified state - not duplicate
-	isDup = dc.CheckPokemon("enc1", false, 500, disappear)
+	isDup = dc.CheckPokemon("enc1", 1, false, 500, disappear)
 	if isDup {
 		t.Error("Expected different verified state to not be duplicate")
 	}
 
 	// Different CP - not duplicate
-	isDup = dc.CheckPokemon("enc1", true, 600, disappear)
+	isDup = dc.CheckPokemon("enc1", 1, true, 600, disappear)
 	if isDup {
 		t.Error("Expected different CP to not be duplicate")
+	}
+}
+
+// TestDuplicateCachePokemonSpeciesChange: a species change on the same
+// encounter (e.g. a Ditto reveal) must get past the duplicate check even when
+// the CP is unchanged, so change detection can see it.
+func TestDuplicateCachePokemonSpeciesChange(t *testing.T) {
+	dc := NewDuplicateCache()
+	defer dc.Close()
+
+	disappear := time.Now().Unix() + 600
+
+	if dc.CheckPokemon("enc1", 16, true, 500, disappear) {
+		t.Fatal("expected first sighting to not be duplicate")
+	}
+	if dc.CheckPokemon("enc1", 132, true, 500, disappear) {
+		t.Error("expected species change with the same CP to not be duplicate")
+	}
+	if !dc.CheckPokemon("enc1", 132, true, 500, disappear) {
+		t.Error("expected repeat of the new species to be duplicate")
 	}
 }
 
@@ -236,7 +256,7 @@ func TestDuplicateCacheMemoryPerEntry(t *testing.T) {
 	runtime.ReadMemStats(&before)
 
 	for i := range entries {
-		dc.CheckPokemon(encounterIDForTest(i), true, 1500, disappear)
+		dc.CheckPokemon(encounterIDForTest(i), 1, true, 1500, disappear)
 	}
 
 	runtime.GC()
