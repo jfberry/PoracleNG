@@ -64,7 +64,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		// Duplicate check
 		verified := pokemon.Verified || pokemon.DisappearTimeVerified
-		if ps.duplicates.CheckPokemon(pokemon.EncounterID, verified, pokemon.CP, pokemon.DisappearTime) {
+		if ps.duplicates.CheckPokemon(pokemon.EncounterID, pokemon.PokemonID, verified, pokemon.CP, pokemon.DisappearTime) {
 			l.Debug("Wild encounter was sent again too soon, ignoring")
 			metrics.DuplicatesSkipped.WithLabelValues("pokemon").Inc()
 			return

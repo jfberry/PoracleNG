@@ -143,7 +143,7 @@ Golbat POSTs a JSON array to `POST /` on the processor:
 
 ### 2. Parsing & Dedup
 
-Each handler unmarshals the raw JSON into a typed struct (`webhook/types.go`). Duplicate check follows — keyed on encounter ID + CP + disappear time for pokemon, station ID + battle end + pokemon ID for maxbattle, etc. Duplicates are silently dropped.
+Each handler unmarshals the raw JSON into a typed struct (`webhook/types.go`). Duplicate check follows — keyed on encounter ID + species + verified + CP for pokemon (species so a same-CP species change such as a Ditto reveal still reaches change detection), station ID + battle end + pokemon ID for maxbattle, etc. Duplicates are silently dropped.
 
 **Important**: Fort update webhooks use a nested format from Golbat (`change_type`, `edit_types`, `new`/`old` snapshot objects), not flat fields. The enrichment layer flattens these into template-friendly fields (`name`, `oldName`, `newName`, `isEditName`, `changeTypeText`, etc.).
 

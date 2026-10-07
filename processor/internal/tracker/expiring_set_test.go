@@ -134,7 +134,7 @@ func BenchmarkDuplicateCacheCheckPokemon(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
-		dc.CheckPokemon(ids[i%n], true, 1500, disappear)
+		dc.CheckPokemon(ids[i%n], 1, true, 1500, disappear)
 	}
 }
 
