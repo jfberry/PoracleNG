@@ -642,6 +642,21 @@ func parseUIDList(s string) ([]int64, error) {
 // validators into an huma error. The override validators predate v2 and return
 // 400 for validation failures; v2 is strict and surfaces these as 422
 // problem+json (the default branch). 404/500 pass through unchanged.
+// rejectEdit returns a 422 when a rule asks for edit mode on a tracking type
+// whose alerts never carry an edit key (the flag would be silently ignored).
+// nil/false are accepted so GET -> PUT round-trips of legacy rows keep working.
+func rejectEdit(typeName string, edit *bool) error {
+	if edit == nil || !*edit {
+		return nil
+	}
+	msg := "edit is not supported for " + typeName + " tracking"
+	return huma.Error422UnprocessableEntity(msg, &huma.ErrorDetail{
+		Location: "body.edit",
+		Message:  msg,
+		Value:    true,
+	})
+}
+
 func humaErr(code int, msg string) error {
 	switch code {
 	case 404:

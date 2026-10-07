@@ -361,10 +361,10 @@ func TestV2Invasion_BossRoundTrip(t *testing.T) {
 func TestV2Invasion_CleanEditSummaryBitmask(t *testing.T) {
 	r, is, _, restore := newV2InvasionTestAPI(t)
 	defer restore()
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion", `[{"type_id":11,"clean":true,"edit":true,"summary":true}]`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion", `[{"type_id":11,"clean":true,"summary":true}]`)
 	rows := is.AllRows()
-	if len(rows) != 1 || rows[0].Clean != 7 {
-		t.Fatalf("expected clean bitmask 7, got %+v", rows)
+	if len(rows) != 1 || rows[0].Clean != 5 {
+		t.Fatalf("expected clean bitmask 5 (clean+summary; edit unsupported), got %+v", rows)
 	}
 }
 

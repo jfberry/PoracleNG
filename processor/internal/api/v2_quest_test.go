@@ -313,10 +313,10 @@ func TestV2Quest_CleanEditSummaryBitmask(t *testing.T) {
 	r, qs, _, restore := newV2QuestTestAPI(t)
 	defer restore()
 
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/quest", `[{"reward_type":3,"clean":true,"edit":true,"summary":true}]`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/quest", `[{"reward_type":3,"clean":true,"summary":true}]`)
 	rows := qs.AllRows()
-	if len(rows) != 1 || rows[0].Clean != 7 {
-		t.Fatalf("expected clean bitmask 7, got %+v", rows)
+	if len(rows) != 1 || rows[0].Clean != 5 {
+		t.Fatalf("expected clean bitmask 5 (clean+summary; edit unsupported), got %+v", rows)
 	}
 }
 
@@ -507,5 +507,15 @@ func TestV2Quest_UnknownHuman404(t *testing.T) {
 	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/nope/tracking/quest", "")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown human, got %d", w.Code)
+	}
+}
+
+func TestV2Quest_EditTrueRejected(t *testing.T) {
+	r, _, _, restore := newV2QuestTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/quest", `[{"reward_type":3,"edit":true}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for edit:true on quest, got %d: %s", w.Code, w.Body.String())
 	}
 }

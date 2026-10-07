@@ -1031,3 +1031,17 @@ func TestV2Pokemon_LegacyZeroPVPRanksReadAsWildcard(t *testing.T) {
 		}
 	}
 }
+
+func TestV2Pokemon_EditTrueAccepted(t *testing.T) {
+	r, ps, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon", `[{"pokemon_id":25,"edit":true}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("edit:true must be accepted on pokemon, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := ps.AllRows()
+	if len(rows) != 1 || rows[0].Clean&2 == 0 {
+		t.Fatalf("edit bit (2) should be stored, got %+v", rows)
+	}
+}

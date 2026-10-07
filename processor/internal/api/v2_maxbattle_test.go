@@ -310,10 +310,10 @@ func TestV2Maxbattle_StationIDRoundTrip(t *testing.T) {
 func TestV2Maxbattle_CleanEditSummaryBitmask(t *testing.T) {
 	r, ms, _, restore := newV2MaxbattleTestAPI(t)
 	defer restore()
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/maxbattle", `[{"pokemon_id":150,"clean":true,"edit":true,"summary":true}]`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/maxbattle", `[{"pokemon_id":150,"clean":true,"summary":true}]`)
 	rows := ms.AllRows()
-	if len(rows) != 1 || rows[0].Clean != 7 {
-		t.Fatalf("expected clean bitmask 7, got %+v", rows)
+	if len(rows) != 1 || rows[0].Clean != 5 {
+		t.Fatalf("expected clean bitmask 5 (clean+summary; edit unsupported), got %+v", rows)
 	}
 }
 
