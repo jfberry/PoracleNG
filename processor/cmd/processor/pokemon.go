@@ -253,6 +253,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		}
 
 		// ReplyKey is set so enabling the flag later threads onto this send.
+		editKey, editMaxAge := ps.pokemonEditFields(pokemon.EncounterID)
 		ps.renderCh <- RenderJob{
 			AlertType:         "pokemon",
 			IsPokemon:         true,
@@ -266,6 +267,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			TileGate:          ps.newTileGate(tilePending),
 			LogReference:      pokemon.EncounterID,
 			ReplyKey:          pokemon.EncounterID,
+			EditKey:           editKey,
+			EditMaxAge:        editMaxAge,
 		}
 	}()
 	return nil
@@ -295,7 +298,19 @@ type pokemonDispatchInput struct {
 // exists. Fresh sends seed the reply-index for future changes. A
 // single tileGate ensures the shared enrichment map is written once
 // before any render worker reads it.
+// pokemonEditFields returns the base edit key and edit window for a pokemon
+// RenderJob. The renderer appends ":<userID>" to the key only for rules with
+// the edit bit. With [tracking] pokemon_edit off, both are zero so no job
+// edits and follow-ups thread as replies.
+func (ps *ProcessorService) pokemonEditFields(encounterID string) (string, time.Duration) {
+	if !ps.cfg.Tracking.PokemonEdit {
+		return "", 0
+	}
+	return "pokemon:" + encounterID, ps.cfg.Tracking.PokemonEditMaxAge()
+}
+
 func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
+	editKey, editMaxAge := ps.pokemonEditFields(in.encounterID)
 	if ps.dispatcher == nil {
 		if len(in.matched) == 0 {
 			return
@@ -313,6 +328,8 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 			TileGate:          ps.newTileGate(in.tilePending),
 			LogReference:      in.encounterID,
 			ReplyKey:          in.encounterID,
+			EditKey:           editKey,
+			EditMaxAge:        editMaxAge,
 		}
 		return
 	}
@@ -335,6 +352,8 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 				TileGate:          gate,
 				LogReference:      in.encounterID,
 				ReplyKey:          in.encounterID,
+				EditKey:           editKey,
+				EditMaxAge:        editMaxAge,
 			}
 		}
 	}
@@ -376,6 +395,8 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 				TileGate:          gate,
 				LogReference:      in.encounterID,
 				ReplyKey:          in.encounterID,
+				EditKey:           editKey,
+				EditMaxAge:        editMaxAge,
 				OriginalView:      orig,
 				ChangeType:        in.change.Type.String(),
 			}

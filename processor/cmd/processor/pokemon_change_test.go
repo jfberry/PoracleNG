@@ -690,3 +690,57 @@ func TestProcessPokemon_RespectsChangeTrackingFlag(t *testing.T) {
 		t.Fatalf("pokemon.go must reference ps.cfg.Tracking.PokemonChangeTracking. Without this, the [tracking] pokemon_change_tracking flag has no effect.")
 	}
 }
+
+func TestDispatchPokemonAlert_EditEnabled_SetsEditFields(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
+	ps.cfg.Tracking.PokemonEdit = true
+	ps.cfg.Tracking.PokemonEditWindowMins = 5
+
+	encounterID := "enc-edit"
+	change := &tracker.EncounterChange{
+		EncounterID: encounterID,
+		Type:        tracker.ChangeSpecies,
+		Old:         tracker.EncounterState{PokemonID: 16, CP: 500},
+		New:         tracker.EncounterState{PokemonID: 132, CP: 500},
+	}
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		matched:        []webhook.MatchedUser{{ID: "still", Type: "discord:user", Clean: 2}},
+		priorOnlyUsers: []webhook.MatchedUser{{ID: "gone", Type: "discord:user", Clean: 2}},
+		isEncountered:  true,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 2 {
+		t.Fatalf("expected monster + monsterChanged jobs, got %d", len(jobs))
+	}
+	for _, j := range jobs {
+		if j.EditKey != "pokemon:"+encounterID {
+			t.Errorf("IsChange=%v: EditKey = %q, want pokemon:%s", j.IsChange, j.EditKey, encounterID)
+		}
+		if j.EditMaxAge != 5*time.Minute {
+			t.Errorf("IsChange=%v: EditMaxAge = %v, want 5m", j.IsChange, j.EditMaxAge)
+		}
+	}
+}
+
+func TestDispatchPokemonAlert_EditDisabled_NoEditKey(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
+	ps.cfg.Tracking.PokemonEdit = false
+	ps.cfg.Tracking.PokemonEditWindowMins = 5
+
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:   "enc-off",
+		matched:       []webhook.MatchedUser{{ID: "u", Type: "discord:user", Clean: 2}},
+		isEncountered: true,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	if jobs[0].EditKey != "" || jobs[0].EditMaxAge != 0 {
+		t.Errorf("pokemon_edit=false must not set edit fields, got key=%q maxAge=%v", jobs[0].EditKey, jobs[0].EditMaxAge)
+	}
+}
