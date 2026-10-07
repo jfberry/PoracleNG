@@ -585,6 +585,16 @@ default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = a
 # `monster` for the encounter event). Set to false to suppress all of this:
 # change events still re-render as a regular `monster` send to matched users.
 pokemon_change_tracking = true
+# pokemon_edit - honour the `edit` flag on pokemon tracking. When true, a
+#   follow-up for the same encounter (IV reveal, weather boost, species/form
+#   change) edits the original alert in place while it is recent enough.
+#   When false, pokemon rules with `edit` behave as if it were not set:
+#   follow-ups arrive as threaded replies.
+pokemon_edit = true
+# pokemon_edit_window_mins - only edit while the original alert is at most
+#   this many minutes old; after that, follow-ups arrive as threaded replies
+#   so they aren't lost further up a busy channel. 0 = no limit.
+pokemon_edit_window_mins = 5
 
 # Quest summary — when on, quest tracking rules with the summary clean bit set
 # (clean & 4) defer matched quests into a per-user in-memory buffer instead of
