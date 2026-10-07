@@ -14,9 +14,9 @@ follow-up for an encounter is sent as a new message threaded as a reply.
 API.md and CLAUDE.md both claim edit takes priority for pokemon; they are
 wrong today.
 
-The same is true for gym, invasion, nest, maxbattle, quest and fort: v2
-exposes `edit` on all of them and the shared command helper accepts the
-`edit` keyword, but no handler sets an edit key. Only raid, egg (shared raid
+The same is true for gym, invasion, nest, maxbattle and quest: v2 exposes
+`edit` on all of them, but no handler sets an edit key. (Fort has no clean
+column, so its v2 type already omits `edit`.) Only raid, egg (shared raid
 key), lure and showcase incidents honour it.
 
 Golbat now sends pokemon with IVs immediately and re-sends them quickly, so
@@ -33,7 +33,7 @@ several minutes ago lands far up the scrollback where nobody sees it.
    fall back to today's threaded reply.
 3. Let the operator turn pokemon edit off entirely.
 4. Stop advertising `edit` on types that cannot honour it: reject it in the
-   v2 API and in commands.
+   v2 API.
 
 ## Non-goals
 
@@ -62,7 +62,7 @@ pokemon_edit_window_mins = 5
 ```
 
 Defaults: `pokemon_edit = true`, `pokemon_edit_window_mins = 5`. Negative
-window values are treated as 0 (no limit) and logged as a config warning.
+window values are treated as 0 (no limit).
 
 ## Behaviour
 
@@ -137,8 +137,8 @@ showcase jobs leave it 0.
 Supported: **pokemon, raid, egg, lure, incident** (incident edit takes effect
 for showcase events — showcase alerts reuse incident rules with
 `grunt_type="showcase"`; other incident events go through the invasion path
-without an edit key). Rejected: **gym, invasion, nest, maxbattle, quest,
-fort**.
+without an edit key). Rejected: **gym, invasion, nest, maxbattle, quest**
+(fort has no `edit` field in v2 at all).
 
 **v2 API.** In each rejected type's `Translate`, `edit: true` returns a 422
 problem response with an `errors[]` entry at `body.edit` and detail
@@ -150,12 +150,12 @@ rejected types becomes "Not supported for <type> tracking — omit, or send
 null/false." The pokemon field `doc` mentions the window and that the
 operator can disable pokemon edit.
 
-**Commands.** `parseCommonTrackFields` (`internal/bot/commands/helpers.go`)
-receives the DTS type. When the `edit` keyword is present for a rejected
-type, return 🙅 with new i18n key `msg.edit_not_supported` = "Edit isn't
-supported for {0} tracking" (added to `en.json`; other locales fall back to
-English per key). Quest's existing `edit` + `summary` conflict message keeps
-precedence. `!track` (`track.go`) keeps accepting `edit`.
+**Commands.** No change needed. Only `!track`, `!raid`, `!egg` and `!lure`
+define the `edit` keyword in their parameter lists; the commands for the
+rejected types (`!gym`, `!invasion`/`!incident`, `!nest`, `!maxbattle`,
+`!quest`, `!fort`) never accepted it — `edit` there is reported as an
+unrecognised argument. (`parseCommonTrackFields` would set bit 2 if the
+keyword were present, but no rejected type's params produce it.)
 
 **v1 API and stored rows.** Untouched. A stored edit bit on a rejected type
 is harmless — nothing reads it.
@@ -192,10 +192,6 @@ v2 API (`internal/api/v2_*_test.go`):
 - `edit: false` / omitted on gym → accepted.
 - Stored gym row with the edit bit → GET returns `edit: null`.
 - `edit: true` on pokemon → accepted and stored as bit 2.
-
-Commands:
-- `!gym … edit` → 🙅 with `msg.edit_not_supported`.
-- `!track … edit` and `!raid … edit` → still accepted.
 
 Pre-commit gate: `go build ./... && go vet ./... && go test -count=1 ./... &&
 golangci-lint run ./...`.
