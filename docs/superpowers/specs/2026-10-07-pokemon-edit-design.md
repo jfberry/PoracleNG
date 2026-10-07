@@ -198,11 +198,14 @@ golangci-lint run ./...`.
 
 ## Known issues (out of scope)
 
-- Raid/egg/lure/showcase: when an edit attempt fails and the queue falls back
+- Raid/egg/lure/showcase and pokemon (pokemon edits are frequent, so it now
+  hits this too): when an edit attempt fails and the queue falls back
   to a new send, that send is tracked under the same edit key, overwriting the
   original's entry so the original is never clean-deleted. The pokemon
   window path avoids this by tracking under the message's own key; the same
-  treatment could be applied to the failed-edit fallback later.
+  treatment could be applied to the failed-edit fallback later. Telegram's
+  "message is not modified" response, the most common trigger, is now treated
+  as success rather than a failed edit.
 - Telegram alerts are sent as several messages (sticker, photo, text,
   location), and `TelegramSender.Edit` only edits the text message. A pokemon
   edit on Telegram therefore updates the text (CP, IV, name, weather) but not

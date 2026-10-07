@@ -291,13 +291,6 @@ type pokemonDispatchInput struct {
 	isEncountered  bool
 }
 
-// dispatchPokemonAlert emits one RenderJob per language per bucket:
-// matched users get `monster`; prior-only users get `monsterChanged`
-// with a per-language {{original.X}} view. ReplyKey is set on every
-// job so the delivery queue attaches reply metadata when a prior
-// exists. Fresh sends seed the reply-index for future changes. A
-// single tileGate ensures the shared enrichment map is written once
-// before any render worker reads it.
 // pokemonEditFields returns the base edit key and edit window for a pokemon
 // RenderJob. The renderer appends ":<userID>" to the key only for rules with
 // the edit bit. With [tracking] pokemon_edit off, both are zero so no job
@@ -309,6 +302,13 @@ func (ps *ProcessorService) pokemonEditFields(encounterID string) (string, time.
 	return "pokemon:" + encounterID, ps.cfg.Tracking.PokemonEditMaxAge()
 }
 
+// dispatchPokemonAlert emits one RenderJob per language per bucket:
+// matched users get `monster`; prior-only users get `monsterChanged`
+// with a per-language {{original.X}} view. ReplyKey is set on every
+// job so the delivery queue attaches reply metadata when a prior
+// exists. Fresh sends seed the reply-index for future changes. A
+// single tileGate ensures the shared enrichment map is written once
+// before any render worker reads it.
 func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	editKey, editMaxAge := ps.pokemonEditFields(in.encounterID)
 	if ps.dispatcher == nil {

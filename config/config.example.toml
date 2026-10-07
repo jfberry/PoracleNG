@@ -583,7 +583,9 @@ default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = a
 # gender, weather-boost shift) and the non-IV → IV transition for users with
 # a prior message fire a reply-threaded `monsterChanged` (or threaded
 # `monster` for the encounter event). Set to false to suppress all of this:
-# change events still re-render as a regular `monster` send to matched users.
+# change events still re-render as a regular `monster` send to matched users
+# (rules with `edit` still edit the original in place while pokemon_edit is on
+# and the alert is within pokemon_edit_window_mins).
 pokemon_change_tracking = true
 # pokemon_edit - honour the `edit` flag on pokemon tracking. When true, a
 #   follow-up for the same encounter (IV reveal, weather boost, species/form

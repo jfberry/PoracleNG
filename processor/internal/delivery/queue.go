@@ -391,7 +391,8 @@ func (fq *FairQueue) processJob(job *Job) {
 	// and the tracker has a prior under EditKey, the existing message is
 	// updated in place — we do not fall through to the reply-stamping path
 	// below, because the message reuses the prior rather than replying to
-	// it.
+	// it. The exception is a prior past the job's EditMaxAge window, which
+	// replies instead.
 	editWindowPassed := false
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
@@ -424,6 +425,15 @@ func (fq *FairQueue) processJob(job *Job) {
 						}
 					}
 				}
+
+				// Refresh the clean-deletion TTL: the follow-up may carry a
+				// later end time. SentAt (the edit-window anchor) and the
+				// rest of the entry are preserved; copy rather than mutate
+				// the cached pointer.
+				if job.TTH.Duration() > 0 {
+					updated := *existing
+					fq.tracker.Track(job.EditKey, &updated, job.TTH.Duration())
+				}
 				return
 			} else {
 				logref.Warnf(job.LogReference, "edit: failed for key=%s: %v, sending new message", job.EditKey, err)
@@ -439,8 +449,8 @@ func (fq *FairQueue) processJob(job *Job) {
 	// message_reference / Telegram reply_to_message_id.
 	//
 	// Only runs after the edit path falls through (either no EditKey, no
-	// prior under EditKey, or the edit attempt failed and we're sending a
-	// fresh message). Caller is not expected to set ReplyToID — it's an
+	// prior under EditKey, the edit attempt failed and we're sending a
+	// fresh message, or the prior is past the edit window). Caller is not expected to set ReplyToID — it's an
 	// ephemeral queue→sender field.
 	if job.ReplyKey != "" && job.ReplyToID == "" {
 		if msgID := fq.tracker.LookupReply(job.ReplyKey, job.Target); msgID != "" {

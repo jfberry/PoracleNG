@@ -1735,3 +1735,35 @@ func TestEditWindow_NoLimitEditsOldMessage(t *testing.T) {
 		t.Fatalf("EditMaxAge 0 must always edit (raid behaviour), got %d edits", got)
 	}
 }
+
+func TestEditWindow_SuccessfulEditRefreshesTTL(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	sentAt := time.Now().Add(-1 * time.Minute).Unix()
+	tracker.Track("pokemon:enc1:user1", &TrackedMessage{
+		SentID:   "chan1:msg-original",
+		Target:   "user1",
+		Type:     "discord:user",
+		Clean:    3,
+		ReplyKey: "enc1",
+		SentAt:   sentAt,
+	}, 2*time.Minute)
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := mock.getEditCalls(); len(got) != 1 {
+		t.Fatalf("expected one edit, got %v", got)
+	}
+	got := tracker.LookupEdit("pokemon:enc1:user1")
+	if got == nil || got.SentID != "chan1:msg-original" || got.SentAt != sentAt {
+		t.Fatalf("entry must keep SentID and SentAt, got %+v", got)
+	}
+	item := tracker.cache.Get("pokemon:enc1:user1")
+	if item == nil {
+		t.Fatal("entry missing from cache")
+	}
+	if remaining := time.Until(item.ExpiresAt()); remaining < 30*time.Minute {
+		t.Fatalf("TTL not refreshed after edit: %v remaining", remaining)
+	}
+}
