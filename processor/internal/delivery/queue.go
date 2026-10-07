@@ -336,6 +336,19 @@ func (fq *FairQueue) Stop() {
 	fq.cancel()
 }
 
+// editTooOld reports whether a tracked message is past the job's edit window.
+// maxAge 0 means no window. SentAt 0 is an entry persisted before SentAt
+// existed; with no known age it is treated as too old.
+func editTooOld(msg *TrackedMessage, maxAge time.Duration, now time.Time) bool {
+	if maxAge <= 0 {
+		return false
+	}
+	if msg.SentAt == 0 {
+		return true
+	}
+	return now.Sub(time.Unix(msg.SentAt, 0)) > maxAge
+}
+
 func (fq *FairQueue) processJob(job *Job) {
 	// 1. Wait for rate limits. Per-platform wire concurrency is now enforced
 	//    by the sender itself (see DiscordSender/TelegramSender.roundTrip),
@@ -379,9 +392,16 @@ func (fq *FairQueue) processJob(job *Job) {
 	// updated in place — we do not fall through to the reply-stamping path
 	// below, because the message reuses the prior rather than replying to
 	// it.
+	editWindowPassed := false
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
-		if existing != nil {
+		if existing != nil && editTooOld(existing, job.EditMaxAge, time.Now()) {
+			// Too far up the channel for an edit to be seen: reply instead
+			// (the reply-stamping path below) and track the reply under its
+			// own key so the original keeps its clean-deletion.
+			logref.Debugf(job.LogReference, "edit: prior for key=%s is past the %v edit window, replying instead", job.EditKey, job.EditMaxAge)
+			editWindowPassed = true
+		} else if existing != nil {
 			logref.Infof(job.LogReference, "edit: found tracked message for key=%s, attempting edit", job.EditKey)
 			if err := sender.Edit(fq.ctx, existing.SentID, job.Message, job.StaticMapData); err == nil {
 				logref.Infof(job.LogReference, "edit: succeeded for key=%s", job.EditKey)
@@ -577,7 +597,7 @@ func (fq *FairQueue) processJob(job *Job) {
 		}
 
 		key := job.EditKey
-		if key == "" {
+		if key == "" || editWindowPassed {
 			key = fmt.Sprintf("clean:%s:%s:%s", job.Type, job.Target, sent.ID)
 		}
 
@@ -592,6 +612,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			Clean:    job.Clean,
 			ReplyKey: job.ReplyKey,
 			Template: job.Template,
+			SentAt:   time.Now().Unix(),
 		}, ttl)
 		logref.Debugf(job.LogReference, "tracked message key=%s sentID=%s ttl=%v clean=%d replyKey=%q", key, sent.ID, ttl, job.Clean, job.ReplyKey)
 	}

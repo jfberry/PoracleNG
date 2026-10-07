@@ -1590,3 +1590,148 @@ func TestLanes_OverflowCountsShedJobs(t *testing.T) {
 		t.Fatal("ShedCount did not record any shed jobs")
 	}
 }
+
+func TestEditTooOld(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	at := func(ago time.Duration) *TrackedMessage {
+		return &TrackedMessage{SentAt: now.Add(-ago).Unix()}
+	}
+	if editTooOld(at(5*time.Minute), 5*time.Minute, now) {
+		t.Error("a message exactly at the window must still be editable")
+	}
+	if !editTooOld(at(5*time.Minute+time.Second), 5*time.Minute, now) {
+		t.Error("a message one second past the window must not be edited")
+	}
+	if editTooOld(at(3*time.Hour), 0, now) {
+		t.Error("maxAge 0 means no limit")
+	}
+	if !editTooOld(&TrackedMessage{SentAt: 0}, 5*time.Minute, now) {
+		t.Error("unknown SentAt with a window must count as too old")
+	}
+	if editTooOld(&TrackedMessage{SentAt: 0}, 0, now) {
+		t.Error("unknown SentAt with no window must stay editable (raid behaviour)")
+	}
+}
+
+// newEditWindowQueue builds a started queue around a fresh tracker and a
+// mock sender whose sends return sentID.
+func newEditWindowQueue(t *testing.T, sentID string) (*FairQueue, *MessageTracker, *queueMockSender) {
+	t.Helper()
+	mock := &queueMockSender{platform: "discord", sentID: sentID}
+	senders := map[string]Sender{"discord": mock}
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+	fq := NewFairQueue(senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	}, nil)
+	fq.Start()
+	return fq, tracker, mock
+}
+
+func pokemonEditJob(maxAge time.Duration) *Job {
+	return &Job{
+		Target:     "user1",
+		Type:       "discord:user",
+		Message:    json.RawMessage(`{"content":"updated"}`),
+		EditKey:    "pokemon:enc1:user1",
+		EditMaxAge: maxAge,
+		ReplyKey:   "enc1",
+		TTH:        TTH{Hours: 1},
+	}
+}
+
+func trackOriginal(tracker *MessageTracker, sentAt int64) {
+	tracker.Track("pokemon:enc1:user1", &TrackedMessage{
+		SentID:   "chan1:msg-original",
+		Target:   "user1",
+		Type:     "discord:user",
+		Clean:    3,
+		ReplyKey: "enc1",
+		SentAt:   sentAt,
+	}, 30*time.Minute)
+}
+
+func TestEditWindow_InsideWindowEdits(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, time.Now().Add(-1*time.Minute).Unix())
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := mock.getEditCalls(); len(got) != 1 || got[0] != "chan1:msg-original" {
+		t.Fatalf("expected one edit of chan1:msg-original, got %v", got)
+	}
+	if got := len(mock.getSendCalls()); got != 0 {
+		t.Fatalf("expected no new send inside the window, got %d", got)
+	}
+}
+
+func TestEditWindow_PastWindowReplies(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, time.Now().Add(-10*time.Minute).Unix())
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getEditCalls()); got != 0 {
+		t.Fatalf("expected no edit past the window, got %d", got)
+	}
+	sends := mock.getSendCalls()
+	if len(sends) != 1 {
+		t.Fatalf("expected one new send past the window, got %d", len(sends))
+	}
+	if sends[0].ReplyToID != "chan1:msg-original" {
+		t.Errorf("past-window send should reply to the original, got ReplyToID=%q", sends[0].ReplyToID)
+	}
+
+	// The original keeps its entry (and so its clean-deletion).
+	orig := tracker.LookupEdit("pokemon:enc1:user1")
+	if orig == nil || orig.SentID != "chan1:msg-original" {
+		t.Fatalf("original entry under the edit key must survive, got %+v", orig)
+	}
+	// The reply is tracked under its own key, with a send time.
+	reply := tracker.LookupEdit("clean:discord:user:user1:chan1:msg-new")
+	if reply == nil {
+		t.Fatal("past-window reply should be tracked under its own clean: key")
+	}
+	if reply.SentAt == 0 {
+		t.Error("tracked reply should record SentAt")
+	}
+	// The next follow-up replies to the newest message in the chain.
+	if got := tracker.LookupReply("enc1", "user1"); got != "chan1:msg-new" {
+		t.Errorf("reply index should point at the newest message, got %q", got)
+	}
+}
+
+func TestEditWindow_UnknownSentAtReplies(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, 0) // persisted before SentAt existed
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getEditCalls()); got != 0 {
+		t.Fatalf("unknown age must not be edited, got %d edits", got)
+	}
+	if got := len(mock.getSendCalls()); got != 1 {
+		t.Fatalf("expected a reply send, got %d", got)
+	}
+}
+
+func TestEditWindow_NoLimitEditsOldMessage(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, time.Now().Add(-2*time.Hour).Unix())
+
+	fq.enqueue(pokemonEditJob(0), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getEditCalls()); got != 1 {
+		t.Fatalf("EditMaxAge 0 must always edit (raid behaviour), got %d edits", got)
+	}
+}
