@@ -2,6 +2,7 @@ package dts
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -35,7 +36,7 @@ type QuestSummaryGroup struct {
 // the static map shows just this chunk's pins so the bullet list and
 // map line up.
 func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n.Translator) map[string]any {
-	views := g.Quests
+	views := escapeQuestSummaryStops(g.Quests)
 
 	// Shared reward icon and sticker — every per-pokestop view in a
 	// single (rewardType, reward, form) group has the same icon/sticker
@@ -116,6 +117,24 @@ func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n
 		"chunks":     chunks,
 		"quests":     views,
 	}
+}
+
+// escapeQuestSummaryStops returns shallow copies of the per-pokestop views
+// with user-generated text (pokestop names, addresses) sanitised. The
+// LayeredView only escapes top-level fields, and templates reach these via
+// {{#each quests}}, so an unescaped " in a stop name would otherwise break
+// the rendered JSON. Copies keep the caller's maps untouched.
+func escapeQuestSummaryStops(stops []map[string]any) []map[string]any {
+	if stops == nil {
+		return nil
+	}
+	out := make([]map[string]any, len(stops))
+	for i, q := range stops {
+		c := maps.Clone(q)
+		escapeUserContentLayered(c, q)
+		out[i] = c
+	}
+	return out
 }
 
 // questSummaryRewardName resolves a (rewardType, rewardID, formID) tuple

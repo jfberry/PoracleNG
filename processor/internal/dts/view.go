@@ -306,7 +306,11 @@ func escapeJSONString(s string) string {
 func escapeUserContentLayered(computed map[string]any, layers ...map[string]any) {
 	fields := []string{
 		"pokestop_name", "pokestop_url",
+		// Quest summary per-stop entries carry the camelCase key directly
+		// (see escapeQuestSummaryStops).
+		"pokestopName",
 		"gym_name",
+		"station_name",
 		"nest_name",
 		"name",
 		"description",
