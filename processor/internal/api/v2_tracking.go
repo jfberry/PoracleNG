@@ -638,6 +638,21 @@ func parseUIDList(s string) ([]int64, error) {
 	return out, nil
 }
 
+// rejectEdit returns a 422 when a rule asks for edit mode on a tracking type
+// whose alerts never carry an edit key (the flag would be silently ignored).
+// nil/false are accepted so GET -> PUT round-trips of legacy rows keep working.
+func rejectEdit(typeName string, edit *bool) error {
+	if edit == nil || !*edit {
+		return nil
+	}
+	msg := "edit is not supported for " + typeName + " tracking"
+	return huma.Error422UnprocessableEntity(msg, &huma.ErrorDetail{
+		Location: "body.edit",
+		Message:  msg,
+		Value:    true,
+	})
+}
+
 // humaErr maps an (httpStatus, message) pair from the shared override
 // validators into an huma error. The override validators predate v2 and return
 // 400 for validation failures; v2 is strict and surfaces these as 422

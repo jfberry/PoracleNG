@@ -411,12 +411,23 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 		"disable_web_page_preview": true,
 	}
 	// Edits also bypass callWithRetry; give them the same 429 backoff.
-	_, status, err := ts.doPostWithRetry(ctx, "editMessageText", body, "edit")
+	respBody, status, err := ts.doPostWithRetry(ctx, "editMessageText", body, "edit")
 	if err != nil {
 		return err
 	}
 	if status >= 200 && status < 300 {
 		return nil
+	}
+	// Identical content is not a failure: treating it as one would make the
+	// queue send a duplicate and overwrite the original's tracker entry.
+	if status == http.StatusBadRequest {
+		var tgErr struct {
+			Description string `json:"description"`
+		}
+		if json.Unmarshal(respBody, &tgErr) == nil &&
+			strings.Contains(strings.ToLower(tgErr.Description), "message is not modified") {
+			return nil
+		}
 	}
 	return fmt.Errorf("telegram editMessageText returned status %d", status)
 }

@@ -696,3 +696,35 @@ func TestTelegram_SetConcurrencyClampsToOne(t *testing.T) {
 		t.Errorf("negative concurrency not clamped: sem cap=%d, want 1", cap(ts2.sem))
 	}
 }
+
+func TestTelegramEdit_NotModifiedIsSuccess(t *testing.T) {
+	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusBadRequest, map[string]any{
+			"ok":          false,
+			"error_code":  400,
+			"description": "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+		}
+	})
+	defer server.Close()
+
+	editMsg := json.RawMessage(`{"content":"same","parse_mode":"HTML"}`)
+	if err := sender.Edit(context.Background(), "12345:99", editMsg, nil); err != nil {
+		t.Fatalf("message is not modified must be treated as success, got %v", err)
+	}
+}
+
+func TestTelegramEdit_OtherBadRequestStillFails(t *testing.T) {
+	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusBadRequest, map[string]any{
+			"ok":          false,
+			"error_code":  400,
+			"description": "Bad Request: message to edit not found",
+		}
+	})
+	defer server.Close()
+
+	editMsg := json.RawMessage(`{"content":"x","parse_mode":"HTML"}`)
+	if err := sender.Edit(context.Background(), "12345:99", editMsg, nil); err == nil {
+		t.Fatal("a different 400 must still return an error")
+	}
+}

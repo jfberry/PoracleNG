@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -235,10 +236,10 @@ func TestV2Gym_GymIDRoundTrip(t *testing.T) {
 func TestV2Gym_CleanEditSummaryBitmask(t *testing.T) {
 	r, gs, _, restore := newV2GymTestAPI(t)
 	defer restore()
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/gym", `[{"team":"any","clean":true,"edit":true,"summary":true}]`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/gym", `[{"team":"any","clean":true,"summary":true}]`)
 	rows := gs.AllRows()
-	if len(rows) != 1 || rows[0].Clean != 7 {
-		t.Fatalf("expected clean bitmask 7, got %+v", rows)
+	if len(rows) != 1 || rows[0].Clean != 5 {
+		t.Fatalf("expected clean bitmask 5 (clean+summary; edit unsupported), got %+v", rows)
 	}
 }
 
@@ -439,5 +440,64 @@ func TestV2Gym_UnknownHuman404(t *testing.T) {
 	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/nope/tracking/gym", "")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown human, got %d", w.Code)
+	}
+}
+
+func TestV2Gym_EditTrueRejected(t *testing.T) {
+	r, gs, _, restore := newV2GymTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/gym", `[{"team":"mystic","edit":true}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for edit:true on gym, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "edit is not supported for gym tracking") {
+		t.Errorf("422 body should explain why: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "body.edit") {
+		t.Errorf("422 should point at body.edit: %s", w.Body.String())
+	}
+	if len(gs.AllRows()) != 0 {
+		t.Error("rejected rule must not be stored")
+	}
+}
+
+func TestV2Gym_EditFalseAccepted(t *testing.T) {
+	r, _, _, restore := newV2GymTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/gym", `[{"team":"mystic","edit":false}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("edit:false must be accepted, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// A rule written by v1 with the edit bit must read back as edit:null and
+// survive a GET -> PUT round-trip without a 422.
+func TestV2Gym_LegacyEditBitRoundTrips(t *testing.T) {
+	r, gs, _, restore := newV2GymTestAPI(t)
+	defer restore()
+
+	uid, err := gs.Insert(&db.GymTrackingAPI{ID: "u1", ProfileNo: 1, Team: 1, Clean: 3})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/tracking/gym", "")
+	rules := v2RulesArray(t, v2DecodeBody(t, w), "rules")
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+	if v, present := rules[0]["edit"]; !present || v != nil {
+		t.Fatalf("edit should read back as present-but-null, got present=%v value=%v", present, v)
+	}
+	if rules[0]["clean"] != true {
+		t.Errorf("clean bit should still read back, got %v", rules[0]["clean"])
+	}
+
+	put := `{"team":"mystic","clean":true,"edit":null}`
+	w = v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/tracking/gym/"+itoa(uid), put)
+	if w.Code != http.StatusOK {
+		t.Fatalf("round-trip PUT must succeed, got %d: %s", w.Code, w.Body.String())
 	}
 }

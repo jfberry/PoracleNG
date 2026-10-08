@@ -955,3 +955,17 @@ func TestTrack_EverythingAdminBypassesGuard(t *testing.T) {
 		t.Errorf("admin must bypass the guard; got 🙅 (text=%q)", replies[0].Text)
 	}
 }
+
+// TestTrack_EditKeyword verifies !track accepts the edit keyword (it used to
+// be reported as unrecognised) and stores it as clean bit 2.
+func TestTrack_EditKeyword(t *testing.T) {
+	ctx := trackCtx(t)
+	replies := runTrack(t, ctx, "25 iv100 clean edit")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Monsters.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 3, rows[0].Clean, "clean (1) + edit (2)")
+}

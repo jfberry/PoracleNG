@@ -3700,7 +3700,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -3812,7 +3812,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -3924,7 +3924,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -4313,7 +4313,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for invasion tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -4429,7 +4429,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for invasion tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -4545,7 +4545,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for invasion tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -4934,7 +4934,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for maxbattle tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -5072,7 +5072,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for maxbattle tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -5210,7 +5210,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for maxbattle tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -5359,7 +5359,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for nest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -5465,7 +5465,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for nest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -5571,7 +5571,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for nest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -5717,7 +5717,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false.",
                   "type": [
                     "boolean",
                     "null"
@@ -6086,7 +6086,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false.",
                   "type": [
                     "boolean",
                     "null"
@@ -6455,7 +6455,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false.",
                   "type": [
                     "boolean",
                     "null"
@@ -6814,7 +6814,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for quest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -6930,7 +6930,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for quest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -7046,7 +7046,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for quest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -7957,7 +7957,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -8170,7 +8170,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for invasion tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -8385,7 +8385,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for maxbattle tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -8532,7 +8532,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for nest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -8676,7 +8676,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false.",
                   "type": [
                     "boolean",
                     "null"
@@ -9033,7 +9033,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for quest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -9531,7 +9531,7 @@
             ]
           },
           "edit": {
-            "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+            "description": "Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
             "type": [
               "boolean",
               "null"
@@ -9784,7 +9784,7 @@
             ]
           },
           "edit": {
-            "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+            "description": "Not supported for invasion tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
             "type": [
               "boolean",
               "null"
@@ -10138,7 +10138,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -10351,7 +10351,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for invasion tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -10566,7 +10566,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for maxbattle tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -10713,7 +10713,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for nest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -10857,7 +10857,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false.",
                   "type": [
                     "boolean",
                     "null"
@@ -11214,7 +11214,7 @@
                   ]
                 },
                 "edit": {
-                  "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+                  "description": "Not supported for quest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
                   "type": [
                     "boolean",
                     "null"
@@ -11644,7 +11644,7 @@
             ]
           },
           "edit": {
-            "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+            "description": "Not supported for maxbattle tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
             "type": [
               "boolean",
               "null"
@@ -11825,7 +11825,7 @@
             ]
           },
           "edit": {
-            "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+            "description": "Not supported for nest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
             "type": [
               "boolean",
               "null"
@@ -11968,7 +11968,7 @@
             ]
           },
           "edit": {
-            "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+            "description": "Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false.",
             "type": [
               "boolean",
               "null"
@@ -12374,7 +12374,7 @@
             ]
           },
           "edit": {
-            "description": "Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false.",
+            "description": "Not supported for quest tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
             "type": [
               "boolean",
               "null"

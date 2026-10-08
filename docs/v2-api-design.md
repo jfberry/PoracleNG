@@ -141,7 +141,7 @@ The wire form is **present-but-null** (e.g. `"min_iv": null`), not an omitted ke
 | `distance` | int | metres; `0` = use the profile's areas instead of a radius |
 | `template` | string | template name; empty = server default |
 | `clean` | bool | auto-delete the alert on expiry |
-| `edit` | bool | keep the message updated in place |
+| `edit` | bool | keep the message updated in place — honoured for pokemon (within the server's edit window), raid, egg, lure and incident (showcase); rejected with 422 for gym, invasion, nest, maxbattle and quest |
 | `summary` | bool | route into the summary digest (where supported) |
 | `ping` | string | mention string appended to the alert |
 | `override_location_label` | string? | use a saved named location instead of the profile location |

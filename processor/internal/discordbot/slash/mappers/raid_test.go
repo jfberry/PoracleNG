@@ -185,3 +185,14 @@ func TestLookupRaid(t *testing.T) {
 		t.Fatal("nil mapper for /raid")
 	}
 }
+
+func TestRaidMapperEdit(t *testing.T) {
+	tokens, _ := Raid([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("level", "5"),
+		sopt("clean", "yes"),
+		sopt("edit", "yes"),
+	})
+	if !reflect.DeepEqual(tokens, []string{"5", "clean", "edit"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}

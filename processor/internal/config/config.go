@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -93,6 +94,16 @@ type TrackingConfig struct {
 	// change events fall through to the regular `monster` send path — no
 	// reply threading, no `monsterChanged` template.
 	PokemonChangeTracking bool `toml:"pokemon_change_tracking"`
+	// PokemonEdit honours the edit bit on pokemon rules: a follow-up for the
+	// same encounter edits the original alert in place while it is within
+	// PokemonEditWindowMins. Default true. When false, pokemon jobs carry no
+	// edit key and follow-ups arrive as threaded replies.
+	PokemonEdit bool `toml:"pokemon_edit"`
+	// PokemonEditWindowMins is how old (minutes since first send) a pokemon
+	// alert may be and still be edited; older alerts get a threaded reply so
+	// the update isn't lost up a busy channel. Default 5. 0 or negative = no
+	// limit.
+	PokemonEditWindowMins int `toml:"pokemon_edit_window_mins"`
 	// QuestSummaryEnabled toggles the per-user buffered quest summary
 	// pipeline (matcher routing, scheduler, render). Default true. When
 	// disabled the scheduler isn't started; the buffer is still loaded
@@ -107,6 +118,14 @@ type TrackingConfig struct {
 	// is zero/garbage/far-future from a malformed payload. Set 0 to
 	// disable the CreatedAt-axis sweep entirely. Default 24.
 	QuestSummaryBufferTTLHours int `toml:"quest_summary_buffer_ttl_hours"`
+}
+
+// PokemonEditMaxAge returns the pokemon edit window; 0 means no limit.
+func (t TrackingConfig) PokemonEditMaxAge() time.Duration {
+	if t.PokemonEditWindowMins <= 0 {
+		return 0
+	}
+	return time.Duration(t.PokemonEditWindowMins) * time.Minute
 }
 
 // SummariserConfig holds settings shared by all summariser pipelines
@@ -937,6 +956,8 @@ func Load(baseDir string) (*Config, error) {
 		},
 		Tracking: TrackingConfig{
 			PokemonChangeTracking:      true,
+			PokemonEdit:                true,
+			PokemonEditWindowMins:      5,
 			QuestSummaryEnabled:        true,
 			QuestSummaryBufferTTLHours: 24,
 		},

@@ -124,7 +124,7 @@ type v2InvasionRule struct {
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
-	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
+	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Not supported for invasion tracking — omit, or send null/false (true is rejected with 422). Always returned as null."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
@@ -136,6 +136,9 @@ type v2InvasionRule struct {
 // down-translates the chosen mode into (grunt_type, gender). ping is "" (server
 // managed); clean packs the bitmask.
 func translateV2Invasion(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2InvasionRule) (db.InvasionTrackingAPI, error) {
+	if err := rejectEdit("invasion", req.Edit); err != nil {
+		return db.InvasionTrackingAPI{}, err
+	}
 	gd := gdFromDeps(deps)
 
 	// Exactly-one-mode.
@@ -242,7 +245,7 @@ func translateV2Invasion(deps *TrackingDeps, humanID string, profileNo int, oc o
 		Distance:              distance,
 		Gender:                gender,
 		GruntType:             gruntType,
-		Clean:                 packClean(valueOr(req.Clean, false), valueOr(req.Edit, false), valueOr(req.Summary, false)),
+		Clean:                 packClean(valueOr(req.Clean, false), false, valueOr(req.Summary, false)),
 		OverrideLocationLabel: overrideLabel,
 		OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 	}
@@ -297,7 +300,7 @@ func v2InvasionToRule(gd *gamedata.GameData, row *db.InvasionTrackingAPI) v2Inva
 		Distance:              ptrUnless(row.Distance, 0),
 		Template:              ptrUnless(row.Template, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
-		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
+		Edit:                  nil, // edit is not supported for this type; always null
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),

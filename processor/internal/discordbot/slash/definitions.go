@@ -361,9 +361,21 @@ func boolOpt(bundle *i18n.Bundle, key, canonName, canonDesc string) *discordgo.A
 // canonDesc is the per-command English description ("Auto-delete the alert
 // when the pokemon despawns" etc.); each call site supplies its own wording.
 func cleanOpt(bundle *i18n.Bundle, cmdKey, canonDesc string) *discordgo.ApplicationCommandOption {
-	name, nameLoc := optName(bundle, cmdKey+".clean", "clean")
-	desc, descLoc := optDesc(bundle, cmdKey+".clean", canonDesc)
-	yesName, yesLoc := choiceName(bundle, cmdKey+".clean.yes", "Yes")
+	return yesOpt(bundle, cmdKey, "clean", canonDesc)
+}
+
+// editOpt builds the "edit" choice option (single Yes choice). Only offered on
+// commands whose text form honours the edit keyword (track, raid, egg, lure).
+func editOpt(bundle *i18n.Bundle, cmdKey, canonDesc string) *discordgo.ApplicationCommandOption {
+	return yesOpt(bundle, cmdKey, "edit", canonDesc)
+}
+
+// yesOpt builds a string option with a single "Yes" choice, used for keyword
+// flags. Keys: slash.opt.<cmdKey>.<opt>[.desc], slash.choice.<cmdKey>.<opt>.yes.
+func yesOpt(bundle *i18n.Bundle, cmdKey, opt, canonDesc string) *discordgo.ApplicationCommandOption {
+	name, nameLoc := optName(bundle, cmdKey+"."+opt, opt)
+	desc, descLoc := optDesc(bundle, cmdKey+"."+opt, canonDesc)
+	yesName, yesLoc := choiceName(bundle, cmdKey+"."+opt+".yes", "Yes")
 	return &discordgo.ApplicationCommandOption{
 		Type:                     discordgo.ApplicationCommandOptionString,
 		Name:                     name,
@@ -497,6 +509,7 @@ func trackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		intOpt(bundle, "track.ultra_rank", "ultra_rank", "Top PVP rank in the Ultra League", false),
 		intOpt(bundle, "track.little_rank", "little_rank", "Top PVP rank in the Little League", false),
 		cleanOpt(bundle, "track", "Auto-delete the alert when the pokemon despawns"),
+		editOpt(bundle, "track", "Update the alert in place when the pokemon changes"),
 		templateOpt(bundle, "track"),
 		stringOpt(bundle, "track.form", "form", "Pokemon form", false, true),
 		stringOpt(bundle, "track.costume", "costume", "Pokemon costume", false, true),
@@ -540,6 +553,7 @@ func raidOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		},
 		distanceOpt(bundle, "raid"),
 		cleanOpt(bundle, "raid", "Auto-delete the alert when the raid expires"),
+		editOpt(bundle, "raid", "Update the alert in place (e.g. RSVP changes)"),
 		templateOpt(bundle, "raid"),
 		stringOpt(bundle, "raid.form", "form", "Raid boss form", false, true),
 		stringOpt(bundle, "raid.costume", "costume", "Raid boss costume", false, true),
@@ -573,6 +587,7 @@ func eggOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		},
 		distanceOpt(bundle, "egg"),
 		cleanOpt(bundle, "egg", "Auto-delete the alert when the egg hatches"),
+		editOpt(bundle, "egg", "Update the alert in place (e.g. RSVP changes)"),
 		templateOpt(bundle, "egg"),
 	}
 	return append(opts, trackerLocationAreaOpts(bundle)...)
@@ -687,6 +702,7 @@ func lureOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		},
 		distanceOpt(bundle, "lure"),
 		cleanOpt(bundle, "lure", "Auto-delete the alert when the lure expires"),
+		editOpt(bundle, "lure", "Update the alert in place when the lure changes"),
 		templateOpt(bundle, "lure"),
 	}
 	return append(opts, trackerLocationAreaOpts(bundle)...)

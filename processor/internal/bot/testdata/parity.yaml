@@ -189,12 +189,13 @@
       ultra_rank: 10
       little_rank: 7
       clean: true
+      edit: true
       template: pvp
       form: alola
       costume: "1"
       size: xl
-  text: "!track 25 iv100 great5 ultra10 little7 d250 clean template:pvp form:alola costume:1 size:xl"
-  expected_tokens: ["25", iv100, great5, ultra10, little7, d250, clean, "template:pvp", "form:alola", "costume:1", "size:xl"]
+  text: "!track 25 iv100 great5 ultra10 little7 d250 clean edit template:pvp form:alola costume:1 size:xl"
+  expected_tokens: ["25", iv100, great5, ultra10, little7, d250, clean, edit, "template:pvp", "form:alola", "costume:1", "size:xl"]
 
 # -----------------------------------------------------------------------------
 # /raid — boss XOR level
@@ -212,7 +213,7 @@
   expected_tokens: [mewtwo, "costume:1", "form:alolan"]
 
 - name: raid-level-all-options
-  description: /raid with level + team + distance + clean + template (covers all non-boss options)
+  description: /raid with level + team + distance + clean + edit + template (covers all non-boss options)
   command: cmd.raid
   slash:
     name: raid
@@ -221,9 +222,10 @@
       team: 1
       distance: 500
       clean: true
+      edit: true
       template: rich
-  text: "!raid 5 mystic d500 clean template:rich"
-  expected_tokens: ["5", mystic, d500, clean, "template:rich"]
+  text: "!raid 5 mystic d500 clean edit template:rich"
+  expected_tokens: ["5", mystic, d500, clean, edit, "template:rich"]
 
 # -----------------------------------------------------------------------------
 # /egg — level required, plus optional team/distance/clean/template
@@ -239,7 +241,7 @@
   expected_tokens: ["5"]
 
 - name: egg-all-options
-  description: /egg exercising team/distance/clean/template
+  description: /egg exercising team/distance/clean/edit/template
   command: cmd.egg
   slash:
     name: egg
@@ -248,9 +250,10 @@
       team: 2
       distance: 750
       clean: true
+      edit: true
       template: short
-  text: "!egg 5 valor d750 clean template:short"
-  expected_tokens: ["5", valor, d750, clean, "template:short"]
+  text: "!egg 5 valor d750 clean edit template:short"
+  expected_tokens: ["5", valor, d750, clean, edit, "template:short"]
 
 # -----------------------------------------------------------------------------
 # /quest — mutually exclusive reward types
@@ -412,7 +415,7 @@
   expected_tokens: [glacial]
 
 - name: lure-all-options
-  description: /lure with distance/clean/template
+  description: /lure with distance/clean/edit/template
   command: cmd.lure
   slash:
     name: lure
@@ -420,9 +423,10 @@
       lure_type: rainy
       distance: 250
       clean: true
+      edit: true
       template: clean
-  text: "!lure rainy d250 clean template:clean"
-  expected_tokens: [rainy, d250, clean, "template:clean"]
+  text: "!lure rainy d250 clean edit template:clean"
+  expected_tokens: [rainy, d250, clean, edit, "template:clean"]
 
 # -----------------------------------------------------------------------------
 # /nest
