@@ -105,7 +105,7 @@ func emitFlag(opt *discordgo.ApplicationCommandInteractionDataOption, keyword st
 	return ""
 }
 
-// appendCommonTail emits the distance / clean / template / location / areas
+// appendCommonTail emits the distance / clean / edit / template / location / areas
 // tokens that every tracking-style mapper accepts as its tail. Equivalent
 // to the inline block
 //
@@ -124,6 +124,10 @@ func emitFlag(opt *discordgo.ApplicationCommandInteractionDataOption, keyword st
 func appendCommonTail(tokens *[]string, o map[string]*discordgo.ApplicationCommandInteractionDataOption) {
 	appendDistance(tokens, o["distance"])
 	if tok := emitFlag(o["clean"], "clean"); tok != "" {
+		*tokens = append(*tokens, tok)
+	}
+	// Only edit-capable commands (track, raid, egg, lure) define this option.
+	if tok := emitFlag(o["edit"], "edit"); tok != "" {
 		*tokens = append(*tokens, tok)
 	}
 	if v, ok := o["template"]; ok && v.StringValue() != "" {

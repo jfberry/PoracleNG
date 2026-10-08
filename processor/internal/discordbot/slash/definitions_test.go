@@ -677,3 +677,25 @@ func TestEnglishOnlyBundleEmitsNoLocalizations(t *testing.T) {
 		}
 	}
 }
+
+// TestEditOptionOnlyOnEditCapableCommands pins the `edit` option to the
+// tracking commands whose text form honours it (track, raid, egg, lure).
+func TestEditOptionOnlyOnEditCapableCommands(t *testing.T) {
+	bundle := testBundle(t)
+	want := map[string]bool{"track": true, "raid": true, "egg": true, "lure": true}
+	for _, canon := range []string{"track", "raid", "egg", "lure", "quest", "invasion", "incident", "nest", "maxbattle", "gym", "fort"} {
+		def := buildCommandDef(bundle, "cmd."+canon, canon)
+		if def == nil {
+			t.Fatalf("nil def for %s", canon)
+		}
+		has := false
+		for _, o := range def.Options {
+			if o.Name == "edit" {
+				has = true
+			}
+		}
+		if has != want[canon] {
+			t.Errorf("/%s has edit option = %v, want %v", canon, has, want[canon])
+		}
+	}
+}
