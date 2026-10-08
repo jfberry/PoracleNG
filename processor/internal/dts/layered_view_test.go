@@ -962,3 +962,13 @@ func TestLayeredView_IncidentAliases(t *testing.T) {
 	require.True(t, ok, "color must resolve")
 	assert.Equal(t, "#FFD700", v, "color must alias gruntTypeColor")
 }
+
+func TestLayeredView_MaxbattleStationNameEscaped(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.templateType = "maxbattle"
+		o.base = map[string]any{"station_name": `The "Cliff"` + "\n" + `a\b`}
+	})
+	name, ok := lv.GetField("stationName")
+	require.True(t, ok)
+	assert.Equal(t, `The ''Cliff'' a?b`, name)
+}
