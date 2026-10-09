@@ -6162,7 +6162,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -6539,7 +6539,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -6916,7 +6916,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -9257,7 +9257,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -11566,7 +11566,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -12725,7 +12725,7 @@
             ]
           },
           "pvp_ranking_worst": {
-            "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
+            "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
             "format": "int64",
             "maximum": 4096,
             "minimum": 1,

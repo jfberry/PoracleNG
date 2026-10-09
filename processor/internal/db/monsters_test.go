@@ -79,3 +79,19 @@ func TestBuildMonsterIndexFromRulesEmpty(t *testing.T) {
 		t.Errorf("PVPEverything should not be nil")
 	}
 }
+
+// pvp_ranking_worst 0 is a legacy "no upper limit", not a rank: left as 0 the
+// matcher's rank > worst check would make a PVP rule match nothing.
+func TestBuildMonsterIndex_WorstZeroMeansNoLimit(t *testing.T) {
+	idx := BuildMonsterIndexFromRules([]MonsterTracking{
+		{ID: "u1", PokemonID: 6, PVPRankingLeague: 1500, PVPRankingWorst: 0},
+		{ID: "u1", PokemonID: 6, PVPRankingLeague: 1500, PVPRankingWorst: 100},
+	})
+	got := idx.PVPSpecific[1500]
+	if got[0].PVPRankingWorst != 4096 {
+		t.Errorf("worst 0 loaded as %d, want 4096", got[0].PVPRankingWorst)
+	}
+	if got[1].PVPRankingWorst != 100 {
+		t.Errorf("explicit worst loaded as %d, want 100", got[1].PVPRankingWorst)
+	}
+}

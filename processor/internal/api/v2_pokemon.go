@@ -63,7 +63,7 @@ type v2PokemonRule struct {
 
 	PVPRankingLeague    *int `json:"pvp_ranking_league,omitempty" nullable:"true" enum:"0,500,1500,2500" doc:"PVP league CP cap (the stored int IS the cap): 0 | 500 | 1500 | 2500. Omit (or 0) for IV-mode tracking with no PVP filter (stored as 0 = none/IV mode). Returned as null when at its wildcard."`
 	PVPRankingBest      *int `json:"pvp_ranking_best,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard."`
-	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard."`
+	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard."`
 	PVPRankingMinCP     *int `json:"pvp_ranking_min_cp,omitempty" minimum:"0" nullable:"true" doc:"PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
 	PVPRankingCap       *int `json:"pvp_ranking_cap,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard."`
 	PVPRankingEvolution *int `json:"pvp_ranking_evolution,omitempty" minimum:"0" maximum:"3" nullable:"true" doc:"Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0)."`
@@ -198,7 +198,7 @@ func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 		MaxSize:               ptrUnless(row.MaxSize, 5),
 		PVPRankingLeague:      ptrUnless(row.PVPRankingLeague, 0),
 		PVPRankingBest:        ptrUnlessAny(row.PVPRankingBest, 1, 0),
-		PVPRankingWorst:       pvpWorstToRule(row),
+		PVPRankingWorst:       ptrUnlessAny(row.PVPRankingWorst, 4096, 0),
 		PVPRankingMinCP:       ptrUnless(row.PVPRankingMinCP, 0),
 		PVPRankingCap:         ptrUnless(row.PVPRankingCap, 0),
 		PVPRankingEvolution:   ptrUnless(row.PVPRankingEvolution, 0),
@@ -258,8 +258,7 @@ func RegisterV2TrackingPokemon(api huma.API, deps *TrackingDeps) {
 
 // canonicalizePokemonRow maps the alias wildcards that pokemonRowToRule
 // projects to null (ptrUnlessAny) onto the value translateV2Pokemon stores
-// for null, so diffing treats them as the same rule. pvp_ranking_worst 0 is
-// only an alias when no league is set — see pvpWorstToRule.
+// for null, so diffing treats them as the same rule.
 func canonicalizePokemonRow(row *db.MonsterTrackingAPI) {
 	if row.Rarity == 0 {
 		row.Rarity = -1
@@ -270,22 +269,9 @@ func canonicalizePokemonRow(row *db.MonsterTrackingAPI) {
 	if row.PVPRankingBest == 0 {
 		row.PVPRankingBest = 1
 	}
-	if row.PVPRankingWorst == 0 && row.PVPRankingLeague == 0 {
+	if row.PVPRankingWorst == 0 {
 		row.PVPRankingWorst = 4096
 	}
-}
-
-// pvpWorstToRule reports pvp_ranking_worst. A stored 0 is the wildcard only
-// when the rule has no league, where the field is never read. With a league
-// set the matcher drops any rank above it, so 0 matches nothing: reporting it
-// as null (any rank) would misdescribe the rule, and the canonical 4096 a
-// client then wrote back would turn a rule that never fired into one that
-// fires on every rank. It is reported as the stored 0 instead.
-func pvpWorstToRule(row *db.MonsterTrackingAPI) *int {
-	if row.PVPRankingLeague == 0 {
-		return ptrUnlessAny(row.PVPRankingWorst, 4096, 0)
-	}
-	return ptrUnless(row.PVPRankingWorst, 4096)
 }
 
 // ptrUnlessAny is ptrUnless for fields with more than one "no filter" value.

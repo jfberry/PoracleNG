@@ -52,40 +52,18 @@ func TestV2Pokemon_AliasRowRoundTripsUnchanged(t *testing.T) {
 	}
 }
 
-// pvp_ranking_worst 0 is a wildcard only with no league. With a league set the
-// matcher drops every rank above it, so the rule matches nothing; reading it as
-// null, or canonicalising it to 4096 for the diff, would make an edit rewrite a
-// dead rule as "any rank".
-func TestV2Pokemon_PVPWorstZeroAliasOnlyWithoutLeague(t *testing.T) {
-	for _, tc := range []struct {
-		name          string
-		league, worst int
-		wantRead      *int
-		wantCanonical int
-	}{
-		{"no league, 0 is the wildcard", 0, 0, nil, 4096},
-		{"no league, 4096 is the wildcard", 0, 4096, nil, 4096},
-		{"league, 0 matches nothing", 1500, 0, new(0), 0},
-		{"league, explicit rank", 1500, 100, new(100), 100},
-		{"league, 4096 is the wildcard", 1500, 4096, nil, 4096},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			row := db.MonsterTrackingAPI{PVPRankingLeague: tc.league, PVPRankingWorst: tc.worst, PVPRankingBest: 1}
-			got := pokemonRowToRule(&row).PVPRankingWorst
-			if (got == nil) != (tc.wantRead == nil) || (got != nil && *got != *tc.wantRead) {
-				t.Errorf("read pvp_ranking_worst = %v, want %v", derefOrNil(got), derefOrNil(tc.wantRead))
-			}
-			canonicalizePokemonRow(&row)
-			if row.PVPRankingWorst != tc.wantCanonical {
-				t.Errorf("canonical pvp_ranking_worst = %d, want %d", row.PVPRankingWorst, tc.wantCanonical)
-			}
-		})
+// pvp_ranking_worst 0 is a legacy "no upper limit" with or without a league:
+// it reads back as null and diffs as the canonical 4096, and the matcher
+// treats it the same way (db.BuildMonsterIndexFromRules).
+func TestV2Pokemon_PVPWorstZeroIsWildcard(t *testing.T) {
+	for _, league := range []int{0, 1500} {
+		row := db.MonsterTrackingAPI{PVPRankingLeague: league, PVPRankingWorst: 0, PVPRankingBest: 1}
+		if got := pokemonRowToRule(&row).PVPRankingWorst; got != nil {
+			t.Errorf("league %d: read pvp_ranking_worst = %d, want null", league, *got)
+		}
+		canonicalizePokemonRow(&row)
+		if row.PVPRankingWorst != 4096 {
+			t.Errorf("league %d: canonical pvp_ranking_worst = %d, want 4096", league, row.PVPRankingWorst)
+		}
 	}
-}
-
-func derefOrNil(p *int) any {
-	if p == nil {
-		return nil
-	}
-	return *p
 }
