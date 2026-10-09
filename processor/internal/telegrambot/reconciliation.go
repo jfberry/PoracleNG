@@ -34,6 +34,7 @@ type TelegramReconciliation struct {
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
+	rateLimiter  RateLimiter
 	log          *log.Entry
 }
 
@@ -44,6 +45,7 @@ func NewTelegramReconciliation(
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
+	rateLimiter RateLimiter,
 ) *TelegramReconciliation {
 	return &TelegramReconciliation{
 		api:          api,
@@ -51,6 +53,7 @@ func NewTelegramReconciliation(
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
+		rateLimiter:  rateLimiter,
 		log:          log.WithField("component", "reconciliation-telegram"),
 	}
 }
@@ -430,13 +433,22 @@ func (r *TelegramReconciliation) sendGreetings(id string) {
 	r.sendSplitMessage(chatID, result)
 }
 
+// sendMessage applies the shared proactive quota before a reconciliation
+// message hits the Telegram client.
+func (r *TelegramReconciliation) sendMessage(ctx context.Context, params *gotgbot.SendMessageParams) (*models.Message, error) {
+	if err := waitForTelegramRateLimit(ctx, r.rateLimiter); err != nil {
+		return nil, err
+	}
+	return r.api.SendMessage(ctx, params)
+}
+
 // sendSplitMessage sends a message, splitting on newlines if it exceeds
 // Telegram's 4096 character limit. Delegates to bot.SplitMessage for
 // the chunking — same helper the polling reply path uses.
 func (r *TelegramReconciliation) sendSplitMessage(chatID int64, text string) {
 	for _, chunk := range bot.SplitMessage(text, 4096) {
 		ctx, cancel := requestCtx()
-		_, _ = r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
+		_, _ = r.sendMessage(ctx, &gotgbot.SendMessageParams{
 			ChatID: chatID,
 			Text:   chunk,
 		})
@@ -457,7 +469,7 @@ func (r *TelegramReconciliation) sendGoodbye(id string) {
 	}
 
 	ctx, cancel := requestCtx()
-	_, err := r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
+	_, err := r.sendMessage(ctx, &gotgbot.SendMessageParams{
 		ChatID: chatID,
 		Text:   goodbyeMsg,
 	})

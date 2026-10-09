@@ -397,6 +397,8 @@ var configSchema = []ConfigSection{
 			{Name: "render_queue_size", Type: "int", Default: 100, Description: "Maximum buffered render jobs before backpressure", Advanced: true},
 			{Name: "concurrent_discord_destinations", Type: "int", Default: 10, Description: "Concurrent Discord DM/channel sends per bot", Advanced: true},
 			{Name: "concurrent_telegram_destinations", Type: "int", Default: 10, Description: "Concurrent Telegram sends per bot", Advanced: true},
+			{Name: "telegram_global_rate_per_second", Type: "int", Default: 29, Description: "Telegram sustained message-send rate per second across the bot; must be greater than zero", Advanced: true},
+			{Name: "telegram_global_burst", Type: "int", Default: 5, Description: "Telegram global message-send token-bucket burst; must be greater than zero", Advanced: true},
 			{Name: "concurrent_discord_webhooks", Type: "int", Default: 10, Description: "Concurrent Discord webhook sends", Advanced: true},
 			{Name: "delivery_queue_size", Type: "int", Default: 200, Description: "Max buffered delivery jobs PER destination lane", Advanced: true},
 			{Name: "validation_timeout_ms", Type: "int", Default: 1500, Description: "External validation hook: per-call HTTP timeout in milliseconds", Advanced: true},

@@ -245,10 +245,13 @@ Delivery is handled via platform REST APIs (Discord API v10, Telegram Bot API).
 - Consecutive failure tracking: disables user after threshold
 
 **Telegram** (`delivery/telegram.go`):
-- Pure REST Bot API — separate from the go-telegram-bot-api polling used for commands
-- Configurable send order: sticker, photo, text, location, venue
+- Pure REST Bot API delivery plus the separate go-telegram/bot polling client used for commands/reconciliation
+- Configurable delivery send order: sticker, photo, text, location, venue
 - Parse mode normalization (MarkdownV2, HTML, Markdown)
-- 429 rate limit retry
+- Proactive global outbound-message limiting in `delivery/telegram_ratelimit.go`: one configurable token bucket shared by all destinations for the bot token (default 29 sends/sec, burst 5)
+- The same global limiter instance is shared with polling-bot/reconciliation `SendMessage` / `SendPhoto` / `SendDocument` calls that use the same bot token
+- Delivery waits happen before the Telegram wire semaphore and are context-cancellable, but tokens are committed only after a wire slot is available; this prevents queued requests from pre-consuming tokens and later bursting onto the wire
+- The proactive quota applies only to methods that create messages (`sendMessage`, `sendPhoto`, `sendSticker`, `sendLocation`, `sendVenue`, `sendDocument`); edits, deletes, polling and read-only methods do not consume the documented broadcast/send budget. Each send retry consumes a fresh token; reactive 429 `retry_after` handling remains in place as a second line of defence
 
 **Rate Limiting** (`delivery/ratelimit.go`):
 - Per-route Discord rate limits with `X-RateLimit-*` header parsing

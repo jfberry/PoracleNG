@@ -537,6 +537,12 @@ concurrent_matched_processors = 10       # pre-matched payloads processed concur
 matched_max_queue_size = 5000            # max items buffered before backpressure
 concurrent_discord_destinations = 10     # concurrent discord DM/channel sends per bot
 concurrent_telegram_destinations = 10    # concurrent telegram sends per bot
+# Telegram proactive global send limit. This counts actual outbound message
+# sends (including each part of multi-message notifications and send retries),
+# not Poracle delivery jobs. Edits, deletes, polling and read-only Bot API calls
+# do not consume this quota. Both values must be greater than zero.
+telegram_global_rate_per_second = 29     # sustained message sends/sec across this bot
+telegram_global_burst = 5                # short-burst token capacity
 concurrent_discord_webhooks = 10         # concurrent discord webhook sends
 
 # ---- Alert Limits ----

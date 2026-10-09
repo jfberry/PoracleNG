@@ -585,6 +585,8 @@ type TuningConfig struct {
 	ConcurrentTelegramDestinations int `toml:"concurrent_telegram_destinations"`
 	ConcurrentDiscordWebhooks      int `toml:"concurrent_discord_webhooks"`
 	DeliveryQueueSize              int `toml:"delivery_queue_size"`
+	TelegramGlobalRatePerSecond    int `toml:"telegram_global_rate_per_second"`
+	TelegramGlobalBurst            int `toml:"telegram_global_burst"`
 
 	// Validation hook tuning (see [validation])
 	ValidationTimeoutMs     int `toml:"validation_timeout_ms"`     // per-call HTTP timeout (default 1500)
@@ -848,6 +850,8 @@ func Load(baseDir string) (*Config, error) {
 			ConcurrentTelegramDestinations: 10,
 			ConcurrentDiscordWebhooks:      10,
 			DeliveryQueueSize:              200,
+			TelegramGlobalRatePerSecond:    29,
+			TelegramGlobalBurst:            5,
 			ValidationTimeoutMs:            1500,
 			ValidationMaxConcurrent:        16,
 		},
@@ -967,6 +971,17 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+	for _, setting := range []struct {
+		name  string
+		value int
+	}{
+		{"telegram_global_rate_per_second", cfg.Tuning.TelegramGlobalRatePerSecond},
+		{"telegram_global_burst", cfg.Tuning.TelegramGlobalBurst},
+	} {
+		if setting.value <= 0 {
+			return nil, fmt.Errorf("[tuning] %s must be greater than zero (got %d)", setting.name, setting.value)
+		}
 	}
 
 	// Copy api_secret from [alerter] section for backward compatibility

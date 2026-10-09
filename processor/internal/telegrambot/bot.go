@@ -28,23 +28,31 @@ type Bot struct {
 	username       string // resolved at startup via getMe
 	nlpParser      *nlp.Parser
 	reconciliation *TelegramReconciliation
+	rateLimiter    RateLimiter
 	cancelStart    context.CancelFunc
 	stopCh         chan struct{}
 	closeOnce      sync.Once
 }
 
+// RateLimiter is the proactive Telegram global message-send quota shared with delivery.
+type RateLimiter interface {
+	Wait(context.Context) error
+}
+
 // Config holds everything needed to create a Telegram bot.
 type Config struct {
-	Token string
+	Token       string
+	RateLimiter RateLimiter
 	bot.BotDeps
 }
 
 // New creates and starts a Telegram bot. Returns the bot (for shutdown) or an error.
 func New(cfg Config) (*Bot, error) {
 	b := &Bot{
-		BotDeps:   cfg.BotDeps,
-		nlpParser: cfg.NLPParser,
-		stopCh:    make(chan struct{}),
+		BotDeps:     cfg.BotDeps,
+		nlpParser:   cfg.NLPParser,
+		rateLimiter: cfg.RateLimiter,
+		stopCh:      make(chan struct{}),
 	}
 
 	api, err := gotgbot.New(cfg.Token, gotgbot.WithDefaultHandler(b.handleUpdate))
@@ -67,7 +75,7 @@ func New(cfg Config) (*Bot, error) {
 	// Initialize reconciliation — needed for check_role periodic sync AND
 	// for /start DM registration (verifies channel membership via API).
 	if cfg.DTS != nil {
-		b.reconciliation = NewTelegramReconciliation(api, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS)
+		b.reconciliation = NewTelegramReconciliation(api, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS, cfg.RateLimiter)
 		if cfg.Cfg.Telegram.CheckRole {
 			go b.reconciliationLoop()
 		}
