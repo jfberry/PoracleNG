@@ -244,14 +244,33 @@ func RegisterV2TrackingPokemon(api huma.API, deps *TrackingDeps) {
 		Store: func(d *TrackingDeps) store.TrackingStore[db.MonsterTrackingAPI] {
 			return d.Tracking.Monsters
 		},
-		Translate: translateV2Pokemon,
-		ToRule:    pokemonRowToRule,
-		GetUID:    store.MonsterGetUID,
-		SetUID:    store.MonsterSetUID,
+		Translate:    translateV2Pokemon,
+		Canonicalize: canonicalizePokemonRow,
+		ToRule:       pokemonRowToRule,
+		GetUID:       store.MonsterGetUID,
+		SetUID:       store.MonsterSetUID,
 		RowText: func(d *TrackingDeps, tr *i18n.Translator, row *db.MonsterTrackingAPI) string {
 			return d.RowText.MonsterRowText(tr, toMonsterTracking(row))
 		},
 	})
+}
+
+// canonicalizePokemonRow maps the alias wildcards that pokemonRowToRule
+// projects to null (ptrUnlessAny) onto the value translateV2Pokemon stores
+// for null, so diffing treats them as the same rule.
+func canonicalizePokemonRow(row *db.MonsterTrackingAPI) {
+	if row.Rarity == 0 {
+		row.Rarity = -1
+	}
+	if row.Size == 0 {
+		row.Size = -1
+	}
+	if row.PVPRankingBest == 0 {
+		row.PVPRankingBest = 1
+	}
+	if row.PVPRankingWorst == 0 {
+		row.PVPRankingWorst = 4096
+	}
 }
 
 // ptrUnlessAny is ptrUnless for fields with more than one "no filter" value.
