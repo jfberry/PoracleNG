@@ -131,11 +131,13 @@ type HumanStore interface {
 	// disabled_date to now. When enabling, clears disabled_date.
 	SetAdminDisable(id string, disable bool) error
 
-	// SetLocation updates latitude and longitude on both humans and the
-	// active profile.
+	// SetLocation updates latitude and longitude on profile profileNo, and on
+	// humans only when profileNo is the human's current profile (humans holds
+	// the live, matched-against copy of the active profile).
 	SetLocation(id string, profileNo int, lat, lon float64) error
 
-	// SetArea updates the area JSON on both humans and the active profile.
+	// SetArea updates the area JSON on profile profileNo, and on humans only
+	// when profileNo is the human's current profile.
 	SetArea(id string, profileNo int, areas []string) error
 
 	// SetLanguage updates the language field.

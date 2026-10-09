@@ -185,10 +185,14 @@ func (s *SQLHumanStore) SetAdminDisable(id string, disable bool) error {
 	return nil
 }
 
+// SetLocation writes the profile's location, and the humans row only when
+// profileNo is the active profile: the matcher reads humans.latitude/longitude,
+// and SwitchProfile copies the profile's value in on the next switch, so writing
+// an inactive profile's location to humans would move the live location.
 func (s *SQLHumanStore) SetLocation(id string, profileNo int, lat, lon float64) error {
 	if _, err := s.db.Exec(
-		`UPDATE humans SET latitude = ?, longitude = ? WHERE id = ?`,
-		lat, lon, id); err != nil {
+		`UPDATE humans SET latitude = ?, longitude = ? WHERE id = ? AND current_profile_no = ?`,
+		lat, lon, id, profileNo); err != nil {
 		return fmt.Errorf("update human location %s: %w", id, err)
 	}
 	if _, err := s.db.Exec(
@@ -199,10 +203,12 @@ func (s *SQLHumanStore) SetLocation(id string, profileNo int, lat, lon float64) 
 	return nil
 }
 
+// SetArea writes the profile's areas, and the humans row only when profileNo
+// is the active profile (see SetLocation).
 func (s *SQLHumanStore) SetArea(id string, profileNo int, areas []string) error {
 	areaJSON := marshalStringSlice(areas)
 	if _, err := s.db.Exec(
-		`UPDATE humans SET area = ? WHERE id = ?`, areaJSON, id); err != nil {
+		`UPDATE humans SET area = ? WHERE id = ? AND current_profile_no = ?`, areaJSON, id, profileNo); err != nil {
 		return fmt.Errorf("update human areas %s: %w", id, err)
 	}
 	if _, err := s.db.Exec(

@@ -137,21 +137,28 @@ func (m *MockHumanStore) SetLocation(id string, profileNo int, lat, lon float64)
 	m.record("SetLocation")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if h, ok := m.humans[id]; ok {
+	if h, ok := m.humans[id]; ok && h.CurrentProfileNo == profileNo {
 		h.Latitude = lat
 		h.Longitude = lon
+	}
+	for i := range m.profiles[id] {
+		if m.profiles[id][i].ProfileNo == profileNo {
+			m.profiles[id][i].Latitude = lat
+			m.profiles[id][i].Longitude = lon
+		}
 	}
 	return nil
 }
 
-// SetArea mirrors SQLHumanStore: it writes humans.area AND the named
-// profile's area. The mock previously ignored profileNo entirely, so a test
-// could not tell a per-profile write from a global one.
+// SetArea mirrors SQLHumanStore: it writes the named profile's area, and
+// humans.area only when profileNo is the current profile. The mock previously
+// ignored profileNo entirely, so a test could not tell a per-profile write
+// from a global one.
 func (m *MockHumanStore) SetArea(id string, profileNo int, areas []string) error {
 	m.record("SetArea")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if h, ok := m.humans[id]; ok {
+	if h, ok := m.humans[id]; ok && h.CurrentProfileNo == profileNo {
 		h.Area = areas
 	}
 	for i := range m.profiles[id] {

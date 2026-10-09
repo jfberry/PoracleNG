@@ -140,6 +140,7 @@ is **not** a sentinel to avoid.
   keyed by the game's `display_type` int. Not available on v1.
 - **`distance`** — clamped to the server's `[tracking] max_distance` on every type (v1 only capped at the
   earth's circumference). Read the limit from `GET /api/config/poracleWeb` (`maxDistance`) to warn users first.
+  A stored rule above a since-lowered limit is reported as `updated` (rewritten at the limit) when posted back.
 - **fort** — `include_empty` now defaults to **`true`** when omitted (v1 defaulted false).
 - **quest** — `reward_type` (proto int: `2`=item, `3`=stardust, `4`=candy, `7`=pokemon,
   `12`=mega_energy) is required; `reward`, `amount`, `form`, `shiny` optional.
