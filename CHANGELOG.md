@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **v2 tracking `ping`.** Every v2 rule type accepts and returns an optional `ping`
+  (mention text). Previously v2 stored `""`, which erased pings set by the bot or v1 on any PUT.
 - **v2 mutes API.** `GET/POST /api/v2/humans/{id}/mutes` and
   `DELETE /api/v2/humans/{id}/mutes[?scope=&value=]` expose the in-memory alert
   mutes (the `!mute` / alert-button feature) over HTTP, and the v2 full

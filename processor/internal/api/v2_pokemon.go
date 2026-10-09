@@ -71,6 +71,7 @@ type v2PokemonRule struct {
 	// Common fields.
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
@@ -105,8 +106,8 @@ func packClean(clean, edit, summary bool) int {
 
 // translateV2Pokemon converts a strict v2 pokemon rule into the stored
 // MonsterTrackingAPI, applying documented defaults, gender enum→int, the clean
-// bitmask, profile, and validated/normalized override fields. ping is always
-// stored "" (server-managed). Returns an huma error on override-field violation.
+// bitmask, profile, and validated/normalized override fields.
+// Returns an huma error on override-field violation.
 func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2PokemonRule) (db.MonsterTrackingAPI, error) {
 	distance := valueOr(req.Distance, 0)
 	const maxDistance = 40000000 // Earth circumference (metres)
@@ -124,7 +125,7 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 	row := db.MonsterTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              template,
 		Distance:              distance,
 		PokemonID:             valueOr(req.PokemonID, 0),
@@ -172,38 +173,38 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 	gender := genderEnum.fromStored(row.Gender)
 	return v2PokemonRule{
-		PokemonID:             ptrUnless(row.PokemonID, 0),
-		Form:                  ptrUnless(row.Form, 0),
-		Costume:               ptrUnless(row.Costume, 9000),
-		MinIV:                 ptrUnless(row.MinIV, -1),
-		MaxIV:                 ptrUnless(row.MaxIV, 100),
-		MinCP:                 ptrUnless(row.MinCP, 0),
-		MaxCP:                 ptrUnless(row.MaxCP, 9000),
-		MinLevel:              ptrUnless(row.MinLevel, 0),
-		MaxLevel:              ptrUnless(row.MaxLevel, 55),
-		ATK:                   ptrUnless(row.ATK, 0),
-		DEF:                   ptrUnless(row.DEF, 0),
-		STA:                   ptrUnless(row.STA, 0),
-		MaxATK:                ptrUnless(row.MaxATK, 15),
-		MaxDEF:                ptrUnless(row.MaxDEF, 15),
-		MaxSTA:                ptrUnless(row.MaxSTA, 15),
-		Gender:                ptrUnless(gender, "any"),
-		MinWeight:             ptrUnless(row.MinWeight, 0),
-		MaxWeight:             ptrUnless(row.MaxWeight, 9000000),
-		MinTime:               ptrUnless(row.MinTime, 0),
-		Rarity:                ptrUnlessAny(row.Rarity, -1, 0),
-		MaxRarity:             ptrUnless(row.MaxRarity, 6),
-		Size:                  ptrUnlessAny(row.Size, -1, 0),
-		MaxSize:               ptrUnless(row.MaxSize, 5),
-		PVPRankingLeague:      ptrUnless(row.PVPRankingLeague, 0),
-		PVPRankingBest:        ptrUnlessAny(row.PVPRankingBest, 1, 0),
-		PVPRankingWorst:       ptrUnlessAny(row.PVPRankingWorst, 4096, 0),
-		PVPRankingMinCP:       ptrUnless(row.PVPRankingMinCP, 0),
-		PVPRankingCap:         ptrUnless(row.PVPRankingCap, 0),
-		PVPRankingEvolution:   ptrUnless(row.PVPRankingEvolution, 0),
-		Distance:              ptrUnless(row.Distance, 0),
-		Template:              ptrUnless(row.Template, ""),
-		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
+		PokemonID:           ptrUnless(row.PokemonID, 0),
+		Form:                ptrUnless(row.Form, 0),
+		Costume:             ptrUnless(row.Costume, 9000),
+		MinIV:               ptrUnless(row.MinIV, -1),
+		MaxIV:               ptrUnless(row.MaxIV, 100),
+		MinCP:               ptrUnless(row.MinCP, 0),
+		MaxCP:               ptrUnless(row.MaxCP, 9000),
+		MinLevel:            ptrUnless(row.MinLevel, 0),
+		MaxLevel:            ptrUnless(row.MaxLevel, 55),
+		ATK:                 ptrUnless(row.ATK, 0),
+		DEF:                 ptrUnless(row.DEF, 0),
+		STA:                 ptrUnless(row.STA, 0),
+		MaxATK:              ptrUnless(row.MaxATK, 15),
+		MaxDEF:              ptrUnless(row.MaxDEF, 15),
+		MaxSTA:              ptrUnless(row.MaxSTA, 15),
+		Gender:              ptrUnless(gender, "any"),
+		MinWeight:           ptrUnless(row.MinWeight, 0),
+		MaxWeight:           ptrUnless(row.MaxWeight, 9000000),
+		MinTime:             ptrUnless(row.MinTime, 0),
+		Rarity:              ptrUnlessAny(row.Rarity, -1, 0),
+		MaxRarity:           ptrUnless(row.MaxRarity, 6),
+		Size:                ptrUnlessAny(row.Size, -1, 0),
+		MaxSize:             ptrUnless(row.MaxSize, 5),
+		PVPRankingLeague:    ptrUnless(row.PVPRankingLeague, 0),
+		PVPRankingBest:      ptrUnlessAny(row.PVPRankingBest, 1, 0),
+		PVPRankingWorst:     ptrUnlessAny(row.PVPRankingWorst, 4096, 0),
+		PVPRankingMinCP:     ptrUnless(row.PVPRankingMinCP, 0),
+		PVPRankingCap:       ptrUnless(row.PVPRankingCap, 0),
+		PVPRankingEvolution: ptrUnless(row.PVPRankingEvolution, 0),
+		Distance:            ptrUnless(row.Distance, 0),
+		Template:            ptrUnless(row.Template, ""),
+		Ping:                ptrUnless(row.Ping, ""), Clean: ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),

@@ -3073,6 +3073,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "rsvp_changes": {
                   "description": "RSVP change handling: none|rsvp|rsvp_only (0|1|2). Omit to disable RSVP updates (defaults to 'none', stored as 0). Returned as null when 'none'.",
                   "enum": [
@@ -3200,6 +3208,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "rsvp_changes": {
                   "description": "RSVP change handling: none|rsvp|rsvp_only (0|1|2). Omit to disable RSVP updates (defaults to 'none', stored as 0). Returned as null when 'none'.",
                   "enum": [
@@ -3322,6 +3338,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -3459,6 +3483,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "template": {
                   "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
                   "type": [
@@ -3546,6 +3578,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "template": {
                   "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
                   "type": [
@@ -3628,6 +3668,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -3730,6 +3778,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "slot_changes": {
                   "description": "Alert on slot (defender count) changes. Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -3842,6 +3898,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "slot_changes": {
                   "description": "Alert on slot (defender count) changes. Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -3949,6 +4013,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -4069,6 +4141,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -4155,6 +4235,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -4236,6 +4324,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -4362,6 +4458,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -4478,6 +4582,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -4589,6 +4701,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -4696,6 +4816,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -4781,6 +4909,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -4861,6 +4997,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -5000,6 +5144,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
@@ -5138,6 +5290,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
@@ -5271,6 +5431,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -5400,6 +5568,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
@@ -5506,6 +5682,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
@@ -5607,6 +5791,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -5899,6 +6091,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
@@ -6268,6 +6468,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
@@ -6632,6 +6840,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -6845,6 +7061,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "reward": {
                   "description": "Reward selector (game-master id; meaning depends on reward_type: item id (2), stardust amount (3), pokecoin amount (8), pokemon/candy id (4/7/12)). Omit (or send 0) to match ANY reward of that category — i.e. {reward_type:2} is 'all items', {reward_type:7} is 'all pokemon', {reward_type:8} is 'any pokecoin amount' (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
@@ -6961,6 +7185,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "reward": {
                   "description": "Reward selector (game-master id; meaning depends on reward_type: item id (2), stardust amount (3), pokecoin amount (8), pokemon/candy id (4/7/12)). Omit (or send 0) to match ANY reward of that category — i.e. {reward_type:2} is 'all items', {reward_type:7} is 'all pokemon', {reward_type:8} is 'any pokecoin amount' (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
@@ -7072,6 +7304,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -7248,6 +7488,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
@@ -7417,6 +7665,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -7596,6 +7852,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
@@ -7762,6 +8026,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "rsvp_changes": {
                   "description": "RSVP change handling: none|rsvp|rsvp_only (0|1|2). Omit to disable RSVP updates (defaults to 'none', stored as 0). Returned as null when 'none'.",
                   "enum": [
@@ -7892,6 +8164,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "template": {
                   "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
                   "type": [
@@ -7982,6 +8262,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -8095,6 +8383,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -8219,6 +8515,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -8314,6 +8618,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -8451,6 +8763,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
@@ -8568,6 +8888,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -8858,6 +9186,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
@@ -9064,6 +9400,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "reward": {
                   "description": "Reward selector (game-master id; meaning depends on reward_type: item id (2), stardust amount (3), pokecoin amount (8), pokemon/candy id (4/7/12)). Omit (or send 0) to match ANY reward of that category — i.e. {reward_type:2} is 'all items', {reward_type:7} is 'all pokemon', {reward_type:8} is 'any pokecoin amount' (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
@@ -9233,6 +9577,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
@@ -9388,6 +9740,14 @@
               "null"
             ]
           },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "rsvp_changes": {
             "description": "RSVP change handling: none|rsvp|rsvp_only (0|1|2). Omit to disable RSVP updates (defaults to 'none', stored as 0). Returned as null when 'none'.",
             "enum": [
@@ -9493,6 +9853,14 @@
               "null"
             ]
           },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "template": {
             "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
             "type": [
@@ -9556,6 +9924,14 @@
           },
           "override_location_label": {
             "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
             "type": [
               "string",
               "null"
@@ -9739,6 +10115,14 @@
               "null"
             ]
           },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "summary": {
             "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
             "type": [
@@ -9828,6 +10212,14 @@
           },
           "override_location_label": {
             "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
             "type": [
               "string",
               "null"
@@ -9938,6 +10330,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -10073,6 +10473,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "template": {
                   "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
                   "type": [
@@ -10163,6 +10571,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -10276,6 +10692,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -10400,6 +10824,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "summary": {
                   "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
                   "type": [
@@ -10495,6 +10927,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -10632,6 +11072,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level.",
                   "format": "int64",
@@ -10749,6 +11197,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -11039,6 +11495,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "pokemon_id": {
                   "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
                   "format": "int64",
@@ -11245,6 +11709,14 @@
                     "null"
                   ]
                 },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "reward": {
                   "description": "Reward selector (game-master id; meaning depends on reward_type: item id (2), stardust amount (3), pokecoin amount (8), pokemon/candy id (4/7/12)). Omit (or send 0) to match ANY reward of that category — i.e. {reward_type:2} is 'all items', {reward_type:7} is 'all pokemon', {reward_type:8} is 'any pokecoin amount' (stored as 0 = any). Returned as null when at its wildcard.",
                   "format": "int64",
@@ -11409,6 +11881,14 @@
                 },
                 "override_location_label": {
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
                   "type": [
                     "string",
                     "null"
@@ -11603,6 +12083,14 @@
               "null"
             ]
           },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "summary": {
             "description": "Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false.",
             "type": [
@@ -11705,6 +12193,14 @@
           },
           "override_location_label": {
             "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
             "type": [
               "string",
               "null"
@@ -11861,6 +12357,14 @@
           },
           "override_location_label": {
             "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
             "type": [
               "string",
               "null"
@@ -12150,6 +12654,14 @@
               "null"
             ]
           },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "pokemon_id": {
             "description": "Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all.",
             "format": "int64",
@@ -12405,6 +12917,14 @@
               "null"
             ]
           },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "reward": {
             "description": "Reward selector (game-master id; meaning depends on reward_type: item id (2), stardust amount (3), pokecoin amount (8), pokemon/candy id (4/7/12)). Omit (or send 0) to match ANY reward of that category — i.e. {reward_type:2} is 'all items', {reward_type:7} is 'all pokemon', {reward_type:8} is 'any pokecoin amount' (stored as 0 = any). Returned as null when at its wildcard.",
             "format": "int64",
@@ -12544,6 +13064,14 @@
           },
           "override_location_label": {
             "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
             "type": [
               "string",
               "null"
