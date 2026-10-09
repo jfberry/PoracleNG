@@ -53,6 +53,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`include_empty` on fort tracking now defaults to `true`** when omitted,
   honoring the `forts` DB column default. The previous gin handler defaulted it
   to `false`; API clients that omit `include_empty` now get `true`.
+- **v2 pokemon: a GET → POST of a rule stored with a legacy wildcard alias is
+  `unchanged`, not a duplicate.** Rows holding `0` for `pvp_ranking_best`,
+  `rarity` or `size` (or for `pvp_ranking_worst` on a rule with no league) read
+  back as `null`, which the write stores as `1`/`-1`/`4096`; the create/PUT
+  diff now treats the two as the same rule. Stored rows are not rewritten.
+- **v2 pokemon: `pvp_ranking_worst` `0` on a rule with a league set is returned
+  as `0`, not `null`.** With a league the matcher drops every rank above it, so
+  that rule matches nothing; reporting it as "any rank" meant writing it back
+  silently turned it into a rule that fires on every rank.
 
 ### Deprecated
 

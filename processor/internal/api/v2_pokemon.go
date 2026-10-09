@@ -63,7 +63,7 @@ type v2PokemonRule struct {
 
 	PVPRankingLeague    *int `json:"pvp_ranking_league,omitempty" nullable:"true" enum:"0,500,1500,2500" doc:"PVP league CP cap (the stored int IS the cap): 0 | 500 | 1500 | 2500. Omit (or 0) for IV-mode tracking with no PVP filter (stored as 0 = none/IV mode). Returned as null when at its wildcard."`
 	PVPRankingBest      *int `json:"pvp_ranking_best,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard."`
-	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard."`
+	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard."`
 	PVPRankingMinCP     *int `json:"pvp_ranking_min_cp,omitempty" minimum:"0" nullable:"true" doc:"PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
 	PVPRankingCap       *int `json:"pvp_ranking_cap,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard."`
 	PVPRankingEvolution *int `json:"pvp_ranking_evolution,omitempty" minimum:"0" maximum:"3" nullable:"true" doc:"Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0)."`
@@ -71,7 +71,7 @@ type v2PokemonRule struct {
 	// Common fields.
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
-	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
@@ -173,38 +173,39 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 	gender := genderEnum.fromStored(row.Gender)
 	return v2PokemonRule{
-		PokemonID:           ptrUnless(row.PokemonID, 0),
-		Form:                ptrUnless(row.Form, 0),
-		Costume:             ptrUnless(row.Costume, 9000),
-		MinIV:               ptrUnless(row.MinIV, -1),
-		MaxIV:               ptrUnless(row.MaxIV, 100),
-		MinCP:               ptrUnless(row.MinCP, 0),
-		MaxCP:               ptrUnless(row.MaxCP, 9000),
-		MinLevel:            ptrUnless(row.MinLevel, 0),
-		MaxLevel:            ptrUnless(row.MaxLevel, 55),
-		ATK:                 ptrUnless(row.ATK, 0),
-		DEF:                 ptrUnless(row.DEF, 0),
-		STA:                 ptrUnless(row.STA, 0),
-		MaxATK:              ptrUnless(row.MaxATK, 15),
-		MaxDEF:              ptrUnless(row.MaxDEF, 15),
-		MaxSTA:              ptrUnless(row.MaxSTA, 15),
-		Gender:              ptrUnless(gender, "any"),
-		MinWeight:           ptrUnless(row.MinWeight, 0),
-		MaxWeight:           ptrUnless(row.MaxWeight, 9000000),
-		MinTime:             ptrUnless(row.MinTime, 0),
-		Rarity:              ptrUnlessAny(row.Rarity, -1, 0),
-		MaxRarity:           ptrUnless(row.MaxRarity, 6),
-		Size:                ptrUnlessAny(row.Size, -1, 0),
-		MaxSize:             ptrUnless(row.MaxSize, 5),
-		PVPRankingLeague:    ptrUnless(row.PVPRankingLeague, 0),
-		PVPRankingBest:      ptrUnlessAny(row.PVPRankingBest, 1, 0),
-		PVPRankingWorst:     ptrUnlessAny(row.PVPRankingWorst, 4096, 0),
-		PVPRankingMinCP:     ptrUnless(row.PVPRankingMinCP, 0),
-		PVPRankingCap:       ptrUnless(row.PVPRankingCap, 0),
-		PVPRankingEvolution: ptrUnless(row.PVPRankingEvolution, 0),
-		Distance:            ptrUnless(row.Distance, 0),
-		Template:            ptrUnless(row.Template, ""),
-		Ping:                ptrUnless(row.Ping, ""), Clean: ptrUnless(db.IsClean(row.Clean), false),
+		PokemonID:             ptrUnless(row.PokemonID, 0),
+		Form:                  ptrUnless(row.Form, 0),
+		Costume:               ptrUnless(row.Costume, 9000),
+		MinIV:                 ptrUnless(row.MinIV, -1),
+		MaxIV:                 ptrUnless(row.MaxIV, 100),
+		MinCP:                 ptrUnless(row.MinCP, 0),
+		MaxCP:                 ptrUnless(row.MaxCP, 9000),
+		MinLevel:              ptrUnless(row.MinLevel, 0),
+		MaxLevel:              ptrUnless(row.MaxLevel, 55),
+		ATK:                   ptrUnless(row.ATK, 0),
+		DEF:                   ptrUnless(row.DEF, 0),
+		STA:                   ptrUnless(row.STA, 0),
+		MaxATK:                ptrUnless(row.MaxATK, 15),
+		MaxDEF:                ptrUnless(row.MaxDEF, 15),
+		MaxSTA:                ptrUnless(row.MaxSTA, 15),
+		Gender:                ptrUnless(gender, "any"),
+		MinWeight:             ptrUnless(row.MinWeight, 0),
+		MaxWeight:             ptrUnless(row.MaxWeight, 9000000),
+		MinTime:               ptrUnless(row.MinTime, 0),
+		Rarity:                ptrUnlessAny(row.Rarity, -1, 0),
+		MaxRarity:             ptrUnless(row.MaxRarity, 6),
+		Size:                  ptrUnlessAny(row.Size, -1, 0),
+		MaxSize:               ptrUnless(row.MaxSize, 5),
+		PVPRankingLeague:      ptrUnless(row.PVPRankingLeague, 0),
+		PVPRankingBest:        ptrUnlessAny(row.PVPRankingBest, 1, 0),
+		PVPRankingWorst:       pvpWorstToRule(row),
+		PVPRankingMinCP:       ptrUnless(row.PVPRankingMinCP, 0),
+		PVPRankingCap:         ptrUnless(row.PVPRankingCap, 0),
+		PVPRankingEvolution:   ptrUnless(row.PVPRankingEvolution, 0),
+		Distance:              ptrUnless(row.Distance, 0),
+		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
+		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
@@ -257,7 +258,8 @@ func RegisterV2TrackingPokemon(api huma.API, deps *TrackingDeps) {
 
 // canonicalizePokemonRow maps the alias wildcards that pokemonRowToRule
 // projects to null (ptrUnlessAny) onto the value translateV2Pokemon stores
-// for null, so diffing treats them as the same rule.
+// for null, so diffing treats them as the same rule. pvp_ranking_worst 0 is
+// only an alias when no league is set — see pvpWorstToRule.
 func canonicalizePokemonRow(row *db.MonsterTrackingAPI) {
 	if row.Rarity == 0 {
 		row.Rarity = -1
@@ -268,9 +270,22 @@ func canonicalizePokemonRow(row *db.MonsterTrackingAPI) {
 	if row.PVPRankingBest == 0 {
 		row.PVPRankingBest = 1
 	}
-	if row.PVPRankingWorst == 0 {
+	if row.PVPRankingWorst == 0 && row.PVPRankingLeague == 0 {
 		row.PVPRankingWorst = 4096
 	}
+}
+
+// pvpWorstToRule reports pvp_ranking_worst. A stored 0 is the wildcard only
+// when the rule has no league, where the field is never read. With a league
+// set the matcher drops any rank above it, so 0 matches nothing: reporting it
+// as null (any rank) would misdescribe the rule, and the canonical 4096 a
+// client then wrote back would turn a rule that never fired into one that
+// fires on every rank. It is reported as the stored 0 instead.
+func pvpWorstToRule(row *db.MonsterTrackingAPI) *int {
+	if row.PVPRankingLeague == 0 {
+		return ptrUnlessAny(row.PVPRankingWorst, 4096, 0)
+	}
+	return ptrUnless(row.PVPRankingWorst, 4096)
 }
 
 // ptrUnlessAny is ptrUnless for fields with more than one "no filter" value.

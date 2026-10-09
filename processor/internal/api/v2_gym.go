@@ -27,7 +27,7 @@ type v2GymRule struct {
 	// Common fields.
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
-	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
@@ -90,13 +90,14 @@ func gymRowToRule(row *db.GymTrackingAPI) v2GymRule {
 		gymID = row.GymID
 	}
 	return v2GymRule{
-		Team:          teamEnum.fromStored(row.Team), // required, always present
-		SlotChanges:   ptrUnless(bool(row.SlotChanges), false),
-		BattleChanges: ptrUnless(bool(row.BattleChanges), false),
-		GymID:         gymID,
-		Distance:      ptrUnless(row.Distance, 0),
-		Template:      ptrUnless(row.Template, ""),
-		Ping:          ptrUnless(row.Ping, ""), Clean: ptrUnless(db.IsClean(row.Clean), false),
+		Team:                  teamEnum.fromStored(row.Team), // required, always present
+		SlotChanges:           ptrUnless(bool(row.SlotChanges), false),
+		BattleChanges:         ptrUnless(bool(row.BattleChanges), false),
+		GymID:                 gymID,
+		Distance:              ptrUnless(row.Distance, 0),
+		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
+		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  nil, // edit is not supported for this type; always null
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),

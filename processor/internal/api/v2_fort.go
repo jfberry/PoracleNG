@@ -42,7 +42,7 @@ type v2FortRule struct {
 	// Common fields. fort has NO clean column ⇒ no clean/edit/summary here.
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
-	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
 	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset."`
@@ -125,13 +125,14 @@ func fortRowToRule(row *db.FortTrackingAPI) v2FortRule {
 	return v2FortRule{
 		// fort_type wildcard is the catch-all "everything" (its documented default);
 		// include_empty defaults TRUE (DB column default) so true is hidden as null.
-		FortType:     ptrUnless(row.FortType, fortTypeEnum.defValue),
-		IncludeEmpty: ptrUnless(bool(row.IncludeEmpty), true),
-		ChangeTypes:  ptrUnlessSlice(changeTypes),
-		Distance:     ptrUnless(row.Distance, 0),
-		Template:     ptrUnless(row.Template, ""),
-		Ping:         ptrUnless(row.Ping, ""), OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
-		OverrideAreas: ptrUnlessSlice(row.OverrideAreas),
+		FortType:              ptrUnless(row.FortType, fortTypeEnum.defValue),
+		IncludeEmpty:          ptrUnless(bool(row.IncludeEmpty), true),
+		ChangeTypes:           ptrUnlessSlice(changeTypes),
+		Distance:              ptrUnless(row.Distance, 0),
+		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
+		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
+		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),
 	}
 }
 

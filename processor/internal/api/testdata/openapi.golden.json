@@ -3074,7 +3074,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -3209,7 +3209,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -3344,7 +3344,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -3484,7 +3484,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -3579,7 +3579,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -3674,7 +3674,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -3779,7 +3779,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -3899,7 +3899,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4019,7 +4019,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4142,7 +4142,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4236,7 +4236,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4330,7 +4330,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4459,7 +4459,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4583,7 +4583,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4707,7 +4707,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4817,7 +4817,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -4910,7 +4910,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -5003,7 +5003,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -5145,7 +5145,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -5291,7 +5291,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -5437,7 +5437,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -5569,7 +5569,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -5683,7 +5683,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -5797,7 +5797,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -6092,7 +6092,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -6162,7 +6162,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -6469,7 +6469,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -6539,7 +6539,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -6846,7 +6846,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -6916,7 +6916,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -7062,7 +7062,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -7186,7 +7186,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -7310,7 +7310,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -7489,7 +7489,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -7671,7 +7671,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -7853,7 +7853,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8027,7 +8027,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8165,7 +8165,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8268,7 +8268,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8389,7 +8389,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8516,7 +8516,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8624,7 +8624,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8764,7 +8764,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -8894,7 +8894,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -9187,7 +9187,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -9257,7 +9257,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -9401,7 +9401,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -9578,7 +9578,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -9741,7 +9741,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -9854,7 +9854,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -9930,7 +9930,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -10116,7 +10116,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -10218,7 +10218,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -10336,7 +10336,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -10474,7 +10474,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -10577,7 +10577,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -10698,7 +10698,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -10825,7 +10825,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -10933,7 +10933,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -11073,7 +11073,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -11203,7 +11203,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -11496,7 +11496,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -11566,7 +11566,7 @@
                   ]
                 },
                 "pvp_ranking_worst": {
-                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
+                  "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
                   "format": "int64",
                   "maximum": 4096,
                   "minimum": 1,
@@ -11710,7 +11710,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -11887,7 +11887,7 @@
                   ]
                 },
                 "ping": {
-                  "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
                   "type": [
                     "string",
@@ -12084,7 +12084,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -12199,7 +12199,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -12363,7 +12363,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -12655,7 +12655,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -12725,7 +12725,7 @@
             ]
           },
           "pvp_ranking_worst": {
-            "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard.",
+            "description": "Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard. A legacy stored 0 is returned as null when no league is set, but as 0 when one is: with a league set, 0 matches no rank, so it is not a wildcard.",
             "format": "int64",
             "maximum": 4096,
             "minimum": 1,
@@ -12918,7 +12918,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
@@ -13070,7 +13070,7 @@
             ]
           },
           "ping": {
-            "description": "Text appended to the alert, typically Discord role/user mentions. Omit for none. Returned as null when empty.",
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
             "maxLength": 255,
             "type": [
               "string",
