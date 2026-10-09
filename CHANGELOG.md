@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **v2 clear location.** `DELETE /api/v2/humans/{id}/location[?profile=]`
+  resets a human's (or profile's) location to unset. Unlike
+  `POST …/location {lat:0,lon:0}` it is not refused for area-restricted users.
+- **v2 tracking enforces `[tracking] max_distance`.** Every v2 tracking type
+  now clamps `distance` to the configured maximum, as the bot commands do
+  (previously v2 only capped at the earth's circumference). Over-limit values
+  are clamped, not rejected, so GET → POST/PUT round-trips keep working.
 - **v2 mutes API.** `GET/POST /api/v2/humans/{id}/mutes` and
   `DELETE /api/v2/humans/{id}/mutes[?scope=&value=]` expose the in-memory alert
   mutes (the `!mute` / alert-button feature) over HTTP, and the v2 full

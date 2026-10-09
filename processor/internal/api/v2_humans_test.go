@@ -440,6 +440,52 @@ func TestV2Humans_SetLocation_AllowedInsideRestriction(t *testing.T) {
 	}
 }
 
+func TestV2Humans_ClearLocation(t *testing.T) {
+	r, humans, reloads := newV2HumansTestAPI(t, nil)
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/location", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertStatusOK(t, w)
+	h, _ := humans.Get("u1")
+	if h.Latitude != 0 || h.Longitude != 0 {
+		t.Fatalf("location not cleared: %+v", h)
+	}
+	if atomic.LoadInt32(reloads) != 1 {
+		t.Fatalf("expected 1 reload, got %d", atomic.LoadInt32(reloads))
+	}
+}
+
+func TestV2Humans_ClearLocation_IgnoresRestriction(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, &config.Config{
+		Area: config.AreaConfig{Enabled: true},
+	})
+	humans.AddHuman(&store.Human{
+		ID: "u1", Type: "discord:user", Name: "User1", Enabled: true, Language: "en",
+		CurrentProfileNo: 1, AreaRestriction: []string{"alpha"}, Latitude: 10, Longitude: 10,
+	})
+	// POST {0,0} would be 403 here: 0,0 is outside alpha.
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/location", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a restricted human, got %d: %s", w.Code, w.Body.String())
+	}
+	h, _ := humans.Get("u1")
+	if h.Latitude != 0 || h.Longitude != 0 {
+		t.Fatalf("location not cleared: %+v", h)
+	}
+}
+
+func TestV2Humans_ClearLocation_404(t *testing.T) {
+	r, _, reloads := newV2HumansTestAPI(t, nil)
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/nobody/location", "")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+	if atomic.LoadInt32(reloads) != 0 {
+		t.Fatalf("404 must not reload")
+	}
+}
+
 // --- check-location ---------------------------------------------------------
 
 func TestV2Humans_CheckLocation_DisabledAlwaysOK(t *testing.T) {

@@ -1045,3 +1045,26 @@ func TestV2Pokemon_EditTrueAccepted(t *testing.T) {
 		t.Fatalf("edit bit (2) should be stored, got %+v", rows)
 	}
 }
+
+func TestClampV2Distance(t *testing.T) {
+	withMax := func(max int) *TrackingDeps {
+		return &TrackingDeps{Config: &config.Config{Tracking: config.TrackingConfig{MaxDistance: max}}}
+	}
+	cases := []struct {
+		name     string
+		deps     *TrackingDeps
+		in, want int
+	}{
+		{"no limit configured keeps value", withMax(0), 5000, 5000},
+		{"no limit configured caps at earth", withMax(0), earthCircumference + 1, earthCircumference},
+		{"under limit unchanged", withMax(10000), 9999, 9999},
+		{"over limit clamped", withMax(10000), 25000, 10000},
+		{"area mode untouched", withMax(10000), 0, 0},
+		{"nil config caps at earth", &TrackingDeps{}, earthCircumference + 1, earthCircumference},
+	}
+	for _, c := range cases {
+		if got := clampV2Distance(c.deps, c.in); got != c.want {
+			t.Errorf("%s: clampV2Distance(%d) = %d, want %d", c.name, c.in, got, c.want)
+		}
+	}
+}

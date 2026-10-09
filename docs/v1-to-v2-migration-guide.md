@@ -59,6 +59,7 @@ that doesn't belong to the addressed human.
 | `POST /api/humans/{id}/adminDisabled` | `POST /api/v2/humans/{id}/admin-disable` | Body `{disabled: bool}` |
 | `POST /api/humans/{id}/language` | `POST /api/v2/humans/{id}/language` | Body `{language: string}`, validated against available locales |
 | `POST /api/humans/{id}/setLocation/{lat}/{lon}` | `POST /api/v2/humans/{id}/location` | Body `{lat, lon}` floats |
+| — | `DELETE /api/v2/humans/{id}/location` | **NEW** — clear the location (`?profile=` as for set). Not subject to the area-restriction check |
 | `GET /api/humans/{id}/checkLocation/{lat}/{lon}` | `GET /api/v2/humans/{id}/check-location?lat=&lon=` | |
 | `POST /api/humans/{id}/setAreas` | `POST /api/v2/humans/{id}/areas` | Body `{areas: []string}` |
 | `POST /api/humans/{id}/switchProfile/{n}` | `POST /api/v2/humans/{id}/profile` | Body `{profile_no: int}` |
@@ -137,6 +138,8 @@ is **not** a sentinel to avoid.
   facade translates down to the same stored grunt-type names v1 wrote.
 - **incident (NEW)** — pokestop events (e.g. Showcases) split out of invasion into their own type,
   keyed by the game's `display_type` int. Not available on v1.
+- **`distance`** — clamped to the server's `[tracking] max_distance` on every type (v1 only capped at the
+  earth's circumference). Read the limit from `GET /api/config/poracleWeb` (`maxDistance`) to warn users first.
 - **fort** — `include_empty` now defaults to **`true`** when omitted (v1 defaulted false).
 - **quest** — `reward_type` (proto int: `2`=item, `3`=stardust, `4`=candy, `7`=pokemon,
   `12`=mega_energy) is required; `reward`, `amount`, `form`, `shiny` optional.
