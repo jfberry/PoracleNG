@@ -46,7 +46,7 @@ func TestV2Locations_List(t *testing.T) {
 	if _, err := humans.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1}); err != nil {
 		t.Fatalf("seed AddLocation: %v", err)
 	}
-	if err := humans.SetLocation("u1", 0, 10, 20); err != nil {
+	if err := humans.SetLocation("u1", 1, 10, 20); err != nil {
 		t.Fatalf("seed SetLocation: %v", err)
 	}
 

@@ -440,6 +440,85 @@ func TestV2Humans_SetLocation_AllowedInsideRestriction(t *testing.T) {
 	}
 }
 
+func TestV2Humans_ClearLocation(t *testing.T) {
+	r, humans, reloads := newV2HumansTestAPI(t, nil)
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/location", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertStatusOK(t, w)
+	h, _ := humans.Get("u1")
+	if h.Latitude != 0 || h.Longitude != 0 {
+		t.Fatalf("location not cleared: %+v", h)
+	}
+	if atomic.LoadInt32(reloads) != 1 {
+		t.Fatalf("expected 1 reload, got %d", atomic.LoadInt32(reloads))
+	}
+}
+
+func TestV2Humans_ClearLocation_IgnoresRestriction(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, &config.Config{
+		Area: config.AreaConfig{Enabled: true},
+	})
+	humans.AddHuman(&store.Human{
+		ID: "u1", Type: "discord:user", Name: "User1", Enabled: true, Language: "en",
+		CurrentProfileNo: 1, AreaRestriction: []string{"alpha"}, Latitude: 10, Longitude: 10,
+	})
+	// POST {0,0} would be 403 here: 0,0 is outside alpha.
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/location", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a restricted human, got %d: %s", w.Code, w.Body.String())
+	}
+	h, _ := humans.Get("u1")
+	if h.Latitude != 0 || h.Longitude != 0 {
+		t.Fatalf("location not cleared: %+v", h)
+	}
+}
+
+func TestV2Humans_ClearLocation_404(t *testing.T) {
+	r, _, reloads := newV2HumansTestAPI(t, nil)
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/nobody/location", "")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+	if atomic.LoadInt32(reloads) != 0 {
+		t.Fatalf("404 must not reload")
+	}
+}
+
+// A ?profile= naming an inactive profile writes that profile only. The matcher
+// reads humans.latitude/longitude, so writing it there too would move (or, for
+// DELETE, wipe) the location the active profile is matching against.
+func TestV2Humans_Location_InactiveProfileLeavesLiveLocation(t *testing.T) {
+	for _, tc := range []struct {
+		name, method, body string
+		wantLat            float64
+	}{
+		{"set", http.MethodPost, `{"lat":20,"lon":20}`, 20},
+		{"clear", http.MethodDelete, "", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, humans, _ := newV2HumansTestAPI(t, nil)
+			humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 1, Name: "Default", Latitude: 10, Longitude: 10})
+			humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 2, Name: "Weekend", Latitude: 5, Longitude: 5})
+
+			w := v2DoReq(t, r, tc.method, "/api/v2/humans/u1/location?profile=2", tc.body)
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+			}
+			if h, _ := humans.Get("u1"); h.Latitude != 10 || h.Longitude != 10 {
+				t.Errorf("live location = %v,%v, want untouched 10,10", h.Latitude, h.Longitude)
+			}
+			profiles, _ := humans.GetProfiles("u1")
+			for _, p := range profiles {
+				if p.ProfileNo == 2 && p.Latitude != tc.wantLat {
+					t.Errorf("profile 2 lat = %v, want %v", p.Latitude, tc.wantLat)
+				}
+			}
+		})
+	}
+}
+
 // --- check-location ---------------------------------------------------------
 
 func TestV2Humans_CheckLocation_DisabledAlwaysOK(t *testing.T) {
@@ -935,6 +1014,10 @@ func TestV2Humans_SetAreas_TargetsNamedProfile(t *testing.T) {
 	// The active profile must be untouched.
 	if got := humans.AreaForProfile("u1", 1); len(got) != 0 {
 		t.Errorf("profile 1 areas = %v, want untouched", got)
+	}
+	// So must the live copy the matcher reads (humans.area).
+	if h, _ := humans.Get("u1"); len(h.Area) != 0 {
+		t.Errorf("humans.area = %v, want untouched", h.Area)
 	}
 }
 

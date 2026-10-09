@@ -76,7 +76,7 @@ func TestMockHumanStore_SetEnabled(t *testing.T) {
 
 func TestMockHumanStore_SetLocation(t *testing.T) {
 	m := NewMockHumanStore()
-	m.AddHuman(&Human{ID: "123"})
+	m.AddHuman(&Human{ID: "123", CurrentProfileNo: 1})
 
 	m.SetLocation("123", 1, 51.5, -0.1)
 	got, _ := m.Get("123")
@@ -87,7 +87,7 @@ func TestMockHumanStore_SetLocation(t *testing.T) {
 
 func TestMockHumanStore_SetArea(t *testing.T) {
 	m := NewMockHumanStore()
-	m.AddHuman(&Human{ID: "123"})
+	m.AddHuman(&Human{ID: "123", CurrentProfileNo: 1})
 
 	m.SetArea("123", 1, []string{"downtown", "park"})
 	got, _ := m.Get("123")

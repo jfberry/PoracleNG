@@ -71,8 +71,9 @@ func TestAreaCommand_RemoveArea(t *testing.T) {
 
 	// Seed user with areas
 	mock.AddHuman(&store.Human{
-		ID:   "user1",
-		Area: []string{"downtown", "park"},
+		ID:               "user1",
+		CurrentProfileNo: 1,
+		Area:             []string{"downtown", "park"},
 	})
 
 	cmd := &AreaCommand{}
@@ -91,8 +92,9 @@ func TestAreaCommand_RemoveMultiple(t *testing.T) {
 	ctx, mock := areaTestCtx(t)
 
 	mock.AddHuman(&store.Human{
-		ID:   "user1",
-		Area: []string{"downtown", "park"},
+		ID:               "user1",
+		CurrentProfileNo: 1,
+		Area:             []string{"downtown", "park"},
 	})
 
 	cmd := &AreaCommand{}
@@ -110,8 +112,9 @@ func TestAreaCommand_RemoveMultiple(t *testing.T) {
 func TestAreaCommand_NoArgs_ShowsCurrent(t *testing.T) {
 	ctx, mock := areaTestCtx(t)
 	mock.AddHuman(&store.Human{
-		ID:   "user1",
-		Area: []string{"downtown"},
+		ID:               "user1",
+		CurrentProfileNo: 1,
+		Area:             []string{"downtown"},
 	})
 
 	cmd := &AreaCommand{}

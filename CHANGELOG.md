@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **v2 clear location.** `DELETE /api/v2/humans/{id}/location[?profile=]`
+  resets a human's (or profile's) location to unset. Unlike
+  `POST …/location {lat:0,lon:0}` it is not refused for area-restricted users.
+- **v2 tracking enforces `[tracking] max_distance`.** Every v2 tracking type
+  now clamps `distance` to the configured maximum, as the bot commands do
+  (previously v2 only capped at the earth's circumference). Over-limit values
+  are clamped, not rejected, so GET → POST/PUT never fails on them; a stored
+  rule above a since-lowered limit comes back from that round trip as
+  `updated` (rewritten at the limit), not `unchanged`.
 - **v2 mutes API.** `GET/POST /api/v2/humans/{id}/mutes` and
   `DELETE /api/v2/humans/{id}/mutes[?scope=&value=]` expose the in-memory alert
   mutes (the `!mute` / alert-button feature) over HTTP, and the v2 full
@@ -51,6 +60,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`include_empty` on fort tracking now defaults to `true`** when omitted,
   honoring the `forts` DB column default. The previous gin handler defaulted it
   to `false`; API clients that omit `include_empty` now get `true`.
+- **v2 `?profile=` on location and areas no longer touches the active
+  profile.** Setting or clearing the location, or setting areas, for an
+  inactive profile also overwrote the human's live location/areas — the copy
+  the matcher reads — so e.g. `DELETE …/location?profile=2` while profile 1 was
+  active stopped every distance rule matching. The store now writes the human
+  row only when the named profile is the current one.
 
 ### Deprecated
 

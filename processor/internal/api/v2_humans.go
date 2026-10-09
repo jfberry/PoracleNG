@@ -456,6 +456,44 @@ func registerV2HumanSetLocation(api huma.API, deps *TrackingDeps, tag []string, 
 	})
 }
 
+type v2ClearLocationInput struct {
+	ID      string `path:"id" doc:"Human id (the owning user)"`
+	Profile int    `query:"profile" default:"-1" doc:"Profile number; defaults to the human's active profile"`
+}
+
+// registerV2HumanClearLocation registers DELETE /v2/humans/{id}/location.
+//
+// POST {lat:0,lon:0} stores the same thing, but a human with an area
+// restriction gets a 403 because 0,0 is inside none of their fences — and
+// clearing a location should never need a fence.
+func registerV2HumanClearLocation(api huma.API, deps *TrackingDeps, tag []string, sec []map[string][]string) {
+	huma.Register(api, huma.Operation{
+		OperationID: "v2-clear-human-location", Method: "DELETE", Path: "/v2/humans/{id}/location",
+		Summary: "Clear a human's location",
+		Description: "Resets the location to 0,0 (unset), the same targeting as POST location. Not subject to the area-restriction " +
+			"check. Rules with a distance > 0 stay as they are and will not match until a location is set again; reset their " +
+			"distance if area matching is wanted. Triggers a state reload. 404 if the human does not exist.",
+		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
+	}, func(_ context.Context, in *v2ClearLocationInput) (*statusOKOutput, error) {
+		human, err := resolveFullHuman(deps, in.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		profileNo := human.CurrentProfileNo
+		if in.Profile != profileSentinel {
+			profileNo = in.Profile
+		}
+
+		if err := deps.Humans.SetLocation(in.ID, profileNo, 0, 0); err != nil {
+			log.Errorf("v2 humans: clear location %s: %s", in.ID, err)
+			return nil, huma.Error500InternalServerError("database error")
+		}
+		reloadState(deps)
+		return okStatus(), nil
+	})
+}
+
 // --- check-location --------------------------------------------------------
 
 type v2CheckLocationInput struct {
@@ -698,6 +736,7 @@ func RegisterV2Humans(humaAPI huma.API, deps *TrackingDeps) {
 	registerV2HumanAdminDisable(humaAPI, deps, tag, sec)
 	registerV2HumanLanguage(humaAPI, deps, tag, sec)
 	registerV2HumanSetLocation(humaAPI, deps, tag, sec)
+	registerV2HumanClearLocation(humaAPI, deps, tag, sec)
 	registerV2HumanCheckLocation(humaAPI, deps, tag, sec)
 	registerV2HumanSetAreas(humaAPI, deps, tag, sec)
 }
