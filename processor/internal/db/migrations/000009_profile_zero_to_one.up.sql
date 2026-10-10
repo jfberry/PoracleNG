@@ -18,6 +18,22 @@
 CREATE TEMPORARY TABLE tmp_real_profile_zero (PRIMARY KEY (id))
 	SELECT DISTINCT id FROM profiles WHERE profile_no = 0;
 
+-- Humans that already have rules on profile 1, captured before anything moves.
+CREATE TEMPORARY TABLE tmp_has_profile_one_rules (PRIMARY KEY (id))
+	SELECT DISTINCT id FROM (
+	SELECT id FROM `monsters` WHERE profile_no = 1
+	UNION SELECT id FROM `raid` WHERE profile_no = 1
+	UNION SELECT id FROM `egg` WHERE profile_no = 1
+	UNION SELECT id FROM `quest` WHERE profile_no = 1
+	UNION SELECT id FROM `invasion` WHERE profile_no = 1
+	UNION SELECT id FROM `lures` WHERE profile_no = 1
+	UNION SELECT id FROM `nests` WHERE profile_no = 1
+	UNION SELECT id FROM `gym` WHERE profile_no = 1
+	UNION SELECT id FROM `forts` WHERE profile_no = 1
+	UNION SELECT id FROM `weather` WHERE profile_no = 1
+	UNION SELECT id FROM `maxbattle` WHERE profile_no = 1
+	) x;
+
 -- 1. A profile-0 human must have a profile 1 to move to (normally it does;
 --    CreateDefaultProfile may have failed).
 INSERT IGNORE INTO profiles (id, profile_no, name, area, latitude, longitude)
@@ -36,8 +52,61 @@ UPDATE profiles p
 	WHERE p.profile_no = 1 AND h.current_profile_no = 0
 	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = h.id);
 
--- 3. Move profile-0 rules to profile 1, for every human (one that has since
---    switched away still has its default profile's rules on 0). UPDATE IGNORE
+-- 3. A human that has switched away from 0 and already has profile-1 rules
+--    rebuilt its default profile after finding profile 1 empty (it could not
+--    switch back to 0). Its profile-0 rules are abandoned — they have not fired
+--    since the switch and the user cannot see them — so drop them rather than
+--    resurrect rules the user chose not to recreate. A human still ON 0 keeps
+--    them: there profile 0 is the live set and any profile-1 rules are a
+--    client's never-matched attempt at the same default profile.
+DELETE t FROM `monsters` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `raid` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `egg` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `quest` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `invasion` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `lures` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `nests` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `gym` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `forts` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `weather` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+DELETE t FROM `maxbattle` t JOIN humans h ON h.id = t.id
+	WHERE t.profile_no = 0 AND h.current_profile_no <> 0
+	  AND EXISTS (SELECT 1 FROM tmp_has_profile_one_rules p1 WHERE p1.id = t.id)
+	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
+
+-- 4. Move the remaining profile-0 rules to profile 1: every rule of a human on
+--    0, and those of a switched-away human whose profile 1 is empty (restoring
+--    the default profile it lost). UPDATE IGNORE
 --    skips a row that would collide with an identical profile-1 rule on a
 --    database still carrying a legacy unique key (weather_tracking, or an
 --    invasion/lures key 000008 did not recognise); the DELETE then drops those
@@ -97,9 +166,10 @@ UPDATE IGNORE `maxbattle` t SET t.profile_no = 1
 DELETE t FROM `maxbattle` t
 	WHERE t.profile_no = 0 AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = t.id);
 
--- 4. Finally point the humans at profile 1 (after step 2, which selects on 0).
+-- 5. Finally point the humans at profile 1 (after step 2, which selects on 0).
 UPDATE humans h SET h.current_profile_no = 1
 	WHERE h.current_profile_no = 0
 	  AND NOT EXISTS (SELECT 1 FROM tmp_real_profile_zero r WHERE r.id = h.id);
 
+DROP TEMPORARY TABLE tmp_has_profile_one_rules;
 DROP TEMPORARY TABLE tmp_real_profile_zero;

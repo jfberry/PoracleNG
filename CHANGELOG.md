@@ -57,10 +57,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   0 that has no `profiles` row, while their default profile is 1. Bot commands
   worked, but rules a client saved to profile 1 never matched, and a user who
   added and switched to profile 2 could never get back to their profile-0
-  rules. The migration folds profile 0 into profile 1 in every tracking table
-  (dropping only exact duplicates), copies the live area/location onto profile
-  1 for humans currently on 0, and moves them to profile 1. Humans with a
-  genuine `profiles` row for 0 are left alone. Not reversible.
+  rules. The migration copies the live area/location onto profile 1 for humans
+  currently on 0 and moves them to profile 1, merging their profile-0 rules in.
+  For a human that had already switched away, profile-0 rules move to profile
+  1 if it is empty, and are deleted as abandoned if the user had since rebuilt
+  profile 1. Humans with a genuine `profiles` row for 0 are left alone. Not
+  reversible.
 
 ### Deprecated
 
