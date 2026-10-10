@@ -51,6 +51,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`include_empty` on fort tracking now defaults to `true`** when omitted,
   honoring the `forts` DB column default. The previous gin handler defaulted it
   to `false`; API clients that omit `include_empty` now get `true`.
+- **New humans start on profile 1, and migration 000009 moves existing
+  ones off profile 0.** `!poracle`, Discord role reconciliation, `!channel add`,
+  `!webhook add` and Telegram channel registration created humans on a profile
+  0 that has no `profiles` row, while their default profile is 1. Bot commands
+  worked, but rules a client saved to profile 1 never matched, and a user who
+  added and switched to profile 2 could never get back to their profile-0
+  rules. The migration folds profile 0 into profile 1 in every tracking table
+  (dropping only exact duplicates), copies the live area/location onto profile
+  1 for humans currently on 0, and moves them to profile 1. Humans with a
+  genuine `profiles` row for 0 are left alone. Not reversible.
 
 ### Deprecated
 

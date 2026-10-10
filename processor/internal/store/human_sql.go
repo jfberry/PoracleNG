@@ -115,6 +115,17 @@ func (s *SQLHumanStore) Get(id string) (*Human, error) {
 	return rowToHuman(&r), nil
 }
 
+// profileNoOrDefault maps an unset (0) profile number to the default profile 1.
+// Create names current_profile_no in its INSERT, so the column default never
+// applies; without this a caller that leaves it unset puts the human on a
+// profile 0 that has no profiles row (CreateDefaultProfile inserts profile 1).
+func profileNoOrDefault(n int) int {
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
 func (s *SQLHumanStore) Create(h *Human) error {
 	_, err := s.db.Exec(
 		`INSERT INTO humans (id, name, type, enabled, area, latitude, longitude,
@@ -124,7 +135,7 @@ func (s *SQLHumanStore) Create(h *Human) error {
 		h.ID, h.Name, h.Type, boolToInt(h.Enabled),
 		marshalStringSlice(h.Area), h.Latitude, h.Longitude,
 		boolToInt(h.AdminDisable), nullIfEmpty(h.Language),
-		h.CurrentProfileNo, marshalStringSlice(h.CommunityMembership),
+		profileNoOrDefault(h.CurrentProfileNo), marshalStringSlice(h.CommunityMembership),
 		nullStringSlice(h.AreaRestriction), h.Notes)
 	if err != nil {
 		return fmt.Errorf("insert human %s: %w", h.ID, err)

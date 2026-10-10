@@ -89,6 +89,7 @@ func (m *MockHumanStore) Create(h *Human) error {
 		return fmt.Errorf("human %s already exists", h.ID)
 	}
 	cp := *h
+	cp.CurrentProfileNo = profileNoOrDefault(cp.CurrentProfileNo)
 	m.humans[h.ID] = &cp
 	return nil
 }
