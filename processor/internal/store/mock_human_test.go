@@ -176,3 +176,26 @@ func TestMockHumanStore_CallTracking(t *testing.T) {
 		t.Errorf("unexpected call sequence: %v", m.Calls)
 	}
 }
+
+// Profile 0 does not exist: every human starts on the default profile 1, and
+// rules saved to a profile other than the active one never match.
+func TestMockHumanStore_CreateDefaultsProfileNo(t *testing.T) {
+	m := NewMockHumanStore()
+
+	if err := m.Create(&Human{ID: "unset", Type: "discord:user"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Create(&Human{ID: "explicit", Type: "discord:user", CurrentProfileNo: 3}); err != nil {
+		t.Fatal(err)
+	}
+
+	for id, want := range map[string]int{"unset": 1, "explicit": 3} {
+		got, err := m.Get(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.CurrentProfileNo != want {
+			t.Errorf("%s: CurrentProfileNo = %d, want %d", id, got.CurrentProfileNo, want)
+		}
+	}
+}
