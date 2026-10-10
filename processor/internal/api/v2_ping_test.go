@@ -89,3 +89,18 @@ func TestV2Pokemon_PingExplicitNullStoredEmpty(t *testing.T) {
 		t.Fatalf("expected PUT null to clear ping, got %+v", rows)
 	}
 }
+
+// Re-posting a rule that differs only in its ping updates it in place.
+func TestV2Pokemon_PingOnlyChangeIsUpdate(t *testing.T) {
+	r, ms, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon", `[{"pokemon_id":25,"ping":"<@&1>"}]`)
+	body := v2DecodeBody(t, v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon", `[{"pokemon_id":25,"ping":"<@&2>"}]`))
+	if len(tryRules(body, "updated")) != 1 || len(tryRules(body, "created")) != 0 {
+		t.Fatalf("expected a ping-only change to be an update: %v", body)
+	}
+	rows, _ := ms.SelectByIDProfile("u1", 1)
+	if len(rows) != 1 || rows[0].Ping != "<@&2>" {
+		t.Fatalf("expected one rule with the new ping, got %+v", rows)
+	}
+}

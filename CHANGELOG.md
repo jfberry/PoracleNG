@@ -62,6 +62,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   rank; the bot already reads it as "no upper limit" on input and v2 reports it
   as `null`, but the matcher dropped every rank above 0, so such a rule never
   fired. Rules now load with `0` treated as `4096` (no limit).
+- **A ping-only change updates the rule instead of adding a copy.** `ping`
+  is now an updatable diff field, like `distance` and `template`, for the bot
+  commands, v1 and v2 alike. Re-running a tracking command (or re-posting a
+  rule) with a different mention — or with none — changes that rule's ping in
+  place; previously it created a second rule. As with the other updatable
+  fields, changing the ping together with another field still adds a new rule.
 
 ### Deprecated
 

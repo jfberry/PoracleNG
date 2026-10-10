@@ -89,7 +89,7 @@ type LureTrackingAPI struct {
 	UID       int64  `db:"uid"                    json:"uid"                    diff:"-"`
 	ID        string `db:"id"                     json:"id"                     diff:"-"`
 	ProfileNo int    `db:"profile_no"             json:"profile_no"             diff:"-"`
-	Ping      string `db:"ping"                   json:"ping"`
+	Ping      string `db:"ping"                   json:"ping"                   diff:"update"`
 	Clean     int    `db:"clean"                  json:"clean"                  diff:"update"`
 	Distance  int    `db:"distance"               json:"distance"               diff:"update"`
 	Template  string `db:"template"               json:"template"               diff:"update"`
@@ -144,7 +144,7 @@ type FortTrackingAPI struct {
 	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                    json:"ping"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
 	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
 	Template              string   `db:"template"                json:"template"               diff:"update"`
 	FortType              string   `db:"fort_type"               json:"fort_type"              diff:"match"`
@@ -200,7 +200,7 @@ type InvasionTrackingAPI struct {
 	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                    json:"ping"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
 	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
 	Template              string   `db:"template"                json:"template"               diff:"update"`
@@ -253,7 +253,7 @@ type NestTrackingAPI struct {
 	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                    json:"ping"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
 	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
 	Template              string   `db:"template"                json:"template"               diff:"update"`
@@ -308,7 +308,7 @@ type QuestTrackingAPI struct {
 	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                    json:"ping"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
 	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
 	Template              string   `db:"template"                json:"template"               diff:"update"`
@@ -367,7 +367,7 @@ type MonsterTrackingAPI struct {
 	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                    json:"ping"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
 	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
 	Template              string   `db:"template"                json:"template"               diff:"update"`
@@ -516,7 +516,7 @@ type RaidTrackingAPI struct {
 	UID                   int64       `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string      `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int         `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string      `db:"ping"                    json:"ping"`
+	Ping                  string      `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int         `db:"clean"                   json:"clean"                  diff:"update"`
 	Distance              int         `db:"distance"                json:"distance"               diff:"update"`
 	Template              string      `db:"template"                json:"template"               diff:"update"`
@@ -580,7 +580,7 @@ type EggTrackingAPI struct {
 	UID                   int64       `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string      `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int         `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string      `db:"ping"                    json:"ping"`
+	Ping                  string      `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int         `db:"clean"                   json:"clean"                  diff:"update"`
 	Distance              int         `db:"distance"                json:"distance"               diff:"update"`
 	Template              string      `db:"template"                json:"template"               diff:"update"`
@@ -638,7 +638,7 @@ type GymTrackingAPI struct {
 	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                    json:"ping"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
 	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
 	Template              string   `db:"template"                json:"template"               diff:"update"`
@@ -696,7 +696,7 @@ type MaxbattleTrackingAPI struct {
 	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
 	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
 	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                    json:"ping"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
 	Clean                 int      `db:"clean"                   json:"clean"`
 	Distance              int      `db:"distance"                json:"distance"`
 	Template              string   `db:"template"                json:"template"`
