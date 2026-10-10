@@ -45,6 +45,7 @@ type v2IncidentRule struct {
 	// Common fields. invasion (shared table) HAS a clean column.
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
@@ -55,7 +56,7 @@ type v2IncidentRule struct {
 
 // translateV2Incident converts a strict v2 incident rule into the stored
 // InvasionTrackingAPI: grunt_type = lower(PokestopEvent[display_type].Name),
-// gender = 0. Unknown display_type ⇒ 422. ping "" (server-managed); clean packs
+// gender = 0. Unknown display_type ⇒ 422. Clean packs
 // the bitmask.
 func translateV2Incident(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2IncidentRule) (db.InvasionTrackingAPI, error) {
 	gd := gdFromDeps(deps)
@@ -82,7 +83,7 @@ func translateV2Incident(deps *TrackingDeps, humanID string, profileNo int, oc o
 	row := db.InvasionTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
 		Gender:                0, // events are genderless
@@ -100,6 +101,7 @@ func v2IncidentToRule(gd *gamedata.GameData, row *db.InvasionTrackingAPI) v2Inci
 	rule := v2IncidentRule{
 		Distance:              ptrUnless(row.Distance, 0),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),

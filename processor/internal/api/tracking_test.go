@@ -163,6 +163,20 @@ func TestDiffTrackingSingleUpdate(t *testing.T) {
 	}
 }
 
+func TestDiffTrackingPingOnlyIsUpdate(t *testing.T) {
+	// A ping-only change (adding, changing or clearing the mention) updates
+	// the rule in place rather than inserting a second copy.
+	for _, tc := range []struct{ from, to string }{{"", "<@&1>"}, {"<@&1>", "<@&2>"}, {"<@&1>", ""}} {
+		a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Ping: tc.from, Distance: 500, LureID: 501}
+		b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: tc.to, Distance: 500, LureID: 501}
+		noMatch, isDup, uid, isUpdate := DiffTracking(a, b)
+		if noMatch || isDup || !isUpdate || uid != 5 {
+			t.Errorf("%q -> %q: noMatch=%v dup=%v update=%v uid=%d, want update of uid 5",
+				tc.from, tc.to, noMatch, isDup, isUpdate, uid)
+		}
+	}
+}
+
 func TestDiffTrackingMultiUpdateIsInsert(t *testing.T) {
 	// Multiple updatable fields differ → new insert (not update)
 	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 500, Template: "1", LureID: 501}
@@ -178,9 +192,9 @@ func TestDiffTrackingMultiUpdateIsInsert(t *testing.T) {
 }
 
 func TestDiffTrackingNewInsert(t *testing.T) {
-	// Ping has no diff tag → non-updatable. Differ on ping → new insert.
-	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Ping: "role1", LureID: 501}
-	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "role2", LureID: 501}
+	// include_empty has no diff tag → non-updatable. Differ on it → new insert.
+	a := &db.FortTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, FortType: "pokestop", IncludeEmpty: false}
+	b := &db.FortTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, FortType: "pokestop", IncludeEmpty: true}
 
 	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
 	if noMatch || isDup || isUpdate {

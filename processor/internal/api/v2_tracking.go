@@ -93,12 +93,31 @@ type v2TrackingType[Req any, T any] struct {
 	// existing-rows set fed into the create/PUT diff (so one type never diffs
 	// against the other's rows).
 	Filter func(*T) bool
+
+	// Canonicalize, when non-nil, rewrites a STORED row's alias wildcard values
+	// to the value Translate stores for the same "any" (e.g. pvp_ranking_best
+	// 0 → 1). Applied to the existing rows fed into the create/PUT diff only,
+	// so a GET → POST of a row stored with an alias diffs as unchanged instead
+	// of inserting a duplicate. The stored rows themselves are not rewritten.
+	Canonicalize func(*T)
 }
 
 // passesFilter reports whether row is visible to this type. A nil Filter admits
 // everything (the single-type-per-store case).
 func (typ v2TrackingType[Req, T]) passesFilter(row *T) bool {
 	return typ.Filter == nil || typ.Filter(row)
+}
+
+// diffRows returns scopedRows with Canonicalize applied, for diffing only.
+func (typ v2TrackingType[Req, T]) diffRows(deps *TrackingDeps, humanID string, profileNo int) ([]T, error) {
+	rows, err := typ.scopedRows(deps, humanID, profileNo)
+	if err != nil || typ.Canonicalize == nil {
+		return rows, err
+	}
+	for i := range rows {
+		typ.Canonicalize(&rows[i])
+	}
+	return rows, nil
 }
 
 // scopedRows returns the human+profile rows visible to this type (Filter applied
@@ -405,7 +424,7 @@ func v2HandleCreate[Req any, T any](deps *TrackingDeps, typ v2TrackingType[Req, 
 
 	// Scope the existing set through Filter so a shared-store type never diffs
 	// (and thus never deletes-as-update) against the other type's rows.
-	existing, err := typ.scopedRows(deps, human.ID, profileNo)
+	existing, err := typ.diffRows(deps, human.ID, profileNo)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("database error")
 	}
@@ -455,7 +474,7 @@ func v2HandlePut[Req any, T any](deps *TrackingDeps, typ v2TrackingType[Req, T],
 	// destroy the addressed rule when the insert collides — deterministic
 	// data loss on databases still carrying the legacy invasion/lures
 	// unique keys, a silent duplicate on the keyless tables.
-	existing, err := typ.scopedRows(deps, human.ID, profileNo)
+	existing, err := typ.diffRows(deps, human.ID, profileNo)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("database error")
 	}

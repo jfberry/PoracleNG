@@ -132,6 +132,7 @@ is **not** a sentinel to avoid.
 
 ### Type-specific changes
 
+- **`ping`** — optional string on every type; null when empty.
 - **invasion** — v2 requires **exactly one** targeting mode per rule: `type_id` (int poke-type,
   optional `gender`) | `grunt_id` (int exact character) | `everything: true` | `boss: true`. The
   facade translates down to the same stored grunt-type names v1 wrote.

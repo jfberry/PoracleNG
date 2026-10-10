@@ -14,14 +14,14 @@ import (
 // set; it is a plain INT (a game-master dictionary value, not a string enum).
 // The discrete set is validated explicitly in translateV2Lure because huma's
 // min/max/enum can't express a sparse int set cleanly. Common fields are
-// optional pointers (omitted ⇒ documented default via valueOr). ping is
-// server-managed (not a caller input).
+// optional pointers (omitted ⇒ documented default via valueOr).
 type v2LureRule struct {
 	LureID int `json:"lure_id" required:"true" doc:"Lure module id (game-master item id); one of 0 | 501 | 502 | 503 | 504 | 505 | 506 (required). Use the in-set value 0 to match ANY lure type — it is the wildcard, but unlike optional filters this required field has no omit-to-wildcard; send 0 explicitly."`
 
 	// Common fields.
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
@@ -33,8 +33,7 @@ type v2LureRule struct {
 // translateV2Lure converts a strict v2 lure rule into the stored LureTrackingAPI,
 // applying documented defaults, the clean bitmask, profile, and
 // validated/normalized override fields. It rejects an out-of-set lure_id with a
-// 422 (matching the v1 handler's validLureIDs guard). ping is always stored ""
-// (server-managed).
+// 422 (matching the v1 handler's validLureIDs guard).
 func translateV2Lure(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2LureRule) (db.LureTrackingAPI, error) {
 	if !validLureIDs[req.LureID] {
 		return db.LureTrackingAPI{}, huma.Error422UnprocessableEntity("Unrecognised lure_id value")
@@ -54,7 +53,7 @@ func translateV2Lure(deps *TrackingDeps, humanID string, profileNo int, oc overr
 	row := db.LureTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
 		LureID:                req.LureID,
@@ -72,6 +71,7 @@ func lureRowToRule(row *db.LureTrackingAPI) v2LureRule {
 		LureID:                row.LureID, // required, always present
 		Distance:              ptrUnless(row.Distance, 0),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),

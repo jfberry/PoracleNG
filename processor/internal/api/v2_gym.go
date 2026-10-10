@@ -16,7 +16,7 @@ import (
 // an omitted or unknown team is rejected by huma's generated schema (422). The
 // remaining filters are optional pointers (omitted ⇒ documented default via
 // valueOr). gym has a clean column, so clean/edit/summary bools pack into the
-// bitmask. ping is server-managed (not a caller input).
+// bitmask.
 type v2GymRule struct {
 	Team string `json:"team" required:"true" enum:"harmony,mystic,valor,instinct,any" doc:"Required controlling team: harmony|mystic|valor|instinct|any (0|1|2|3|4; no wildcard — required). Use 'any' to match regardless of team (stored as 4)."`
 
@@ -27,6 +27,7 @@ type v2GymRule struct {
 	// Common fields.
 	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Not supported for gym tracking — omit, or send null/false (true is rejected with 422). Always returned as null."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
@@ -37,8 +38,7 @@ type v2GymRule struct {
 
 // translateV2Gym converts a strict v2 gym rule into the stored GymTrackingAPI,
 // applying the required team enum→int, documented defaults, the clean bitmask,
-// profile, and validated/normalized override fields. ping is always stored ""
-// (server-managed).
+// profile, and validated/normalized override fields.
 func translateV2Gym(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2GymRule) (db.GymTrackingAPI, error) {
 	if err := rejectEdit("gym", req.Edit); err != nil {
 		return db.GymTrackingAPI{}, err
@@ -68,7 +68,7 @@ func translateV2Gym(deps *TrackingDeps, humanID string, profileNo int, oc overri
 	row := db.GymTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
 		Team:                  team,
@@ -96,6 +96,7 @@ func gymRowToRule(row *db.GymTrackingAPI) v2GymRule {
 		GymID:                 gymID,
 		Distance:              ptrUnless(row.Distance, 0),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  nil, // edit is not supported for this type; always null
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),

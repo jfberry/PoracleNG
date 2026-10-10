@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **v2 tracking `ping`.** Every v2 rule type accepts and returns an optional `ping`
+  (mention text). Previously v2 stored `""`, which erased pings set by the bot or v1 on any PUT.
 - **v2 mutes API.** `GET/POST /api/v2/humans/{id}/mutes` and
   `DELETE /api/v2/humans/{id}/mutes[?scope=&value=]` expose the in-memory alert
   mutes (the `!mute` / alert-button feature) over HTTP, and the v2 full
@@ -51,6 +53,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`include_empty` on fort tracking now defaults to `true`** when omitted,
   honoring the `forts` DB column default. The previous gin handler defaulted it
   to `false`; API clients that omit `include_empty` now get `true`.
+- **v2 pokemon: a GET → POST of a rule stored with a legacy wildcard alias is
+  `unchanged`, not a duplicate.** Rows holding `0` for `pvp_ranking_best`,
+  `rarity`, `size` or `pvp_ranking_worst` read back as `null`, which the write
+  stores as `1`/`-1`/`4096`; the create/PUT diff now treats the two as the
+  same rule. Stored rows are not rewritten.
+- **PVP rules stored with `pvp_ranking_worst = 0` now match.** `0` is not a
+  rank; the bot already reads it as "no upper limit" on input and v2 reports it
+  as `null`, but the matcher dropped every rank above 0, so such a rule never
+  fired. Rules now load with `0` treated as `4096` (no limit).
+- **A ping-only change updates the rule instead of adding a copy.** `ping`
+  is now an updatable diff field, like `distance` and `template`, for the bot
+  commands, v1 and v2 alike. Re-running a tracking command (or re-posting a
+  rule) with a different mention — or with none — changes that rule's ping in
+  place; previously it created a second rule. As with the other updatable
+  fields, changing the ping together with another field still adds a new rule.
 
 ### Deprecated
 
