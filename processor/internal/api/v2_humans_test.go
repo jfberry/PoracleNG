@@ -966,3 +966,64 @@ func TestV2Humans_SetAreas_ProfileAndAllProfilesConflict(t *testing.T) {
 		t.Fatalf("expected 422 for profile + all_profiles, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// A user-drawn fence appears in NO community's allowed_areas — that is what
+// makes it user-drawn. So trusted adds it to the permitted set and
+// community.FilterAreas then strips it straight back out, making trusted a
+// no-op under area_security for precisely the fences it exists to allow.
+//
+// The #228 fixture masked this by listing "private" in the community's
+// allowed_areas, which a real drawn fence never is.
+func TestV2Humans_SetAreas_TrustedLiftsFenceInNoCommunity(t *testing.T) {
+	// SKIPPED: this is the RED test for jfberry/PoracleNG#243, committed ahead
+	// of the fix so it is not lost. It fails against current develop with:
+	//
+	//   areas=[alpha] rejected=[gamma private]
+	//
+	// which is the bug exactly: gamma (another community's fence) is correctly
+	// rejected — that is #228's separation working — while private (the
+	// user-drawn fence) is wrongly rejected, because it is in no community's
+	// allowed_areas and community.FilterAreas strips it after trusted admits
+	// it.
+	//
+	// UN-SKIP THIS FIRST when implementing #243. Do not delete it, and do not
+	// "fix" it by relaxing the gamma assertion — that assertion is #228's
+	// regression guard and must keep passing.
+	t.Skip("RED test for #243 — un-skip when implementing exemptFromAreaSecurity")
+
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	// "drawn" is deliberately absent: no community publishes a user's fence.
+	cfg.Area.Communities = []config.CommunityConfig{
+		{Name: "coast", AllowedAreas: []string{"alpha", "beta"}},
+	}
+	r, humans, _ := newV2HumansTestAPI(t, cfg)
+	h, _ := humans.Get("u1")
+	h.CommunityMembership = []string{"coast"}
+	h.AreaRestriction = []string{"alpha", "beta"}
+	humans.AddHuman(h)
+
+	// The mixed request a client actually sends: an admin area the user may
+	// have, an admin area from another community, and the user's own fence.
+	code, got := setAreas(t, r, `{"areas":["alpha","gamma","private"],"trusted":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	stored := map[string]bool{}
+	for _, a := range got.Areas {
+		stored[a] = true
+	}
+	if !stored["alpha"] {
+		t.Errorf("alpha should be stored: areas=%v rejected=%v", got.Areas, got.Rejected)
+	}
+	// Another community's admin fence must still be refused — that is #228.
+	if stored["gamma"] {
+		t.Errorf("gamma is another community's area and must stay rejected: %v", got.Areas)
+	}
+	// And the user's own fence must be allowed — that is what trusted is for.
+	if !stored["private"] {
+		t.Errorf("trusted did not lift the user-drawn fence under area_security; "+
+			"areas=%v rejected=%v", got.Areas, got.Rejected)
+	}
+}
