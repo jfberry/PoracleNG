@@ -5895,6 +5895,20 @@
                     "null"
                   ]
                 },
+                "personal_background": {
+                  "description": "Only alert when the pokemon has the special (event) background for one of the human's linked accounts (personal bitmask bit 2). Same requirements as personal_shiny; when both are set both must hold. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "personal_shiny": {
+                  "description": "Only alert when the pokemon is shiny for one of the human's linked game accounts (personal bitmask bit 1). Needs the server's [shiny_rates] feed; matches nothing until it loads or while the human has no linked accounts. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
                 "ping": {
                   "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
@@ -6272,6 +6286,20 @@
                     "null"
                   ]
                 },
+                "personal_background": {
+                  "description": "Only alert when the pokemon has the special (event) background for one of the human's linked accounts (personal bitmask bit 2). Same requirements as personal_shiny; when both are set both must hold. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "personal_shiny": {
+                  "description": "Only alert when the pokemon is shiny for one of the human's linked game accounts (personal bitmask bit 1). Needs the server's [shiny_rates] feed; matches nothing until it loads or while the human has no linked accounts. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
                 "ping": {
                   "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
@@ -6646,6 +6674,20 @@
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
                   "type": [
                     "string",
+                    "null"
+                  ]
+                },
+                "personal_background": {
+                  "description": "Only alert when the pokemon has the special (event) background for one of the human's linked accounts (personal bitmask bit 2). Same requirements as personal_shiny; when both are set both must hold. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "personal_shiny": {
+                  "description": "Only alert when the pokemon is shiny for one of the human's linked game accounts (personal bitmask bit 1). Needs the server's [shiny_rates] feed; matches nothing until it loads or while the human has no linked accounts. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
                     "null"
                   ]
                 },
@@ -8987,6 +9029,20 @@
                   "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
                   "type": [
                     "string",
+                    "null"
+                  ]
+                },
+                "personal_background": {
+                  "description": "Only alert when the pokemon has the special (event) background for one of the human's linked accounts (personal bitmask bit 2). Same requirements as personal_shiny; when both are set both must hold. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "personal_shiny": {
+                  "description": "Only alert when the pokemon is shiny for one of the human's linked game accounts (personal bitmask bit 1). Needs the server's [shiny_rates] feed; matches nothing until it loads or while the human has no linked accounts. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
                     "null"
                   ]
                 },
@@ -11420,6 +11476,20 @@
                     "null"
                   ]
                 },
+                "personal_background": {
+                  "description": "Only alert when the pokemon has the special (event) background for one of the human's linked accounts (personal bitmask bit 2). Same requirements as personal_shiny; when both are set both must hold. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "personal_shiny": {
+                  "description": "Only alert when the pokemon is shiny for one of the human's linked game accounts (personal bitmask bit 1). Needs the server's [shiny_rates] feed; matches nothing until it loads or while the human has no linked accounts. Omit for false. Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
                 "ping": {
                   "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
                   "maxLength": 255,
@@ -12599,6 +12669,20 @@
             "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "personal_background": {
+            "description": "Only alert when the pokemon has the special (event) background for one of the human's linked accounts (personal bitmask bit 2). Same requirements as personal_shiny; when both are set both must hold. Omit for false. Returned as null when false.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "personal_shiny": {
+            "description": "Only alert when the pokemon is shiny for one of the human's linked game accounts (personal bitmask bit 1). Needs the server's [shiny_rates] feed; matches nothing until it loads or while the human has no linked accounts. Omit for false. Returned as null when false.",
+            "type": [
+              "boolean",
               "null"
             ]
           },
