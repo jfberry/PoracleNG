@@ -240,3 +240,29 @@ func TestBuildTarget_BareNamePrefixRequiresExistingTarget(t *testing.T) {
 		t.Error("name:missing: expected webhook-not-found error")
 	}
 }
+
+func TestBuildTargetStrictKeepsUserPrefixedArgs(t *testing.T) {
+	ctx := newTargetCtx(t, true, false)
+	_, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "username123", "namesake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rest) != 3 || rest[1] != "username123" || rest[2] != "namesake" {
+		t.Fatalf("strict target ate args: %q", rest)
+	}
+	// user: needs a numeric ID; anything else is an ordinary value.
+	if _, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "user:abc"}); err != nil || len(rest) != 2 || rest[1] != "user:abc" {
+		t.Fatalf("user:abc rest = %q, err = %v", rest, err)
+	}
+	// Non-account commands keep the legacy behaviour.
+	if _, rest, _ := BuildTargetFor(ctx, "cmd.track", []string{"pikachu"}); len(rest) != 1 {
+		t.Fatalf("track args = %q", rest)
+	}
+}
+
+func TestStripTargetTokens(t *testing.T) {
+	got := StripTargetTokens([]string{"add", "User:123", "Abc_Def", "NAME:hook", "username1"})
+	if len(got) != 3 || got[0] != "add" || got[1] != "Abc_Def" || got[2] != "username1" {
+		t.Fatalf("got %q", got)
+	}
+}
