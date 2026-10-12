@@ -86,12 +86,16 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		costume = id
 	}
 
+	// Personal shiny/background rules match roughly 1 in 512 spawns per
+	// account, so they narrow "everything" like any other filter.
+	personal := db.PackPersonal(parsed.HasKeyword("arg.personalshiny"), parsed.HasKeyword("arg.personalbackground"))
+
 	// Reject bare "!track everything" with no meaningful filters for non-admins.
 	// Filters like IV, CP, level, PVP league, type, gender, or costume
 	// meaningfully narrow results. "shiny" alone doesn't — almost everything
 	// can be shiny.
 	if parsed.HasKeyword("arg.everything") && !ctx.IsAdmin {
-		hasFilters := len(parsed.Singles) > 0 || narrowingRanges(parsed.Ranges) ||
+		hasFilters := personal != 0 || len(parsed.Singles) > 0 || narrowingRanges(parsed.Ranges) ||
 			len(parsed.Types) > 0 || parsed.Gender != 0 || len(parsed.PVP) > 0 ||
 			costume != 9000
 		if !hasFilters {
@@ -212,6 +216,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				PVPRankingMinCP:       pe.MinCP,
 				PVPRankingCap:         pe.Cap,
 				PVPRankingEvolution:   pe.Evolution,
+				Personal:              personal,
 				OverrideLocationLabel: override.LocationLabel,
 				OverrideAreas:         override.Areas,
 			})
@@ -249,6 +254,11 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	ctx.TriggerReload()
 
 	message.WriteString(trackingWarnings(ctx, filters.distance))
+	if personal != 0 {
+		if h := humanFromState(ctx, ctx.TargetID); h == nil || len(h.Accounts) == 0 {
+			message.WriteString("\n" + tr.Tf("msg.track.personal_no_accounts", bot.CommandPrefix(ctx)))
+		}
+	}
 	if templateWarn != "" {
 		message.WriteString("\n⚠️ " + templateWarn)
 	}
@@ -318,6 +328,8 @@ func trackParams(ctx *bot.CommandContext) []bot.ParamDef {
 		{Type: bot.ParamKeyword, Key: "arg.remove"},
 		{Type: bot.ParamKeyword, Key: "arg.clean"},
 		{Type: bot.ParamKeyword, Key: "arg.edit"},
+		{Type: bot.ParamKeyword, Key: "arg.personalshiny"},
+		{Type: bot.ParamKeyword, Key: "arg.personalbackground"},
 		{Type: bot.ParamGender},
 		{Type: bot.ParamTypeName},
 		{Type: bot.ParamPokemonName},
@@ -703,4 +715,17 @@ func narrowingRanges(ranges map[string]bot.Range) bool {
 		}
 	}
 	return false
+}
+
+// humanFromState returns the human as loaded into the current state (with
+// linked accounts), or nil.
+func humanFromState(ctx *bot.CommandContext, id string) *db.Human {
+	if ctx.StateMgr == nil {
+		return nil
+	}
+	st := ctx.StateMgr.Get()
+	if st == nil {
+		return nil
+	}
+	return st.Humans[id]
 }

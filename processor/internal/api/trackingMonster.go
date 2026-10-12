@@ -492,6 +492,7 @@ func toMonsterTracking(api *db.MonsterTrackingAPI) *db.MonsterTracking {
 		MinTime:          api.MinTime,
 		Rarity:           api.Rarity,
 		MaxRarity:        api.MaxRarity,
+		Personal:         api.Personal,
 		Size:             api.Size,
 		MaxSize:          api.MaxSize,
 		PVPRankingLeague: api.PVPRankingLeague,
