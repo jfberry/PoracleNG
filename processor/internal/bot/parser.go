@@ -13,6 +13,7 @@ type ParsedCommand struct {
 	CommandKey   string   // identifier key (e.g. "cmd.track"), empty if unrecognised
 	Args         []string // remaining arguments (lowercased, underscores→spaces)
 	RawArgs      []string // remaining arguments preserving original case (underscores→spaces still applied to unquoted tokens). Use for output that should keep what the user typed — e.g. autocreate channel/category names.
+	VerbatimArgs []string // remaining arguments exactly as typed: original case, underscores kept. For opaque values (player IDs) that must survive byte-for-byte.
 	LanguageHint string   // language code from available_languages (e.g. "de" from "!dasporacle")
 }
 
@@ -140,6 +141,7 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 		// user's input (autocreate channel names, etc.) don't collapse it.
 		args := make([]string, 0, len(tokens)-1)
 		rawArgs := make([]string, 0, len(tokens)-1)
+		verbatim := make([]string, 0, len(tokens)-1)
 		for _, tok := range tokens[1:] {
 			val := tok.Value
 			raw := tok.Raw
@@ -149,10 +151,12 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 			}
 			args = append(args, val)
 			rawArgs = append(rawArgs, raw)
+			verbatim = append(verbatim, tok.Raw)
 		}
 
 		// Pipe splitting: split args by "|" into groups sharing the same command
 		groups, rawGroups := splitByPipePaired(args, rawArgs)
+		_, verbatimGroups := splitByPipePaired(args, verbatim)
 		if len(groups) == 0 {
 			results = append(results, ParsedCommand{CommandKey: cmdKey, Args: nil, LanguageHint: langHint})
 		} else {
@@ -161,6 +165,7 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 					CommandKey:   cmdKey,
 					Args:         groups[i],
 					RawArgs:      rawGroups[i],
+					VerbatimArgs: verbatimGroups[i],
 					LanguageHint: langHint,
 				})
 			}

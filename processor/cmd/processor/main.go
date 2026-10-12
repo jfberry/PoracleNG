@@ -125,6 +125,8 @@ func main() {
 	defer database.Close()
 
 	humanStore := store.NewSQLHumanStore(database)
+	// Created once; shared by the bot deps and (later) the API tracking deps.
+	playerAccounts := store.NewPlayerAccountStore(database)
 	trackingStores := store.NewTrackingStores(database)
 	summaryScheduleStore := store.NewSQLSummaryScheduleStore(database)
 
@@ -931,6 +933,8 @@ func main() {
 	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
 	sharedBotDeps := bot.BotDeps{
 		DB:                 database,
+		PlayerAccounts:     playerAccounts,
+		ShinyRates:         proc.shinyRates,
 		Humans:             humanStore,
 		Tracking:           trackingStores,
 		Cfg:                cfg,

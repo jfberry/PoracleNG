@@ -298,3 +298,20 @@ func TestParserEnsurePrefix(t *testing.T) {
 		t.Fatalf("parse after EnsurePrefix = %+v", cmds)
 	}
 }
+
+func TestParseVerbatimArgs(t *testing.T) {
+	p := newTestParser()
+	cmds := p.Parse(`!track User_ABC "Quoted_Value" x | Second_One`)
+	if len(cmds) != 2 {
+		t.Fatalf("got %d commands", len(cmds))
+	}
+	if got := cmds[0].VerbatimArgs; len(got) != 3 || got[0] != "User_ABC" || got[1] != "Quoted_Value" || got[2] != "x" {
+		t.Fatalf("verbatim[0] = %q", got)
+	}
+	if got := cmds[1].VerbatimArgs; len(got) != 1 || got[0] != "Second_One" {
+		t.Fatalf("verbatim[1] = %q", got)
+	}
+	if cmds[0].Args[0] != "user abc" {
+		t.Fatalf("Args unchanged: %q", cmds[0].Args)
+	}
+}
