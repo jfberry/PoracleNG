@@ -2394,7 +2394,7 @@
           "legendFormat": "{{platform}} avg"
         }
       ],
-      "title": "Discord Rate Limit Wait Time",
+      "title": "Delivery Rate Limit Wait Time",
       "type": "timeseries"
     },
     {

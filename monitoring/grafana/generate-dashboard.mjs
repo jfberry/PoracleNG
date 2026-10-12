@@ -783,7 +783,7 @@ panels.push(
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Discord Rate Limit Wait Time',
+		title: 'Delivery Rate Limit Wait Time',
 		x: 12,
 		y,
 		unit: 's',

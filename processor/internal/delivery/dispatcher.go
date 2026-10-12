@@ -12,13 +12,14 @@ import (
 
 // DispatcherConfig holds all configuration for the delivery dispatcher.
 type DispatcherConfig struct {
-	DiscordToken  string
-	TelegramToken string
-	UploadImages  bool
-	DeleteDelayMs int
-	QueueSize     int
-	CacheDir      string
-	Queue         QueueConfig
+	DiscordToken        string
+	TelegramToken       string
+	UploadImages        bool
+	DeleteDelayMs       int
+	QueueSize           int
+	CacheDir            string
+	Queue               QueueConfig
+	TelegramRateLimiter *TelegramSendRateLimiter
 	// TileProviderURL / TileInternalURL let the Discord sender rewrite a
 	// remote tile URL (embed.image.url, which is the public tileserver URL
 	// for Discord clients to resolve) to the internal URL before the
@@ -92,7 +93,11 @@ func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 		senders["discord"] = ds
 	}
 	if cfg.TelegramToken != "" {
-		senders["telegram"] = NewTelegramSender(cfg.TelegramToken)
+		ts := NewTelegramSender(cfg.TelegramToken)
+		if cfg.TelegramRateLimiter != nil {
+			ts.SetRateLimiter(cfg.TelegramRateLimiter)
+		}
+		senders["telegram"] = ts
 	}
 
 	if ds, ok := senders["discord"].(*DiscordSender); ok {
