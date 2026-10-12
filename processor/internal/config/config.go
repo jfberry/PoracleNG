@@ -38,6 +38,8 @@ type Config struct {
 	Validation     ValidationConfig     `toml:"validation"`
 	Autocreate     AutocreateConfig     `toml:"autocreate"`
 	Snapshots      SnapshotsConfig      `toml:"snapshots"`
+	ShinyRates     ShinyRatesConfig     `toml:"shiny_rates"`
+	PlayerAccounts PlayerAccountsConfig `toml:"player_accounts"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -585,6 +587,22 @@ type WeatherConfig struct {
 	ForecastRefreshInterval int      `toml:"forecast_refresh_interval"` // hours between API calls
 	LocalFirstFetchHOD      int      `toml:"local_first_fetch_hod"`     // first fetch hour of day
 	SmartForecast           bool     `toml:"smart_forecast"`            // pull on demand if no data
+}
+
+// ShinyRatesConfig is the shiny-rate feed shared with Golbat's
+// [shiny_rates] (GET <url>/v1/rates?compact=1). Empty URL turns personal
+// shiny alerts and feed-backed shiny fields off.
+type ShinyRatesConfig struct {
+	URL   string `toml:"url"`
+	Token string `toml:"token"`
+}
+
+// PlayerAccountsConfig controls who may link game accounts.
+type PlayerAccountsConfig struct {
+	// SelfService lets users add/remove/label their own accounts. When
+	// false only admins (and the API) can. Ownership of a player ID cannot
+	// be verified, so the default is false.
+	SelfService bool `toml:"self_service"`
 }
 
 // SnapshotsConfig controls the opt-in per-delivery snapshot store used by

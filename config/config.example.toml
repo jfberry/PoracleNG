@@ -750,3 +750,19 @@ enabled = false
 # path                = "config/.cache/snapshots"   # relative to BaseDir
 # max_age_days        = 7                           # safety-sweep grace period
 # sweep_interval_mins = 60                          # background sweep cadence
+
+# ---- Personal shiny / backgrounds ----
+# Shiny-rate feed in the same format Golbat's [shiny_rates] uses
+# (GET <url>/v1/rates?compact=1). When set, users with linked game accounts
+# can track pokemon that are shiny (or have the event background) for their
+# own accounts (`!track ... personalshiny` / `personalbackground`), and the
+# feed drives shinyPossible / shinyRate. Empty = off; shiny fields use
+# Poracle's observed stats as before.
+[shiny_rates]
+url = ""
+token = ""                               # optional bearer token
+
+# Who may link game accounts (!account / API). Player IDs cannot be
+# verified, so by default only admins (or a trusted API client) can link.
+[player_accounts]
+self_service = false

@@ -48,6 +48,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/resources"
@@ -1350,6 +1351,11 @@ type ProcessorService struct {
 	muteStore   *mute.Store
 	muteSweeper *mute.Sweeper
 
+	// shinyRates is the shiny-rate feed (Golbat [shiny_rates] format). Always
+	// non-nil; with no URL configured it never loads, so personal rules never
+	// match and enrichment keeps the observed-stats shiny fields.
+	shinyRates *personalshiny.Rates
+
 	// buttonActions is the dispatch registry for button-triggered state
 	// changes (#109). Always allocated and built-in handlers registered
 	// at startup; nil only in tests that skip init.
@@ -1807,6 +1813,12 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		}
 	}
 
+	ps.shinyRates = personalshiny.NewRates(cfg.ShinyRates.URL, cfg.ShinyRates.Token)
+	if cfg.ShinyRates.URL != "" {
+		ps.shinyRates.Start(ps.ctx)
+		log.Infof("Shiny rates: refreshing from %s every 5m", cfg.ShinyRates.URL)
+	}
+
 	return ps
 }
 
@@ -1814,6 +1826,7 @@ func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
 	log.Info("Webhook workers stopped")
+	ps.shinyRates.Stop()
 
 	// Close render channel BEFORE dispatcher — render workers feed into dispatcher.
 	// Order: webhook workers → render channel → render workers → dispatcher → delivery

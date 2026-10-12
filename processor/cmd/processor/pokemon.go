@@ -14,6 +14,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/mute"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -88,7 +89,11 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		// Match (against the new state — `processed` was built from the
 		// just-parsed webhook, so this set is correct for both initial
 		// sightings and change events).
-		matched, matchedAreas := ps.pokemonMatcher.Match(processed, ps.stateMgr.Get())
+		snap := ps.stateMgr.Get()
+		if snap != nil {
+			processed.Personal = personalshiny.NewChecker(ps.shinyRates.Evaluate(&pokemon), snap.Humans)
+		}
+		matched, matchedAreas := ps.pokemonMatcher.Match(processed, snap)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokemonID: pokemon.PokemonID})
@@ -222,6 +227,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		if ps.enricher.PVPDisplay != nil && perLang != nil && len(matched) > 0 {
 			perUser = ps.enricher.PokemonPerUser(perLang, matched)
 		}
+		perUser = enrichment.AnnotatePersonal(perUser, matched, processed.Personal)
 		metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
 
 		if ps.renderCh == nil {
