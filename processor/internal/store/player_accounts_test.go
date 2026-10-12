@@ -57,6 +57,13 @@ func runPlayerAccountStoreContract(t *testing.T, s PlayerAccountStore) {
 	if err := s.SetLabel("u1", "user_abc", "MAIN"); !errors.Is(err, ErrDuplicateAccountLabel) {
 		t.Fatalf("relabel clash is case-insensitive: %v", err)
 	}
+	// Re-casing an account's own label is not a clash.
+	if err := s.SetLabel("u1", "user_abc", "ALT"); err != nil {
+		t.Fatalf("relabel to different case of own label: %v", err)
+	}
+	if err := s.SetLabel("u1", "user_abc", "alt"); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.SetLabel("u1", "nope", "x"); !errors.Is(err, ErrAccountNotFound) {
 		t.Fatalf("relabel missing: %v", err)
 	}
