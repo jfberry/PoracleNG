@@ -18,7 +18,7 @@ import (
 // self_service does not apply here.
 
 type v2AccountItem struct {
-	PlayerID  string    `json:"player_id" doc:"Game player ID, opaque and case-sensitive (1-256 bytes)."`
+	PlayerID  string    `json:"player_id" doc:"Game player ID: 1-256 ASCII letters or digits, case-sensitive."`
 	Label     *string   `json:"label" nullable:"true" doc:"Optional label, unique per human (case-insensitive). null when unset."`
 	CreatedAt time.Time `json:"created_at" doc:"When the account was linked."`
 }
@@ -30,7 +30,7 @@ type v2AccountsOutput struct {
 }
 
 type v2AddAccountBody struct {
-	PlayerID string `json:"player_id" required:"true" minLength:"1" maxLength:"256" doc:"Game player ID (case-sensitive)."`
+	PlayerID string `json:"player_id" required:"true" minLength:"1" maxLength:"256" pattern:"^[A-Za-z0-9]+$" doc:"Game player ID: 1-256 ASCII letters or digits, case-sensitive."`
 	Label    string `json:"label,omitempty" maxLength:"64" doc:"Optional label, unique per human."`
 }
 
@@ -41,12 +41,12 @@ type v2AddAccountInput struct {
 
 type v2AccountPathInput struct {
 	ID       string `path:"id" doc:"Human id"`
-	PlayerID string `path:"player_id" doc:"Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F."`
+	PlayerID string `path:"player_id" doc:"Game player ID (ASCII letters or digits, case-sensitive)."`
 }
 
 type v2LabelAccountInput struct {
 	ID       string `path:"id" doc:"Human id"`
-	PlayerID string `path:"player_id" doc:"Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F."`
+	PlayerID string `path:"player_id" doc:"Game player ID (ASCII letters or digits, case-sensitive)."`
 	Body     struct {
 		Label string `json:"label" maxLength:"64" doc:"New label; empty clears it."`
 	}
@@ -136,9 +136,8 @@ func RegisterV2Accounts(humaAPI huma.API, deps *TrackingDeps) {
 
 	huma.Register(humaAPI, huma.Operation{
 		OperationID: "v2-label-human-account", Method: "PUT", Path: "/v2/humans/{id}/accounts/{player_id}",
-		Summary:     "Set or clear a linked account's label",
-		Description: "Player IDs containing / must be URL-escaped (%2F) in the path.",
-		Tags:        tag, Security: sec, RejectUnknownQueryParameters: true,
+		Summary: "Set or clear a linked account's label",
+		Tags:    tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2LabelAccountInput) (*statusOKOutput, error) {
 		if err := deps.Accounts.SetLabel(in.ID, in.PlayerID, in.Body.Label); err != nil {
 			return nil, accountStoreError("label", in.ID, err)
@@ -149,9 +148,8 @@ func RegisterV2Accounts(humaAPI huma.API, deps *TrackingDeps) {
 
 	huma.Register(humaAPI, huma.Operation{
 		OperationID: "v2-delete-human-account", Method: "DELETE", Path: "/v2/humans/{id}/accounts/{player_id}",
-		Summary:     "Unlink a game account",
-		Description: "Player IDs containing / must be URL-escaped (%2F) in the path.",
-		Tags:        tag, Security: sec, RejectUnknownQueryParameters: true,
+		Summary: "Unlink a game account",
+		Tags:    tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2AccountPathInput) (*statusOKOutput, error) {
 		if err := deps.Accounts.Remove(in.ID, in.PlayerID); err != nil {
 			return nil, accountStoreError("remove", in.ID, err)

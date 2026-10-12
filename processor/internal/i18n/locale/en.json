@@ -267,7 +267,7 @@
   "msg.account.duplicate": "That player ID is already linked.",
   "msg.account.duplicate_name": "Name \"{0}\" is already in use.",
   "msg.account.too_many": "You can link at most {0} accounts.",
-  "msg.account.invalid_id": "Player IDs must be 1–256 bytes.",
+  "msg.account.invalid_id": "Player IDs are 1–256 letters or digits (A–Z, a–z, 0–9), case-sensitive, exactly as your game account shows them.",
   "msg.account.invalid_name": "Names can be at most 64 characters.",
   "msg.account.admin_only": "Only admins can change linked accounts on this server.",
   "msg.account.unavailable": "Account linking is not available.",

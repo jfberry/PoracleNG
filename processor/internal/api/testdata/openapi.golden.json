@@ -2344,7 +2344,7 @@
             ]
           },
           "player_id": {
-            "description": "Game player ID, opaque and case-sensitive (1-256 bytes).",
+            "description": "Game player ID: 1-256 ASCII letters or digits, case-sensitive.",
             "type": "string"
           }
         },
@@ -2588,9 +2588,10 @@
             "type": "string"
           },
           "player_id": {
-            "description": "Game player ID (case-sensitive).",
+            "description": "Game player ID: 1-256 ASCII letters or digits, case-sensitive.",
             "maxLength": 256,
             "minLength": 1,
+            "pattern": "^[A-Za-z0-9]+$",
             "type": "string"
           }
         },
@@ -16592,7 +16593,6 @@
     },
     "/v2/humans/{id}/accounts/{player_id}": {
       "delete": {
-        "description": "Player IDs containing / must be URL-escaped (%2F) in the path.",
         "operationId": "v2-delete-human-account",
         "parameters": [
           {
@@ -16606,12 +16606,12 @@
             }
           },
           {
-            "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+            "description": "Game player ID (ASCII letters or digits, case-sensitive).",
             "in": "path",
             "name": "player_id",
             "required": true,
             "schema": {
-              "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+              "description": "Game player ID (ASCII letters or digits, case-sensitive).",
               "type": "string"
             }
           }
@@ -16649,7 +16649,6 @@
         ]
       },
       "put": {
-        "description": "Player IDs containing / must be URL-escaped (%2F) in the path.",
         "operationId": "v2-label-human-account",
         "parameters": [
           {
@@ -16663,12 +16662,12 @@
             }
           },
           {
-            "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+            "description": "Game player ID (ASCII letters or digits, case-sensitive).",
             "in": "path",
             "name": "player_id",
             "required": true,
             "schema": {
-              "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+              "description": "Game player ID (ASCII letters or digits, case-sensitive).",
               "type": "string"
             }
           }

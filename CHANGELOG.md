@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   feed; fails closed until it loads.
 - **Linked game accounts.** `!account` / `/account` (list/add/remove/rename; `!account add <name> <player-id>`) and
   `GET|POST /api/v2/humans/{id}/accounts`, `PUT|DELETE …/accounts/{player_id}`;
-  the v2 snapshot carries `accounts`. `[player_accounts] self_service` gates
+  the v2 snapshot carries `accounts`. Player IDs are 1-256 ASCII letters/digits, case-sensitive. `[player_accounts] self_service` gates
   non-admin linking. `/health` advertises `personalShiny`.
 - **Feed-backed shiny info.** `shinyPossible` is variant-aware when
   `[shiny_rates]` is configured; new `shinyRate` / `shinyRateBoosted` DTS

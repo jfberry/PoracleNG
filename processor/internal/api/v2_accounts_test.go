@@ -48,31 +48,31 @@ func TestV2Accounts_ListEmptyAndUnknownHuman(t *testing.T) {
 
 func TestV2Accounts_AddListLabelDelete(t *testing.T) {
 	r := newV2AccountsTestAPI(t)
-	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"User_ABC","label":"main"}`)
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"UserABC9","label":"main"}`)
 	if w.Code != 201 {
 		t.Fatalf("add: %d %s", w.Code, w.Body.String())
 	}
 	w = v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/accounts", "")
-	if !strings.Contains(w.Body.String(), `"player_id":"User_ABC"`) || !strings.Contains(w.Body.String(), `"label":"main"`) || !strings.Contains(w.Body.String(), `"created_at"`) {
+	if !strings.Contains(w.Body.String(), `"player_id":"UserABC9"`) || !strings.Contains(w.Body.String(), `"label":"main"`) || !strings.Contains(w.Body.String(), `"created_at"`) {
 		t.Fatalf("list: %s", w.Body.String())
 	}
-	if w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/accounts/User_ABC", `{"label":"alt"}`); w.Code != 200 {
+	if w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/accounts/UserABC9", `{"label":"alt"}`); w.Code != 200 {
 		t.Fatalf("put: %d %s", w.Code, w.Body.String())
 	}
 	if w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/accounts/nope", `{"label":"x"}`); w.Code != 404 {
 		t.Fatalf("put missing: %d", w.Code)
 	}
-	if w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/accounts/User_ABC", `{"label":""}`); w.Code != 200 {
+	if w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/accounts/UserABC9", `{"label":""}`); w.Code != 200 {
 		t.Fatalf("clear: %d", w.Code)
 	}
 	w = v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/accounts", "")
 	if !strings.Contains(w.Body.String(), `"label":null`) {
 		t.Fatalf("expected null label: %s", w.Body.String())
 	}
-	if w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/accounts/User_ABC", ""); w.Code != 200 {
+	if w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/accounts/UserABC9", ""); w.Code != 200 {
 		t.Fatalf("delete: %d", w.Code)
 	}
-	if w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/accounts/User_ABC", ""); w.Code != 404 {
+	if w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/accounts/UserABC9", ""); w.Code != 404 {
 		t.Fatalf("delete missing: %d", w.Code)
 	}
 }
@@ -82,10 +82,10 @@ func TestV2Accounts_Rejections(t *testing.T) {
 	post := func(body string) int {
 		return v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", body).Code
 	}
-	if c := post(`{"player_id":"User_ABC","label":"main"}`); c != 201 {
+	if c := post(`{"player_id":"UserABC9","label":"main"}`); c != 201 {
 		t.Fatalf("seed: %d", c)
 	}
-	if c := post(`{"player_id":"User_ABC"}`); c != 409 {
+	if c := post(`{"player_id":"UserABC9"}`); c != 409 {
 		t.Errorf("dup player: %d", c)
 	}
 	if c := post(`{"player_id":"x","label":"MAIN"}`); c != 409 {
@@ -107,26 +107,23 @@ func TestV2Accounts_Rejections(t *testing.T) {
 	}
 }
 
-func TestV2Accounts_SlashInPlayerID(t *testing.T) {
+func TestV2Accounts_RejectsNonAlphanumericPlayerID(t *testing.T) {
 	r := newV2AccountsTestAPI(t)
-	if c := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"User/ABC"}`).Code; c != 201 {
-		t.Fatalf("add: %d", c)
-	}
-	if c := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/accounts/User%2FABC", `{"label":"s"}`).Code; c != 200 {
-		t.Fatalf("put: %d", c)
-	}
-	if c := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u1/accounts/User%2FABC", "").Code; c != 200 {
-		t.Fatalf("delete: %d", c)
+	for _, id := range []string{"User/ABC", "User_ABC", "a b", "é"} {
+		body := fmt.Sprintf(`{"player_id":%q}`, id)
+		if c := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", body).Code; c != 422 {
+			t.Errorf("%q: got %d, want 422", id, c)
+		}
 	}
 	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/accounts", "")
-	if strings.Contains(w.Body.String(), "User/ABC") {
-		t.Fatalf("still present: %s", w.Body.String())
+	if strings.Contains(w.Body.String(), "ABC") {
+		t.Fatalf("rejected id was stored: %s", w.Body.String())
 	}
 }
 
 func TestV2Accounts_InSnapshot(t *testing.T) {
 	r := newV2AccountsTestAPI(t)
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"User_ABC"}`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"UserABC9"}`)
 	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/tracking", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"accounts":[{`) {
 		t.Fatalf("snapshot: %d %s", w.Code, w.Body.String())
@@ -150,12 +147,12 @@ func TestV2Accounts_AddSucceedsWhenReadBackFails(t *testing.T) {
 	accounts := store.NewMockPlayerAccountStore()
 	RegisterV2Accounts(humaAPI, &TrackingDeps{Humans: humans, Accounts: resolveFailingAccounts{accounts}, Config: &config.Config{}})
 
-	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"User_ABC","label":"main"}`)
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"UserABC9","label":"main"}`)
 	if w.Code != 201 {
 		t.Fatalf("add with failing read-back: %d %s (the link was stored)", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `"player_id":"User_ABC"`) || !strings.Contains(body, `"label":"main"`) || !strings.Contains(body, `"created_at"`) {
+	if !strings.Contains(body, `"player_id":"UserABC9"`) || !strings.Contains(body, `"label":"main"`) || !strings.Contains(body, `"created_at"`) {
 		t.Fatalf("body: %s", body)
 	}
 	if list, _ := accounts.List("u1"); len(list) != 1 {

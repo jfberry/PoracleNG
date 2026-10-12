@@ -589,7 +589,7 @@ Get the user's delegated administration permissions (channels, webhooks, user tr
 Personal shiny/background tracking rolls per game account. Accounts are managed on the strict `/api/v2` surface; see the [v1 → v2 migration guide](docs/v1-to-v2-migration-guide.md) and `/docs` for the full contract. Essentials:
 
 - `GET|POST /api/v2/humans/{id}/accounts` (POST body `{"player_id","label"?}` returns `201 {"account":{player_id,label,created_at}}`); `PUT|DELETE /api/v2/humans/{id}/accounts/{player_id}` (PUT body `{"label"}`, empty clears) return `{"status":"ok"}`.
-- `player_id` is case-sensitive, 1-256 bytes, and must be URL-escaped in the path (`/` as `%2F`). Max 50 accounts per human; `label` is `null` when unset, unique per human (case-insensitive), max 64 chars.
+- `player_id` is 1-256 ASCII letters or digits, case-sensitive (anything else is a 422 on POST). Max 50 accounts per human; `label` is `null` when unset, unique per human (case-insensitive), max 64 chars.
 - Status codes: `201` created; `404` unknown human (GET/POST) or `"account not found"` (PUT/DELETE, including an unknown human); `409` player ID or label already linked; `422` invalid or over a limit.
 - The v2 full snapshot carries an `accounts` array; v2 pokemon rules take `personal_shiny` / `personal_background` (booleans, `null` when false, full-replace on PUT).
 - `[player_accounts] self_service` gates only the chat commands, not the API.

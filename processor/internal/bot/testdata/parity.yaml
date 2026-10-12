@@ -1051,10 +1051,10 @@
   slash:
     name: account
     options:
-      add.player_id: User_ABC
+      add.player_id: UserABC9
       add.name: Main
-  text: "!account add Main User_ABC"
-  expected_tokens: [add, Main, User_ABC]
+  text: "!account add Main UserABC9"
+  expected_tokens: [add, Main, UserABC9]
 
 - name: account-remove
   description: /account remove — unlink an account
@@ -1072,7 +1072,7 @@
   slash:
     name: account
     options:
-      rename.account: User_ABC
+      rename.account: UserABC9
       rename.name: alt
-  text: "!account rename User_ABC alt"
-  expected_tokens: [rename, User_ABC, alt]
+  text: "!account rename UserABC9 alt"
+  expected_tokens: [rename, UserABC9, alt]
