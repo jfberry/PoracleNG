@@ -94,3 +94,53 @@ func TestPersonalRulesMatch(t *testing.T) {
 		t.Fatalf("nil checker matches = %+v", matched)
 	}
 }
+
+// TestPersonalOnlyEvaluatedForValidatedHumans: personal bits are answered
+// only for rules whose human passed human validation (enabled, profile,
+// area/distance), so a webhook never hashes the accounts of humans the
+// sighting could not alert anyway.
+func TestPersonalOnlyEvaluatedForValidatedHumans(t *testing.T) {
+	near := makeHuman("near")
+	outside := makeHuman("outside")
+	outside.Area = []string{"elsewhere"}
+	far := makeHuman("far")
+	far.Latitude, far.Longitude = 40.0, 10.0
+	disabled := makeHuman("disabled")
+	disabled.Enabled = false
+	otherProfile := makeHuman("otherprofile")
+	otherProfile.CurrentProfileNo = 2
+	humans := map[string]*db.Human{"near": near, "outside": outside, "far": far, "disabled": disabled, "otherprofile": otherProfile}
+
+	personalRule := func(id string) *db.MonsterTracking {
+		r := makeMonster(id, 25)
+		r.Personal = db.PersonalShiny
+		return r
+	}
+	farRule := personalRule("far")
+	farRule.Distance = 1000
+	nearPVP := personalRule("near")
+	nearPVP.PVPRankingLeague, nearPVP.PVPRankingWorst = 1500, 100
+	nearPVP.Personal = db.PersonalBackground
+	rules := []*db.MonsterTracking{
+		personalRule("near"), nearPVP, personalRule("outside"), farRule,
+		personalRule("disabled"), personalRule("otherprofile"),
+	}
+	st := makeTestState(rules, humans)
+
+	asked := map[string]int{}
+	m := &PokemonMatcher{PVPQueryMaxRank: 100}
+	m.personalAllows = func(_ *ProcessedPokemon, humanID string, bits int) bool {
+		asked[humanID]++
+		return bits == db.PersonalShiny // background (the PVP rule) misses
+	}
+	p := personalPikachu(nil, true)
+	p.PVPBestRank = map[int][]pvp.LeagueRank{1500: {{Rank: 10, CP: 1490, Caps: []int{50}}}}
+
+	matched, _ := m.Match(p, st)
+	if len(asked) != 1 || asked["near"] != 2 {
+		t.Fatalf("personal evaluated for %v; want only near (basic + PVP rule)", asked)
+	}
+	if len(matched) != 1 || matched[0].ID != "near" || matched[0].PVPRankingLeague != 0 {
+		t.Fatalf("matched = %+v; want near's basic rule only (PVP personal rule gated)", matched)
+	}
+}
