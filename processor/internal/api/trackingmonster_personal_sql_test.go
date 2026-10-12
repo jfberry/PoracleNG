@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
@@ -23,7 +24,7 @@ import (
 )
 
 // TestV1Monster_PersonalSQL drives the real v1 handlers against a real MySQL
-// (disposable DB; all tables are dropped). Skipped unless PORACLENG_TEST_DSN is set.
+// (non-destructive: migrations are idempotent, only rows with a unique test id are created and removed; skips unless the DB name contains "test"). Skipped unless PORACLENG_TEST_DSN is set.
 func TestV1Monster_PersonalSQL(t *testing.T) {
 	dsn := os.Getenv("PORACLENG_TEST_DSN")
 	if dsn == "" {
@@ -33,26 +34,18 @@ func TestV1Monster_PersonalSQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	t.Cleanup(func() { _ = conn.Close() }) // registered first, so it runs after the row cleanup below
 	if err := conn.Ping(); err != nil {
 		t.Skipf("cannot ping test DB: %v", err)
 	}
-	rows, err := conn.Query("SHOW TABLES")
-	if err != nil {
+	var dbName string
+	if err := conn.QueryRow("SELECT DATABASE()").Scan(&dbName); err != nil {
 		t.Fatal(err)
 	}
-	var tables []string
-	for rows.Next() {
-		var n string
-		_ = rows.Scan(&n)
-		tables = append(tables, n)
+	if !strings.Contains(dbName, "test") {
+		t.Skipf("refusing to run against database %q: name must contain \"test\"", dbName)
 	}
-	rows.Close()
-	_, _ = conn.Exec("SET FOREIGN_KEY_CHECKS = 0")
-	for _, tb := range tables {
-		_, _ = conn.Exec(fmt.Sprintf("DROP TABLE `%s`", tb))
-	}
-	_, _ = conn.Exec("SET FOREIGN_KEY_CHECKS = 1")
+	// Same idempotent bring-up the processor does at startup; non-destructive.
 	if err := db.AdoptExistingDatabase(conn); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +53,14 @@ func TestV1Monster_PersonalSQL(t *testing.T) {
 	if err := db.RunMigrations(conn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec("INSERT INTO humans (id, type, name, area, community_membership) VALUES ('u1','discord:user','U','[]','[]')"); err != nil {
+	hid := fmt.Sprintf("test-personal-%d", time.Now().UnixNano())
+	cleanup := func() {
+		_, _ = conn.Exec("DELETE FROM monsters WHERE id=?", hid)
+		_, _ = conn.Exec("DELETE FROM profiles WHERE id=?", hid)
+		_, _ = conn.Exec("DELETE FROM humans WHERE id=?", hid)
+	}
+	t.Cleanup(cleanup)
+	if _, err := conn.Exec("INSERT INTO humans (id, type, name, area, community_membership) VALUES (?,'discord:user','U','[]','[]')", hid); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,14 +82,14 @@ func TestV1Monster_PersonalSQL(t *testing.T) {
 	post := func(body string) {
 		t.Helper()
 		w := httptest.NewRecorder()
-		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body)))
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/"+hid, strings.NewReader(body)))
 		if w.Code != http.StatusOK {
 			t.Fatalf("POST %s: %d %s", body, w.Code, w.Body.String())
 		}
 	}
 	stored := func() (personal, minIV int, uid int64) {
 		t.Helper()
-		if err := conn.QueryRow("SELECT uid, personal, min_iv FROM monsters WHERE id='u1'").Scan(&uid, &personal, &minIV); err != nil {
+		if err := conn.QueryRow("SELECT uid, personal, min_iv FROM monsters WHERE id=?", hid).Scan(&uid, &personal, &minIV); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -107,7 +107,7 @@ func TestV1Monster_PersonalSQL(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/tracking/pokemon/u1", nil))
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/tracking/pokemon/"+hid, nil))
 	var got struct {
 		Pokemon []map[string]any `json:"pokemon"`
 	}
