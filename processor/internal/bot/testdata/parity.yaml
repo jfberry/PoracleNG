@@ -1033,7 +1033,7 @@
 
 # -----------------------------------------------------------------------------
 # /account — linked game accounts for personal shiny / background alerts.
-# Player IDs and labels are passed through verbatim (case-sensitive).
+# Player IDs and names are passed through verbatim (case-sensitive).
 # -----------------------------------------------------------------------------
 - name: account-list
   description: /account list — list linked accounts
@@ -1046,15 +1046,15 @@
   expected_tokens: [list]
 
 - name: account-add
-  description: /account add — link an account with a label
+  description: /account add — link an account with a name
   command: cmd.account
   slash:
     name: account
     options:
       add.player_id: User_ABC
-      add.label: Main
-  text: "!account add User_ABC Main"
-  expected_tokens: [add, User_ABC, Main]
+      add.name: Main
+  text: "!account add Main User_ABC"
+  expected_tokens: [add, Main, User_ABC]
 
 - name: account-remove
   description: /account remove — unlink an account
@@ -1066,13 +1066,13 @@
   text: "!account remove Main"
   expected_tokens: [remove, Main]
 
-- name: account-label
-  description: /account label — relabel an account
+- name: account-rename
+  description: /account rename — rename an account
   command: cmd.account
   slash:
     name: account
     options:
-      label.account: User_ABC
-      label.label: alt
-  text: "!account label User_ABC alt"
-  expected_tokens: [label, User_ABC, alt]
+      rename.account: User_ABC
+      rename.name: alt
+  text: "!account rename User_ABC alt"
+  expected_tokens: [rename, User_ABC, alt]

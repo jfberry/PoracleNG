@@ -27,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `/track personal_shiny|personal_background`, v1 `personal` bitmask, v2
   `personal_shiny` / `personal_background`. Needs the new `[shiny_rates]`
   feed; fails closed until it loads.
-- **Linked game accounts.** `!account` / `/account` (list/add/remove/label) and
+- **Linked game accounts.** `!account` / `/account` (list/add/remove/rename; `!account add <name> <player-id>`) and
   `GET|POST /api/v2/humans/{id}/accounts`, `PUT|DELETE …/accounts/{player_id}`;
   the v2 snapshot carries `accounts`. `[player_accounts] self_service` gates
   non-admin linking. `/health` advertises `personalShiny`.

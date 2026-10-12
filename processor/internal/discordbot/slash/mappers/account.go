@@ -6,9 +6,9 @@ import "github.com/bwmarrin/discordgo"
 // through verbatim: player IDs are case-sensitive.
 //
 //	list                      → ["list"]
-//	add <player_id> [label]   → ["add", id, label?]
+//	add <player_id> [name]    → ["add", name, id] (or ["add", id] unnamed)
 //	remove <account>          → ["remove", account]
-//	label <account> [label]   → ["label", account, label?]
+//	rename <account> [name]   → ["rename", account, name?]
 func Account(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
 	if len(opts) == 0 || opts[0] == nil || opts[0].Type != discordgo.ApplicationCommandOptionSubCommand {
 		return nil, &MapperError{Key: "error.slash.account.no_subcommand"}
@@ -23,24 +23,23 @@ func Account(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]strin
 		if id == "" {
 			return nil, &MapperError{Key: "error.slash.account.no_player_id"}
 		}
-		tokens := []string{"add", id}
-		if l := getString(o["label"]); l != "" {
-			tokens = append(tokens, l)
+		if n := getString(o["name"]); n != "" {
+			return []string{"add", n, id}, nil
 		}
-		return tokens, nil
+		return []string{"add", id}, nil
 	case "remove":
 		ref := getString(o["account"])
 		if ref == "" {
 			return nil, &MapperError{Key: "error.slash.account.no_account"}
 		}
 		return []string{"remove", ref}, nil
-	case "label":
+	case "rename":
 		ref := getString(o["account"])
 		if ref == "" {
 			return nil, &MapperError{Key: "error.slash.account.no_account"}
 		}
-		tokens := []string{"label", ref}
-		if l := getString(o["label"]); l != "" {
+		tokens := []string{"rename", ref}
+		if l := getString(o["name"]); l != "" {
 			tokens = append(tokens, l)
 		}
 		return tokens, nil

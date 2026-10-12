@@ -13,7 +13,7 @@ import (
 )
 
 // AccountCommand manages the target's linked game accounts (player IDs) for
-// personal shiny/background tracking. Player IDs and labels are read from
+// personal shiny/background tracking. Player IDs and names are read from
 // ctx.VerbatimArgs so case and underscores survive.
 type AccountCommand struct{}
 
@@ -30,7 +30,8 @@ func (c *AccountCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 	verbatim := bot.StripTargetTokens(ctx.VerbatimArgs)
 	if len(verbatim) == 0 {
-		return c.list(ctx)
+		// Like bare !location: show the current state, then the usage line.
+		return append(c.list(ctx), bot.Reply{Text: inlineUsage(ctx, "msg.account.usage")})
 	}
 
 	enTr := ctx.Translations.For("en")
@@ -49,12 +50,19 @@ func (c *AccountCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		if !c.canWrite(ctx) {
 			return deny
 		}
-		if len(rest) < 1 {
+		// `add <player-id>` (unnamed) or `add <name> <player-id>`. Player IDs
+		// are a single token, so anything beyond two args is a usage error.
+		var label, playerID string
+		switch len(rest) {
+		case 1:
+			playerID = rest[0]
+		case 2:
+			label, playerID = rest[0], rest[1]
+		default:
 			return usage
 		}
-		label := strings.Join(rest[1:], " ")
-		return c.result(ctx, ctx.PlayerAccounts.Add(ctx.TargetID, rest[0], label), label,
-			tr.Tf("msg.account.added", personalshiny.DisplayName(db.PlayerAccount{PlayerID: rest[0], Label: label})))
+		return c.result(ctx, ctx.PlayerAccounts.Add(ctx.TargetID, playerID, label), label,
+			tr.Tf("msg.account.added", personalshiny.DisplayName(db.PlayerAccount{PlayerID: playerID, Label: label})))
 	case is("arg.remove"):
 		if !c.canWrite(ctx) {
 			return deny
@@ -73,7 +81,7 @@ func (c *AccountCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		}
 		return c.result(ctx, ctx.PlayerAccounts.Remove(ctx.TargetID, a.PlayerID), "",
 			tr.Tf("msg.account.removed", personalshiny.DisplayName(*a)))
-	case is("arg.label"):
+	case is("arg.rename"):
 		if !c.canWrite(ctx) {
 			return deny
 		}
@@ -89,9 +97,9 @@ func (c *AccountCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.account.not_found", rest[0])}}
 		}
 		label := strings.Join(rest[1:], " ")
-		ok := tr.Tf("msg.account.labelled", personalshiny.DisplayName(*a), label)
+		ok := tr.Tf("msg.account.renamed", personalshiny.DisplayName(*a), label)
 		if label == "" {
-			ok = tr.Tf("msg.account.label_cleared", personalshiny.DisplayName(*a))
+			ok = tr.Tf("msg.account.name_cleared", personalshiny.DisplayName(*a))
 		}
 		return c.result(ctx, ctx.PlayerAccounts.SetLabel(ctx.TargetID, a.PlayerID, label), label, ok)
 	}
@@ -124,13 +132,13 @@ func (c *AccountCommand) result(ctx *bot.CommandContext, err error, label, ok st
 	case errors.Is(err, store.ErrDuplicateAccount):
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.account.duplicate")}}
 	case errors.Is(err, store.ErrDuplicateAccountLabel):
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.account.duplicate_label", label)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.account.duplicate_name", label)}}
 	case errors.Is(err, store.ErrTooManyAccounts):
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.account.too_many", personalshiny.MaxPlayers)}}
 	case errors.Is(err, store.ErrInvalidPlayerID):
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.account.invalid_id")}}
 	case errors.Is(err, store.ErrInvalidAccountLabel):
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.account.invalid_label")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.account.invalid_name")}}
 	case errors.Is(err, store.ErrAccountNotFound):
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.account.not_found", "")}}
 	}

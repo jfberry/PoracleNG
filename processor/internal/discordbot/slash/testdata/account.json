@@ -31,7 +31,7 @@
         },
         {
           "type": 3,
-          "name": "label",
+          "name": "name",
           "description": "Optional short name, e.g. main or alt",
           "channel_types": null,
           "required": false,
@@ -53,7 +53,7 @@
         {
           "type": 3,
           "name": "account",
-          "description": "Player ID or label",
+          "description": "Name or player ID",
           "channel_types": null,
           "required": true,
           "options": null,
@@ -66,15 +66,15 @@
     },
     {
       "type": 1,
-      "name": "label",
-      "description": "Set or clear an account's label",
+      "name": "rename",
+      "description": "Rename an account (or clear its name)",
       "channel_types": null,
       "required": false,
       "options": [
         {
           "type": 3,
           "name": "account",
-          "description": "Player ID or label",
+          "description": "Name or player ID",
           "channel_types": null,
           "required": true,
           "options": null,
@@ -83,8 +83,8 @@
         },
         {
           "type": 3,
-          "name": "label",
-          "description": "New label (leave empty to clear)",
+          "name": "name",
+          "description": "New name (leave empty to clear)",
           "channel_types": null,
           "required": false,
           "options": null,
