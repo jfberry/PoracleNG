@@ -274,7 +274,7 @@ func oneIn(p float64) int {
 	return int(1/p + 0.5)
 }
 
-// DisplayName is how an account is shown to users: its label, else the
+// DisplayName is how an account is shown to users: its name (the Label field), else the
 // player ID shortened to "…" plus its last four characters.
 func DisplayName(a db.PlayerAccount) string {
 	if a.Label != "" {
