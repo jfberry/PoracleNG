@@ -588,21 +588,13 @@ Get the user's delegated administration permissions (channels, webhooks, user tr
 
 ## Linked accounts (v2)
 
-Personal shiny/background tracking rolls per game account, so a human links one or more game player IDs. These endpoints live on the strict `/api/v2` surface (errors are `application/problem+json`). The v2 pokemon tracking type gains `personal_shiny` and `personal_background` (booleans; `null` when false; full-replace on PUT, so omitting one clears it). The v2 full snapshot `GET /api/v2/humans/{id}/tracking` carries an `accounts` array with the same items as the list endpoint.
+Personal shiny/background tracking rolls per game account. Accounts are managed on the strict `/api/v2` surface; see the [v1 → v2 migration guide](docs/v1-to-v2-migration-guide.md) and `/docs` for the full contract. Essentials:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v2/humans/{id}/accounts` | List linked accounts: `{"accounts":[{"player_id","label","created_at"}]}` |
-| POST | `/api/v2/humans/{id}/accounts` | Link an account. Body `{"player_id":"…","label":"…"}` (`label` optional). `201 {"account":{…}}` |
-| PUT | `/api/v2/humans/{id}/accounts/{player_id}` | Set or clear the label. Body `{"label":"…"}` (empty clears) |
-| DELETE | `/api/v2/humans/{id}/accounts/{player_id}` | Unlink the account |
-
-- `label` is `null` when unset. Labels are unique per human (case-insensitive), max 64 chars.
-- `player_id` is opaque and **case-sensitive**, 1-256 bytes. In the path it must be URL-escaped; an ID containing `/` is sent as `%2F`.
-- Limit: 50 accounts per human.
-- Status codes: `201` created; `404` unknown human or account; `409` player ID or label already linked to this human; `422` invalid ID/label or over a limit.
-- Mutations trigger a debounced state reload.
-- `[player_accounts] self_service` gates only the chat commands (`!account`, `/account`) for non-admins; the API is an admin-secret surface and is not affected by it.
+- `GET|POST /api/v2/humans/{id}/accounts` (POST body `{"player_id","label"?}` returns `201 {"account":{player_id,label,created_at}}`); `PUT|DELETE /api/v2/humans/{id}/accounts/{player_id}` (PUT body `{"label"}`, empty clears) return `{"status":"ok"}`.
+- `player_id` is case-sensitive, 1-256 bytes, and must be URL-escaped in the path (`/` as `%2F`). Max 50 accounts per human; `label` is `null` when unset, unique per human (case-insensitive), max 64 chars.
+- Status codes: `201` created; `404` unknown human (GET/POST) or `"account not found"` (PUT/DELETE, including an unknown human); `409` player ID or label already linked; `422` invalid or over a limit.
+- The v2 full snapshot carries an `accounts` array; v2 pokemon rules take `personal_shiny` / `personal_background` (booleans, `null` when false, full-replace on PUT).
+- `[player_accounts] self_service` gates only the chat commands, not the API.
 
 ## Profile Management
 
