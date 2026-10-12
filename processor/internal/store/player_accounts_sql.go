@@ -60,7 +60,9 @@ func (s *sqlPlayerAccountStore) Add(humanID, playerID, label string) error {
 		return ErrTooManyAccounts
 	}
 	// Case-insensitive uniqueness is enforced here, not by the column
-	// collation (the unique key is only case-insensitive under *_ci).
+	// collation (the unique key is only case-insensitive under *_ci). The
+	// check-then-insert is not atomic: two concurrent adds could both pass
+	// (tiny window, acceptable; the unique key still catches exact matches).
 	if label != "" {
 		var taken int
 		if err := s.db.Get(&taken, `SELECT COUNT(*) FROM player_accounts WHERE id = ? AND LOWER(label) = LOWER(?)`,
