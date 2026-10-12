@@ -4297,10 +4297,9 @@ Run from `processor/`:
 
 ```bash
 go build ./... && go vet ./... && go test -count=1 ./... && golangci-lint run ./...
-grep -rn -i "lenisko" .. --include='*.go' --include='*.md' --include='*.toml' | grep -v '/.git/' || echo "no references"
 ```
 
-Expected: all four pass; `no references`.
+Expected: all four pass. Then check by hand that no repo file names any other community port (Global Constraints).
 
 - [ ] **Step 7: Commit**
 
