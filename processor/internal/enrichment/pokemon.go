@@ -58,14 +58,17 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	}
 
 	// Shiny rate and shiny possible
-	if e.ShinyProvider != nil {
-		rate := e.ShinyProvider.GetShinyRate(pokemon.PokemonID)
-		if rate > 0 {
-			m["shinyStats"] = int(math.Round(rate))
-			m["shinyPossible"] = true
+	if sf := e.shinyFacts(pokemon.PokemonID, pokemon.Form, pokemon.Costume, pokemon.Latitude, pokemon.Longitude); sf.answered {
+		if sf.observed > 0 {
+			m["shinyStats"] = int(math.Round(sf.observed))
+		}
+		m["shinyPossible"] = sf.possible
+		if sf.possible {
 			m["shinyPossibleEmojiKey"] = "shiny"
-		} else {
-			m["shinyPossible"] = false
+		}
+		if sf.oneIn > 0 {
+			m["shinyRate"] = sf.oneIn
+			m["shinyRateBoosted"] = sf.boosted
 		}
 	}
 
