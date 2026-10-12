@@ -7,6 +7,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -444,4 +445,27 @@ func TestStatusReport_SummaryBufferSection(t *testing.T) {
 			t.Errorf("expected top-user 'user-1' in section:\n%s", section)
 		}
 	})
+}
+
+func TestStatusShinyRates(t *testing.T) {
+	ctx := statusCtx(t)
+	ctx.ShinyRates = personalshiny.NewRates("", "")
+	text := statusText(statusReport(ctx, false))
+	if !strings.Contains(text, "Shiny rates") || !strings.Contains(text, "not configured") {
+		t.Fatalf("unconfigured: %q", text)
+	}
+
+	ctx.ShinyRates = personalshiny.NewRates("http://127.0.0.1:1", "")
+	text = statusText(statusReport(ctx, false))
+	if !strings.Contains(text, "not loaded yet") {
+		t.Fatalf("unloaded: %q", text)
+	}
+}
+
+func statusText(replies []bot.Reply) string {
+	var sb strings.Builder
+	for _, r := range replies {
+		sb.WriteString(r.Text)
+	}
+	return sb.String()
 }
