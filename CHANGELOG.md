@@ -21,6 +21,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   from `humans.area` and every profile. Irreversible: an incomplete
   `allowed_areas` empties that community's members. Only currently loaded
   fences are ever removed, so a partial geofence load can't strip selections (#243).
+- **Personal shiny / background tracking** (mirrors Golbat#423). Pokemon rules
+  can require that the pokemon is shiny (or has the special background) for
+  one of the user's linked game accounts: `!track … personalshiny|personalbackground`,
+  `/track personal_shiny|personal_background`, v1 `personal` bitmask, v2
+  `personal_shiny` / `personal_background`. Needs the new `[shiny_rates]`
+  feed; fails closed until it loads.
+- **Linked game accounts.** `!account` / `/account` (list/add/remove/label) and
+  `GET|POST /api/v2/humans/{id}/accounts`, `PUT|DELETE …/accounts/{player_id}`;
+  the v2 snapshot carries `accounts`. `[player_accounts] self_service` gates
+  non-admin linking. `/health` advertises `personalShiny`.
+- **Feed-backed shiny info.** `shinyPossible` is variant-aware when
+  `[shiny_rates]` is configured; new `shinyRate` / `shinyRateBoosted` DTS
+  fields (pokemon, quest, nest); per-user `personalShiny*`,
+  `personalBackground*`, `hasLinkedAccounts`. `!info <pokemon>` shows the
+  expected shiny rate, `!info shiny` what is boosted now, and
+  `!poracle-admin status` a "Shiny rates" section.
+- Migration `000010_personal_shiny` (`player_accounts` table, `monsters.personal`).
 - **v2 tracking `ping`.** Every v2 rule type accepts and returns an optional `ping`
   (mention text). Previously v2 stored `""`, which erased pings set by the bot or v1 on any PUT.
 - **v2 clear location.** `DELETE /api/v2/humans/{id}/location[?profile=]`

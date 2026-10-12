@@ -72,6 +72,8 @@ curl http://localhost:3030/health
 {"status": "healthy"}
 ```
 
+The real response also carries `version` and a static `capabilities` map for feature detection (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`, and `personalShiny` — true when personal shiny/background tracking and linked accounts are available).
+
 ### GET /metrics
 
 Prometheus metrics endpoint.
@@ -250,6 +252,7 @@ Force a state reload (same as POST /api/reload).
 | `distance` | int | 0 | Distance in metres (0 = use area) |
 | `template` | string | config default | DTS template name |
 | `clean` | bool | false | Auto-delete message after TTH |
+| `personal` | int | 0 | Personal-alert bitmask: `1` = only when shiny for one of the user's linked accounts, `2` = only when the special background applies to a linked account. Unknown bits are dropped. **Omitted on a by-uid update ⇒ the stored value is kept** (pre-personal clients don't clear it). Needs `[shiny_rates]`; see [Linked accounts](#linked-accounts-v2). |
 
 #### Pokemon change template (`monsterChanged`)
 
@@ -582,6 +585,24 @@ Remove a Discord role from a user.
 Get the user's delegated administration permissions (channels, webhooks, user tracking).
 
 ---
+
+## Linked accounts (v2)
+
+Personal shiny/background tracking rolls per game account, so a human links one or more game player IDs. These endpoints live on the strict `/api/v2` surface (errors are `application/problem+json`). The v2 pokemon tracking type gains `personal_shiny` and `personal_background` (booleans; `null` when false; full-replace on PUT, so omitting one clears it). The v2 full snapshot `GET /api/v2/humans/{id}/tracking` carries an `accounts` array with the same items as the list endpoint.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v2/humans/{id}/accounts` | List linked accounts: `{"accounts":[{"player_id","label","created_at"}]}` |
+| POST | `/api/v2/humans/{id}/accounts` | Link an account. Body `{"player_id":"…","label":"…"}` (`label` optional). `201 {"account":{…}}` |
+| PUT | `/api/v2/humans/{id}/accounts/{player_id}` | Set or clear the label. Body `{"label":"…"}` (empty clears) |
+| DELETE | `/api/v2/humans/{id}/accounts/{player_id}` | Unlink the account |
+
+- `label` is `null` when unset. Labels are unique per human (case-insensitive), max 64 chars.
+- `player_id` is opaque and **case-sensitive**, 1-256 bytes. In the path it must be URL-escaped; an ID containing `/` is sent as `%2F`.
+- Limit: 50 accounts per human.
+- Status codes: `201` created; `404` unknown human or account; `409` player ID or label already linked to this human; `422` invalid ID/label or over a limit.
+- Mutations trigger a debounced state reload.
+- `[player_accounts] self_service` gates only the chat commands (`!account`, `/account`) for non-admins; the API is an admin-secret surface and is not affected by it.
 
 ## Profile Management
 
