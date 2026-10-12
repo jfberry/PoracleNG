@@ -98,11 +98,15 @@ func (c *AccountCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	return usage
 }
 
-// canWrite: admins (or delegated channel admins for a non-user target);
-// otherwise only self-service on the caller's own user.
+// canWrite: admins; delegated channel admins for the channel the command
+// runs in; otherwise only self-service on the caller's own user. Other
+// non-user targets (another channel, a webhook) need full admin.
 func (c *AccountCommand) canWrite(ctx *bot.CommandContext) bool {
 	isUserTarget := strings.HasSuffix(ctx.TargetType, ":user")
-	if ctx.IsAdmin || (!isUserTarget && ctx.Permissions.ChannelTracking) {
+	if ctx.IsAdmin {
+		return true
+	}
+	if !isUserTarget && ctx.Permissions.ChannelTracking && ctx.ChannelID != "" && ctx.TargetID == ctx.ChannelID {
 		return true
 	}
 	return isUserTarget && ctx.TargetID == ctx.UserID &&
