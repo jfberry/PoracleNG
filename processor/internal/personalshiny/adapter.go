@@ -207,6 +207,26 @@ func (r *Rates) BaseShinyVariant(pokemonID, form, costume int) (supported bool, 
 	return rate.Prediction.Supported, rate.Prediction.Probability, true
 }
 
+// ShinyVariantForm is ShinyVariant for callers that may hold form 0 for a
+// species whose normal variant has its own form id: when (pokemon, form 0,
+// costume) is not listed and defaultForm != 0, it retries with defaultForm.
+// Poracle only; the personal roll (Evaluate) never uses this.
+func (r *Rates) ShinyVariantForm(pokemonID, form, defaultForm, costume int, lat, lon float64) (supported bool, probability float64, known bool) {
+	if supported, probability, known = r.ShinyVariant(pokemonID, form, costume, lat, lon); known || form != 0 || defaultForm == 0 {
+		return supported, probability, known
+	}
+	return r.ShinyVariant(pokemonID, defaultForm, costume, lat, lon)
+}
+
+// BaseShinyVariantForm is BaseShinyVariant with the ShinyVariantForm
+// default-form fallback.
+func (r *Rates) BaseShinyVariantForm(pokemonID, form, defaultForm, costume int) (supported bool, probability float64, known bool) {
+	if supported, probability, known = r.BaseShinyVariant(pokemonID, form, costume); known || form != 0 || defaultForm == 0 {
+		return supported, probability, known
+	}
+	return r.BaseShinyVariant(pokemonID, defaultForm, costume)
+}
+
 // VariantRate is a variant whose shiny rate is above the 1/512 base.
 type VariantRate struct {
 	PokemonID, Form, Costume int

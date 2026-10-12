@@ -151,6 +151,19 @@ func (gd *GameData) GetMonster(pokemonID, form int) *Monster {
 	return gd.Monsters[MonsterKey{pokemonID, 0}]
 }
 
+// DefaultForm returns the species' default (NORMAL) form id from the
+// masterfile, or 0 when unknown. Many species have no form 0 in the game;
+// their normal variant has its own form id. Nil-safe.
+func (gd *GameData) DefaultForm(pokemonID int) int {
+	if gd == nil {
+		return 0
+	}
+	if m, ok := gd.Monsters[MonsterKey{pokemonID, 0}]; ok {
+		return m.DefaultFormID
+	}
+	return 0
+}
+
 // GetMove looks up a move by ID.
 func (gd *GameData) GetMove(moveID int) *Move {
 	return gd.Moves[moveID]

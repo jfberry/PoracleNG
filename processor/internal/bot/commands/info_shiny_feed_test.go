@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -82,5 +84,31 @@ func TestShinyFeedInfoShinyBoosted(t *testing.T) {
 	out := cmd.Run(ctx, []string{"shiny"})[0].Text
 	if !strings.Contains(out, "Boosted right now") || !strings.Contains(out, "Pikachu: 1:10") {
 		t.Fatalf("boosted section missing: %q", out)
+	}
+}
+
+// The feed keys Pikachu under its NORMAL form id (598); form 0 lookups must
+// resolve through the species' default form, and that form must not be
+// spelled out in the "boosted" list.
+const shinyFeedNormalForm = `{"rates":[{"pokemon":25,"form":598,"costume":0,"prediction":{"probability":0.1,"supported":true}}]}`
+
+func TestShinyFeedInfoUsesDefaultForm(t *testing.T) {
+	ctx := infoCostumeCtx(t)
+	ctx.GameData.Monsters[gamedata.MonsterKey{ID: 25, Form: 0}].DefaultFormID = 598
+	ctx.Translations.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"poke_25":  "Pikachu",
+		"form_598": "Normal",
+	}))
+	ctx.ShinyRates = loadedShinyRates(t, shinyFeedNormalForm)
+	cmd := &InfoCommand{}
+
+	out := cmd.Run(ctx, []string{"pikachu"})[0].Text
+	if !strings.Contains(out, "Expected shiny rate: 1:10") {
+		t.Fatalf("default-form rate missing: %q", out)
+	}
+
+	out = cmd.Run(ctx, []string{"shiny"})[0].Text
+	if !strings.Contains(out, "Pikachu: 1:10") || strings.Contains(out, "(Normal)") {
+		t.Fatalf("boosted list should omit the default form suffix: %q", out)
 	}
 }

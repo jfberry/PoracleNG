@@ -417,7 +417,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	// Expected shiny rate from the [shiny_rates] feed (base, and at the
 	// user's location when an override applies there).
 	if ctx.ShinyRates.Loaded() {
-		if line := c.expectedShinyLine(ctx, pokemonID); line != "" {
+		if line := c.expectedShinyLine(ctx, pokemonID, form); line != "" {
 			sb.WriteByte('\n')
 			sb.WriteString(line + "\n")
 		}
@@ -933,7 +933,7 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 			boosted.WriteString(ctx.Bold(tr.T("msg.info.shiny_boosted_header")) + "\n")
 			for _, v := range list {
 				name := tr.T(gamedata.PokemonTranslationKey(v.PokemonID))
-				if v.Form != 0 {
+				if v.Form != 0 && v.Form != ctx.GameData.DefaultForm(v.PokemonID) {
 					name += " (" + gamedata.FormName(tr, v.Form) + ")"
 				}
 				fmt.Fprintf(&boosted, "%s: 1:%d\n", ctx.EscapeForReply(name), v.OneIn)
@@ -977,11 +977,12 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 }
 
 // expectedShinyLine is the feed-derived expected shiny rate for a species
-// (base form), with the local rate when an override applies at the user's
+// form (form 0 resolves through the species' default/NORMAL form), with the local rate when an override applies at the user's
 // location. Empty when the feed does not list the species.
-func (c *InfoCommand) expectedShinyLine(ctx *bot.CommandContext, pokemonID int) string {
+func (c *InfoCommand) expectedShinyLine(ctx *bot.CommandContext, pokemonID, form int) string {
 	tr := ctx.Tr()
-	supported, base, known := ctx.ShinyRates.BaseShinyVariant(pokemonID, 0, 0)
+	defaultForm := ctx.GameData.DefaultForm(pokemonID)
+	supported, base, known := ctx.ShinyRates.BaseShinyVariantForm(pokemonID, form, defaultForm, 0)
 	if !known {
 		return ""
 	}
@@ -989,7 +990,7 @@ func (c *InfoCommand) expectedShinyLine(ctx *bot.CommandContext, pokemonID int) 
 		return ctx.Bold(tr.T("msg.info.shiny_not_released"))
 	}
 	if lat, lon, ok := c.userLocation(ctx); ok {
-		if s, local, _ := ctx.ShinyRates.ShinyVariant(pokemonID, 0, 0, lat, lon); s && local > 0 && local != base {
+		if s, local, _ := ctx.ShinyRates.ShinyVariantForm(pokemonID, form, defaultForm, 0, lat, lon); s && local > 0 && local != base {
 			return ctx.Bold(tr.Tf("msg.info.shiny_expected_local", personalshiny.OneIn(base), personalshiny.OneIn(local)))
 		}
 	}

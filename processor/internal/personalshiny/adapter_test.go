@@ -226,3 +226,31 @@ func TestDisplayName(t *testing.T) {
 		}
 	}
 }
+
+// Poracle-only: feed lookups for "form 0" fall back to the species' default
+// (NORMAL) form, which the game keys under its own form id.
+func TestShinyVariantFormDefaultFallback(t *testing.T) {
+	r := loadedRates(t, `{"rates":[{"pokemon":25,"form":598,"costume":0,"prediction":{"probability":0.1,"supported":true},"overrides":{"Europe/London":{"probability":0.05,"supported":true}}}]}`)
+	if _, _, ok := r.ShinyVariant(25, 0, 0, 51.5, 0); ok {
+		t.Fatal("plain lookup of form 0 must not resolve (Golbat behaviour)")
+	}
+	if s, p, ok := r.ShinyVariantForm(25, 0, 598, 0, 51.5, 0); !ok || !s || p != 0.05 {
+		t.Fatalf("default-form fallback with override = %v %v %v", s, p, ok)
+	}
+	if s, p, ok := r.BaseShinyVariantForm(25, 0, 598, 0); !ok || !s || p != 0.1 {
+		t.Fatalf("base default-form fallback = %v %v %v", s, p, ok)
+	}
+	if _, _, ok := r.ShinyVariantForm(25, 0, 0, 0, 51.5, 0); ok {
+		t.Fatal("no default form known must not resolve")
+	}
+	if _, _, ok := r.ShinyVariantForm(25, 7, 598, 0, 51.5, 0); ok {
+		t.Fatal("explicit non-zero form must not fall back")
+	}
+	var nilRates *Rates
+	if _, _, ok := nilRates.ShinyVariantForm(25, 0, 598, 0, 0, 0); ok {
+		t.Fatal("nil rates known")
+	}
+	if _, _, ok := nilRates.BaseShinyVariantForm(25, 0, 598, 0); ok {
+		t.Fatal("nil rates known")
+	}
+}
