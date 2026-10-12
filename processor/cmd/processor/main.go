@@ -768,6 +768,7 @@ func main() {
 	cmdRegistry.Register(&commands.ProfileCommand{})
 	cmdRegistry.Register(&commands.SummaryCommand{})
 	cmdRegistry.Register(&commands.LocationCommand{})
+	cmdRegistry.Register(&commands.AccountCommand{})
 	cmdRegistry.Register(&commands.AreaCommand{})
 	cmdRegistry.Register(&commands.ScriptCommand{})
 	cmdRegistry.Register(&commands.VersionCommand{})

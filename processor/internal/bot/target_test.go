@@ -228,3 +228,35 @@ func TestStripTargetTokens(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestBuildTargetFor_AccountAdminUserOverride(t *testing.T) {
+	ctx := newTargetCtx(t, true, true)
+	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
+		ID: "other", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
+	})
+	target, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "username_9", "user:other"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if target == nil || target.ID != "other" {
+		t.Fatalf("expected override target other, got %+v", target)
+	}
+	if len(rest) != 2 || rest[1] != "username_9" {
+		t.Fatalf("rest = %v", rest)
+	}
+}
+
+func TestBuildTargetFor_AccountNonAdminUserOverrideRejected(t *testing.T) {
+	ctx := newTargetCtx(t, true, false)
+	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
+		ID: "other", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
+	})
+	_, _, errFor := BuildTargetFor(ctx, "cmd.account", []string{"add", "x", "user:other"})
+	_, _, errPlain := BuildTarget(ctx, []string{"user:other"})
+	if errFor == nil || errPlain == nil {
+		t.Fatalf("expected rejection, got %v / %v", errFor, errPlain)
+	}
+	if errFor.Error() != errPlain.Error() {
+		t.Fatalf("BuildTargetFor err %q differs from BuildTarget err %q", errFor, errPlain)
+	}
+}
