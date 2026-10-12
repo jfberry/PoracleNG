@@ -195,6 +195,7 @@ func (r *Rates) refreshShinyRates(ctx context.Context) (err error) {
 		return fmt.Errorf("rates response has no rates list")
 	}
 	next := &shinyRates{variants: make(map[shinyVariant]shinyRate), maximum: make(map[int16]uint32), backgroundMaximum: make(map[int16]uint32)}
+	// Poracle: loop variable renamed r → rt (r is the receiver).
 	for _, rt := range *feed.Rates {
 		next.variants[shinyVariant{rt.Pokemon, rt.Form, rt.Costume}] = rt
 		// Unknown costumes/forms still default to 1/512 shiny and no background.
