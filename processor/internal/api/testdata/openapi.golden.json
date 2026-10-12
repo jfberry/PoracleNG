@@ -2320,6 +2320,63 @@
         ],
         "type": "object"
       },
+      "V2AccountCreatedOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/V2AccountItem"
+          }
+        },
+        "required": [
+          "account"
+        ],
+        "type": "object"
+      },
+      "V2AccountItem": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "description": "When the account was linked.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "label": {
+            "description": "Optional label, unique per human (case-insensitive). null when unset.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "player_id": {
+            "description": "Game player ID, opaque and case-sensitive (1-256 bytes).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "player_id",
+          "label",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "V2AccountsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/V2AccountItem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "type": "object"
+      },
       "V2ActiveHourEntry": {
         "additionalProperties": false,
         "properties": {
@@ -2523,6 +2580,26 @@
           "forms",
           "raid_costumes",
           "raid_forms"
+        ],
+        "type": "object"
+      },
+      "V2AddAccountBody": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "Optional label, unique per human.",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "player_id": {
+            "description": "Game player ID (case-sensitive).",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "player_id"
         ],
         "type": "object"
       },
@@ -11914,6 +11991,20 @@
         },
         "type": "object"
       },
+      "V2LabelAccountInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "New label; empty clears it.",
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object"
+      },
       "V2LanguageBody": {
         "additionalProperties": false,
         "properties": {
@@ -20192,6 +20283,16 @@
       "V2SnapshotBody": {
         "additionalProperties": false,
         "properties": {
+          "accounts": {
+            "description": "Linked game accounts — same items as GET …/accounts.",
+            "items": {
+              "$ref": "#/components/schemas/V2AccountItem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "human": {
             "$ref": "#/components/schemas/V2Human"
           },
@@ -20243,7 +20344,8 @@
           "profiles",
           "locations",
           "summaries",
-          "mutes"
+          "mutes",
+          "accounts"
         ],
         "type": "object"
       },
@@ -23360,6 +23462,237 @@
         "summary": "Fetch one human",
         "tags": [
           "v2-humans"
+        ]
+      }
+    },
+    "/v2/humans/{id}/accounts": {
+      "get": {
+        "operationId": "v2-list-human-accounts",
+        "parameters": [
+          {
+            "description": "Human id (the owning user)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2AccountsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "List a human's linked game accounts",
+        "tags": [
+          "v2-accounts"
+        ]
+      },
+      "post": {
+        "description": "Links a player ID to the human. 409 if the player ID or label is already linked to this human; 422 when invalid or over the 50-account limit. Triggers a state reload.",
+        "operationId": "v2-add-human-account",
+        "parameters": [
+          {
+            "description": "Human id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2AddAccountBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2AccountCreatedOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Link a game account",
+        "tags": [
+          "v2-accounts"
+        ]
+      }
+    },
+    "/v2/humans/{id}/accounts/{player_id}": {
+      "delete": {
+        "description": "Player IDs containing / must be URL-escaped (%2F) in the path.",
+        "operationId": "v2-delete-human-account",
+        "parameters": [
+          {
+            "description": "Human id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Unlink a game account",
+        "tags": [
+          "v2-accounts"
+        ]
+      },
+      "put": {
+        "description": "Player IDs containing / must be URL-escaped (%2F) in the path.",
+        "operationId": "v2-label-human-account",
+        "parameters": [
+          {
+            "description": "Human id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "description": "Game player ID. Must be URL-escaped; a player ID containing / is sent as %2F.",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2LabelAccountInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Set or clear a linked account's label",
+        "tags": [
+          "v2-accounts"
         ]
       }
     },

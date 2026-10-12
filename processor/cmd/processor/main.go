@@ -428,6 +428,7 @@ func main() {
 		defaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
 	}
 	trackingDeps := &api.TrackingDeps{
+		Accounts: playerAccounts,
 		DB:       database,
 		Humans:   humanStore,
 		Tracking: trackingStores,
@@ -480,6 +481,7 @@ func main() {
 	// Strict v2 mutes surface (huma, sub-resource of human) over the in-memory
 	// mute store — net-new in v2 (the bot/buttons were the only mute writers).
 	api.RegisterV2Mutes(humaAPI, trackingDeps)
+	api.RegisterV2Accounts(humaAPI, trackingDeps)
 
 	tracking := apiGroup.Group("/tracking")
 	tracking.GET("/pokemon/refresh", api.HandleReload(func() error {
