@@ -977,8 +977,9 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 }
 
 // expectedShinyLine is the feed-derived expected shiny rate for a species
-// form (form 0 resolves through the species' default/NORMAL form), with the local rate when an override applies at the user's
-// location. Empty when the feed does not list the species.
+// form (form 0 resolves through the species' default/NORMAL form), with the
+// local rate when an override applies at the user's location. Empty when the
+// feed does not list the species.
 func (c *InfoCommand) expectedShinyLine(ctx *bot.CommandContext, pokemonID, form int) string {
 	tr := ctx.Tr()
 	defaultForm := ctx.GameData.DefaultForm(pokemonID)
