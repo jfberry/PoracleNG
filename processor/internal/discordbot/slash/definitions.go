@@ -207,6 +207,8 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 		return buildDefinition(bundle, key, canon, profileOptions(bundle))
 	case "cmd.location":
 		return buildDefinition(bundle, key, canon, locationOptions(bundle))
+	case "cmd.account":
+		return buildDefinition(bundle, key, canon, accountOptions(bundle))
 	case "cmd.summary":
 		return buildDefinition(bundle, key, canon, summaryOptions(bundle))
 	}
@@ -496,6 +498,21 @@ func locationOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption 
 	}
 }
 
+// accountOptions exposes /account with sub-commands mirroring !account.
+func accountOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		subCommand(bundle, "account.list", "list", "List your linked game accounts"),
+		subCommand(bundle, "account.add", "add", "Link a game account (player ID)",
+			stringOpt(bundle, "account.add.player_id", "player_id", "Your in-game player ID (exactly as shown)", true, false),
+			stringOpt(bundle, "account.add.label", "label", "Optional short name, e.g. main or alt", false, false)),
+		subCommand(bundle, "account.remove", "remove", "Unlink a game account",
+			stringOpt(bundle, "account.remove.account", "account", "Player ID or label", true, false)),
+		subCommand(bundle, "account.label", "label", "Set or clear an account's label",
+			stringOpt(bundle, "account.label.account", "account", "Player ID or label", true, false),
+			stringOpt(bundle, "account.label.label", "label", "New label (leave empty to clear)", false, false)),
+	}
+}
+
 // trackOptions builds the slash option list for /track. Pokemon is the
 // only required option; everything else is filtered or omitted.
 func trackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
@@ -510,6 +527,8 @@ func trackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		intOpt(bundle, "track.little_rank", "little_rank", "Top PVP rank in the Little League", false),
 		cleanOpt(bundle, "track", "Auto-delete the alert when the pokemon despawns"),
 		editOpt(bundle, "track", "Update the alert in place when the pokemon changes"),
+		yesOpt(bundle, "track", "personal_shiny", "Only when shiny for one of your linked game accounts"),
+		yesOpt(bundle, "track", "personal_background", "Only when it has the event background for one of your linked accounts"),
 		templateOpt(bundle, "track"),
 		stringOpt(bundle, "track.form", "form", "Pokemon form", false, true),
 		stringOpt(bundle, "track.costume", "costume", "Pokemon costume", false, true),
@@ -935,7 +954,7 @@ func allCommandKeys() []string {
 		"cmd.incident",
 		"cmd.lure", "cmd.nest", "cmd.maxbattle", "cmd.gym", "cmd.fort",
 		"cmd.untrack",
-		"cmd.area", "cmd.profile", "cmd.location",
+		"cmd.area", "cmd.profile", "cmd.location", "cmd.account",
 		"cmd.summary",
 	}
 }
