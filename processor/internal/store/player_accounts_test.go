@@ -12,69 +12,74 @@ import (
 // humans "u1" and "u2".
 func runPlayerAccountStoreContract(t *testing.T, s PlayerAccountStore) {
 	t.Helper()
-	if err := s.Add("u1", "User_ABC", "main"); err != nil {
+	if err := s.Add("u1", "UserABC9", "main"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Add("u1", "user_abc", ""); err != nil {
+	if err := s.Add("u1", "userabc9", ""); err != nil {
 		t.Fatalf("player IDs are case-sensitive: %v", err)
 	}
-	if err := s.Add("u1", "User_ABC", "other"); !errors.Is(err, ErrDuplicateAccount) {
+	if err := s.Add("u1", "UserABC9", "other"); !errors.Is(err, ErrDuplicateAccount) {
 		t.Fatalf("duplicate id: %v", err)
 	}
 	if err := s.Add("u1", "x", "MAIN"); !errors.Is(err, ErrDuplicateAccountLabel) {
 		t.Fatalf("labels are case-insensitive: %v", err)
 	}
-	if err := s.Add("u2", "User_ABC", "main"); err != nil {
+	if err := s.Add("u2", "UserABC9", "main"); err != nil {
 		t.Fatalf("same ID on another human: %v", err)
 	}
-	if err := s.Add("u1", "", ""); !errors.Is(err, ErrInvalidPlayerID) {
-		t.Fatalf("empty id: %v", err)
+	for _, bad := range []string{"", "User_ABC", "a b", "ab:c", "é", "\u201cabc\u201d", "abc\u200b", strings.Repeat("a", 257)} {
+		if err := s.Add("u1", bad, ""); !errors.Is(err, ErrInvalidPlayerID) {
+			t.Fatalf("id %q: %v", bad, err)
+		}
 	}
-	if err := s.Add("u1", strings.Repeat("x", 257), ""); !errors.Is(err, ErrInvalidPlayerID) {
-		t.Fatalf("long id: %v", err)
+	if err := s.Add("u1", strings.Repeat("a", 256), ""); err != nil {
+		t.Fatalf("256-char id: %v", err)
+	}
+	if err := s.Remove("u1", strings.Repeat("a", 256)); err != nil {
+		t.Fatal(err)
 	}
 	if err := s.Add("u1", "y", strings.Repeat("l", 65)); !errors.Is(err, ErrInvalidAccountLabel) {
 		t.Fatalf("long label: %v", err)
 	}
 
 	a, err := s.Resolve("u1", "Main")
-	if err != nil || a == nil || a.PlayerID != "User_ABC" {
+	if err != nil || a == nil || a.PlayerID != "UserABC9" {
 		t.Fatalf("resolve by label: %+v %v", a, err)
 	}
-	a, _ = s.Resolve("u1", "user_abc")
-	if a == nil || a.PlayerID != "user_abc" {
+	a, _ = s.Resolve("u1", "userabc9")
+	if a == nil || a.PlayerID != "userabc9" {
 		t.Fatalf("resolve exact id before label: %+v", a)
 	}
 	if a, _ = s.Resolve("u1", "missing"); a != nil {
 		t.Fatalf("resolve missing: %+v", a)
 	}
-	if err := s.SetLabel("u1", "user_abc", "alt"); err != nil {
+	if err := s.SetLabel("u1", "userabc9", "alt"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetLabel("u1", "user_abc", "main"); !errors.Is(err, ErrDuplicateAccountLabel) {
+	if err := s.SetLabel("u1", "userabc9", "main"); !errors.Is(err, ErrDuplicateAccountLabel) {
 		t.Fatalf("relabel clash: %v", err)
 	}
-	if err := s.SetLabel("u1", "user_abc", "MAIN"); !errors.Is(err, ErrDuplicateAccountLabel) {
+	if err := s.SetLabel("u1", "userabc9", "MAIN"); !errors.Is(err, ErrDuplicateAccountLabel) {
 		t.Fatalf("relabel clash is case-insensitive: %v", err)
 	}
 	// Re-casing an account's own label is not a clash.
-	if err := s.SetLabel("u1", "user_abc", "ALT"); err != nil {
+	if err := s.SetLabel("u1", "userabc9", "ALT"); err != nil {
 		t.Fatalf("relabel to different case of own label: %v", err)
 	}
-	if err := s.SetLabel("u1", "user_abc", "alt"); err != nil {
+	if err := s.SetLabel("u1", "userabc9", "alt"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetLabel("u1", "nope", "x"); !errors.Is(err, ErrAccountNotFound) {
 		t.Fatalf("relabel missing: %v", err)
 	}
-	if err := s.Remove("u1", "User_ABC"); err != nil {
+	if err := s.Remove("u1", "UserABC9"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Remove("u1", "User_ABC"); !errors.Is(err, ErrAccountNotFound) {
+	if err := s.Remove("u1", "UserABC9"); !errors.Is(err, ErrAccountNotFound) {
 		t.Fatalf("remove twice: %v", err)
 	}
 	list, _ := s.List("u1")
-	if len(list) != 1 || list[0].PlayerID != "user_abc" || list[0].Label != "alt" {
+	if len(list) != 1 || list[0].PlayerID != "userabc9" || list[0].Label != "alt" {
 		t.Fatalf("list = %+v", list)
 	}
 }

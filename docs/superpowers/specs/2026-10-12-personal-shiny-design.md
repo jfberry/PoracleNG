@@ -92,8 +92,8 @@ ALTER TABLE `monsters` ADD COLUMN `personal` TINYINT NOT NULL DEFAULT 0;
   webhook URL (well over 50 characters). The unique keys therefore need large
   index prefixes, which `humans.id` already requires of every install.
 - `player_id` is `VARBINARY` so uniqueness and lookups are case-sensitive and byte-exact under any table collation.
-- `player_id` is an opaque, case-sensitive string of 1–256 bytes (Golbat's
-  limits). Uniqueness is per human: the same player ID may be linked to
+- `player_id` is a case-sensitive string of 1–256 ASCII letters and digits
+  (enforced on input only; the roll itself stays byte-for-byte Golbat). Uniqueness is per human: the same player ID may be linked to
   several humans (shared household account, a channel tracking a group's
   accounts).
 - `label` is optional, unique per human, compared case-insensitively
@@ -398,8 +398,8 @@ DELETE /api/v2/humans/{id}/accounts/{player_id}
 ```
 
 - 409 on duplicate player ID or label; 422 on invalid ID/label or over 50
-  accounts; 404 on unknown human or account. `player_id` is URL-escaped in
-  the path.
+  accounts; 404 on unknown human or account. `player_id` is 1–256 ASCII
+  letters/digits, so it needs no URL escaping.
 - The v2 full tracking snapshot gains an `accounts` array.
 
 ### Other surfaces

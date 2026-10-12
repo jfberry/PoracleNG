@@ -14,11 +14,11 @@ func TestAccountMapper(t *testing.T) {
 		want []string
 	}{
 		{"list", []*discordgo.ApplicationCommandInteractionDataOption{subopt("list")}, []string{"list"}},
-		{"add", []*discordgo.ApplicationCommandInteractionDataOption{subopt("add", sopt("player_id", "User_ABC"), sopt("name", "Main"))}, []string{"add", "Main", "User_ABC"}},
-		{"add no name", []*discordgo.ApplicationCommandInteractionDataOption{subopt("add", sopt("player_id", "User_ABC"))}, []string{"add", "User_ABC"}},
+		{"add", []*discordgo.ApplicationCommandInteractionDataOption{subopt("add", sopt("player_id", "UserABC9"), sopt("name", "Main"))}, []string{"add", "Main", "UserABC9"}},
+		{"add no name", []*discordgo.ApplicationCommandInteractionDataOption{subopt("add", sopt("player_id", "UserABC9"))}, []string{"add", "UserABC9"}},
 		{"remove", []*discordgo.ApplicationCommandInteractionDataOption{subopt("remove", sopt("account", "Main"))}, []string{"remove", "Main"}},
-		{"rename", []*discordgo.ApplicationCommandInteractionDataOption{subopt("rename", sopt("account", "User_ABC"), sopt("name", "alt"))}, []string{"rename", "User_ABC", "alt"}},
-		{"rename clear", []*discordgo.ApplicationCommandInteractionDataOption{subopt("rename", sopt("account", "User_ABC"))}, []string{"rename", "User_ABC"}},
+		{"rename", []*discordgo.ApplicationCommandInteractionDataOption{subopt("rename", sopt("account", "UserABC9"), sopt("name", "alt"))}, []string{"rename", "UserABC9", "alt"}},
+		{"rename clear", []*discordgo.ApplicationCommandInteractionDataOption{subopt("rename", sopt("account", "UserABC9"))}, []string{"rename", "UserABC9"}},
 	}
 	for _, tc := range cases {
 		got, err := Account(tc.opts)
