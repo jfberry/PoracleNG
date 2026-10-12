@@ -44,6 +44,8 @@ func TestDumpSnapshots(t *testing.T) {
 		withOverride("en", "slash.desc.profile", "Manage your profiles"),
 		withOverride("en", "slash.cmd.location", "location"),
 		withOverride("en", "slash.desc.location", "Manage your saved locations"),
+		withOverride("en", "slash.cmd.account", "account"),
+		withOverride("en", "slash.desc.account", "Manage your linked game accounts"),
 		withOverride("en", "slash.cmd.summary", "summary"),
 		withOverride("en", "slash.desc.summary", "Manage scheduled summary digests (e.g. quest)"),
 		withOverride("en", "slash.cmd.start", "start"),
@@ -69,6 +71,7 @@ func TestDumpSnapshots(t *testing.T) {
 		{"cmd.area", "area"},
 		{"cmd.profile", "profile"},
 		{"cmd.location", "location"},
+		{"cmd.account", "account"},
 		{"cmd.summary", "summary"},
 	} {
 		def := buildCommandDef(bundle, c.key, c.canon)

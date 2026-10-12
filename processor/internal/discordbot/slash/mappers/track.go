@@ -58,6 +58,15 @@ func Track(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 
 	appendCommonTail(&tokens, o)
 
+	// personal_shiny / personal_background: only alert when the pokemon is
+	// shiny / event-background for one of the user's linked accounts.
+	if tok := emitFlag(o["personal_shiny"], "personalshiny"); tok != "" {
+		tokens = append(tokens, tok)
+	}
+	if tok := emitFlag(o["personal_background"], "personalbackground"); tok != "" {
+		tokens = append(tokens, tok)
+	}
+
 	// form and costume are compared case-insensitively downstream
 	// (filterByForm lowercases the translation it compares against), but slash
 	// tokens never pass through the text parser's lowercasing — so normalise
