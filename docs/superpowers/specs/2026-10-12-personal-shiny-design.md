@@ -77,10 +77,10 @@ alert and makes Golbat a hard dependency of the processor.
 CREATE TABLE IF NOT EXISTS `player_accounts` (
   `uid`        INT PRIMARY KEY AUTO_INCREMENT,
   `id`         VARCHAR(50)  NOT NULL,
-  `player_id`  VARCHAR(256) NOT NULL,
+  `player_id`  VARBINARY(256) NOT NULL,
   `label`      VARCHAR(64)  NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY `uniq_id_player` (`id`, `player_id`(191)),
+  UNIQUE KEY `uniq_id_player` (`id`, `player_id`),
   UNIQUE KEY `uniq_id_label`  (`id`, `label`)
 ) ENGINE=InnoDB;
 
@@ -88,6 +88,7 @@ ALTER TABLE `monsters` ADD COLUMN `personal` TINYINT NOT NULL DEFAULT 0;
 ```
 
 - `id` is the human ID. Accounts are per human, **not** per profile.
+- `player_id` is `VARBINARY` so uniqueness and lookups are case-sensitive and byte-exact under any table collation; 50×4 + 256 bytes keeps the unique key under InnoDB's 767-byte limit on older MariaDB.
 - `player_id` is an opaque, case-sensitive string of 1–256 bytes (Golbat's
   limits). Uniqueness is per human: the same player ID may be linked to
   several humans (shared household account, a channel tracking a group's
@@ -134,7 +135,7 @@ and the documented deviations.
 
 | Local file | Golbat source | Contents |
 |---|---|---|
-| `javarandom.go` | `derive/javarandom/javarandom.go` | `New`, `Next` only |
+| javarandom/ (subpackage) | derive/javarandom/ | verbatim copy, both files (package name unchanged), so it diffs clean |
 | `rates.go` | `decoder/api_pokemon_shiny.go` | `shinyPrediction`/`cutoff`, `shinyRate`, `shinyRates`, species maxima, refresh loop |
 | `roll.go` | `decoder/api_pokemon_shiny.go` | `shinyPlayer` (`rolls`, `generator`), `shinyCutoff`, `backgroundCutoff`, `backgroundRoll`, `personalLookup`, annotate logic |
 | `adapter.go` | — | webhook → Golbat inputs; public API |
@@ -161,11 +162,13 @@ func (r *Rates) Loaded() bool
 // Returns nil when rates are not loaded or the pokemon is ineligible.
 func (r *Rates) Evaluate(p *webhook.PokemonWebhook) *Evaluation
 
-// For runs the per-player annotate logic over a human's accounts,
-// memoised per player ID within the Evaluation.
-func (e *Evaluation) For(accounts []Account) Result
+func (e *Evaluation) For(accounts []db.PlayerAccount) Result
+type Result struct{ Shiny, Background []db.PlayerAccount }
 
-type Result struct{ Shiny, Background []Account }
+type Checker struct{ … }   // per webhook: Evaluation + state humans, memoised per human
+func NewChecker(ev *Evaluation, humans map[string]*db.Human) *Checker
+func (c *Checker) Allows(humanID string, bits int) bool
+func (c *Checker) Result(humanID string) (Result, bool)
 
 // Variant-level lookups for shinyPossible / shinyRate (see below).
 func (r *Rates) Variant(pokemonID, form, costume int, lat, lon float64) (v VariantInfo, known bool)
@@ -343,11 +346,7 @@ Both sections go into `config.example.toml` and the config-editor schema.
 | `!account remove <player-id\|label>` | self-service or admin; exact player ID first, then label |
 | `!account label <player-id> <label>` | self-service or admin |
 
-- Admins may target others with `user:<id>` (standard `BuildTarget`).
-- **Player IDs must survive parsing verbatim.** The parser lowercases
-  `Args` and, in `RawArgs`, still turns underscores into spaces. Add a
-  `VerbatimArgs` slice to `ParsedCommand` (original case, no underscore
-  substitution) and read the ID from it.
+- **Player IDs must survive parsing verbatim.** `ParsedCommand` gains `VerbatimArgs` (original case, no underscore substitution), copied to `CommandContext.VerbatimArgs`; `!account` reads IDs and labels from it. `BuildTarget` strips any argument beginning `user`/`name`, so hosts call `BuildTargetFor`, which for `cmd.account` only recognises `user:<id>` / `name:<name>`.
 - Translatable command and message keys in `en.json` and the locale files.
 - Slash command `/account` with `list|add|remove|label` subcommands.
 
