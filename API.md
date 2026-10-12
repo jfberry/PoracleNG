@@ -250,7 +250,7 @@ Force a state reload (same as POST /api/reload).
 | `distance` | int | 0 | Distance in metres (0 = use area) |
 | `template` | string | config default | DTS template name |
 | `clean` | bool | false | Auto-delete message after TTH |
-| `personal` | int | 0 | Personal-alert bitmask: `1` = only when shiny for one of the user's linked accounts, `2` = only when the special background applies to a linked account. Unknown bits are dropped. **Omitted on a by-uid update ⇒ the stored value is kept** (pre-personal clients don't clear it). Needs `[shiny_rates]`; see [Linked accounts](#linked-accounts-v2). |
+| `personal` | int | 0 | Personal-alert bitmask: `1` = only when shiny for one of the user's linked accounts, `2` = only when the special background applies to a linked account. Unknown bits are dropped. **Omitted on a by-uid update ⇒ the stored value is kept** (pre-personal clients don't clear it). `personal` is part of rule identity: a create without `uid` whose `personal` differs from an otherwise identical existing rule adds a separate rule rather than updating that one. Needs `[shiny_rates]`; see [Linked accounts](#linked-accounts-v2). |
 
 #### Pokemon change template (`monsterChanged`)
 
