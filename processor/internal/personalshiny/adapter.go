@@ -56,11 +56,6 @@ func (r *Rates) Evaluate(p *webhook.PokemonWebhook) *Evaluation {
 	ev := &Evaluation{encounter: id}
 	ev.shinyCutoff, ev.shinyCapable = s.shinyCutoff(rate, ok, p.Latitude, p.Longitude)
 	ev.backgroundCutoff = s.backgroundCutoff(rate, ok, p.Latitude, p.Longitude)
-	// Species maximum as a cheap rejection, as Golbat's match does: no
-	// variant of this species ever offers a background.
-	if snap.backgroundMaximum[int16(p.PokemonID)] == 0 {
-		ev.backgroundCutoff = 0
-	}
 	return ev
 }
 

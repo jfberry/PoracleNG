@@ -16,20 +16,18 @@ import (
 const MaxPlayers = 50
 const MaxPlayerIDBytes = 256
 
-const dittoPokemonID = 132
-
 // personalLookup packs roll eligibility and costume into one byte:
 // 0 means never personally shiny or background-eligible (Ditto, disguised,
 // or seen only as nearby), otherwise costume+1.
 // Poracle: Golbat reads its Pokemon record and stores the byte in
 // PokemonLookup; Poracle reads the webhook. The webhook has no is_ditto:
 // Golbat sends a detected Ditto as pokemon_id 132 with the disguise in
-// display_pokemon_id, which the pokemon_id and display checks cover.
+// display_pokemon_id, which the pokemon_id (132) and display checks cover.
 // Golbat's costume is a uint8, so out-of-range webhook values are rejected
 // with 255.
 func personalLookup(p *webhook.PokemonWebhook) uint8 {
 	costume := p.Costume
-	if p.PokemonID == dittoPokemonID || costume < 0 || costume >= math.MaxUint8 ||
+	if p.PokemonID == 132 || costume < 0 || costume >= math.MaxUint8 ||
 		p.DisplayPokemonID != 0 && p.DisplayPokemonID != p.PokemonID ||
 		p.SeenType != "wild" && p.SeenType != "encounter" {
 		return 0
