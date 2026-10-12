@@ -8,12 +8,16 @@ import (
 
 // AnnotatePersonal adds the per-user personal shiny/background fields for
 // every matched user with linked accounts, whichever rule matched them.
-// perUser may be nil (no PVP display configured); it is created as needed
-// and returned. A nil checker (feature off) leaves perUser untouched.
+// When the spawn was not evaluated (feed not loaded, or ineligible) only
+// hasLinkedAccounts is set: the personal* fields stay absent rather than
+// claiming "not shiny". perUser may be nil (no PVP display configured); it
+// is created as needed and returned. A nil checker (feature off) leaves
+// perUser untouched.
 func AnnotatePersonal(perUser map[string]map[string]any, matched []webhook.MatchedUser, c *personalshiny.Checker) map[string]map[string]any {
 	if c == nil {
 		return perUser
 	}
+	evaluated := c.Evaluated()
 	for _, u := range matched {
 		res, linked := c.Result(u.ID)
 		if !linked {
@@ -28,6 +32,9 @@ func AnnotatePersonal(perUser map[string]map[string]any, matched []webhook.Match
 			perUser[u.ID] = m
 		}
 		m["hasLinkedAccounts"] = true
+		if !evaluated {
+			continue
+		}
 		m["personalShiny"] = len(res.Shiny) > 0
 		m["personalShinyAccounts"] = displayNames(res.Shiny)
 		m["personalBackground"] = len(res.Background) > 0
