@@ -228,12 +228,17 @@ func MergeApplyGroups(cmds []ParsedCommand) []ParsedCommand {
 		}
 
 		// Collect consecutive cmd.apply entries
+		// Args, RawArgs and VerbatimArgs are rejoined in lockstep so apply
+		// can hand each sub-command its own verbatim args.
 		merged := ParsedCommand{CommandKey: "cmd.apply"}
 		merged.Args = append(merged.Args, cmds[i].Args...)
+		merged.RawArgs = append(merged.RawArgs, cmds[i].RawArgs...)
+		merged.VerbatimArgs = append(merged.VerbatimArgs, cmds[i].VerbatimArgs...)
 		i++
 		for i < len(cmds) && cmds[i].CommandKey == "cmd.apply" {
-			merged.Args = append(merged.Args, "|")
-			merged.Args = append(merged.Args, cmds[i].Args...)
+			merged.Args = append(append(merged.Args, "|"), cmds[i].Args...)
+			merged.RawArgs = append(append(merged.RawArgs, "|"), cmds[i].RawArgs...)
+			merged.VerbatimArgs = append(append(merged.VerbatimArgs, "|"), cmds[i].VerbatimArgs...)
 			i++
 		}
 		result = append(result, merged)
