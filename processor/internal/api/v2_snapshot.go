@@ -47,6 +47,7 @@ type v2SnapshotBody struct {
 	Locations v2Locations                  `json:"locations"`
 	Summaries []v2SummarySchedule          `json:"summaries"`
 	Mutes     []v2MuteItem                 `json:"mutes" doc:"Active (non-expired) alert mutes — same items as GET …/mutes. Mutes are held in memory only and are cleared by a processor restart."`
+	Accounts  []v2AccountItem              `json:"accounts" doc:"Linked game accounts — same items as GET …/accounts."`
 }
 
 type v2SnapshotOutput struct {
@@ -109,6 +110,7 @@ func RegisterV2TrackingSnapshot(api huma.API, deps *TrackingDeps) {
 		out.Body.Locations = snapshotLocations(deps, human.ID, humanFull)
 		out.Body.Summaries = snapshotSummaries(deps, human.ID)
 		out.Body.Mutes = snapshotMutes(deps, human.ID)
+		out.Body.Accounts = snapshotAccounts(deps, human.ID)
 		return out, nil
 	})
 }
@@ -134,6 +136,23 @@ func snapshotLocations(deps *TrackingDeps, id string, humanFull *store.Human) v2
 			Latitude:  humanFull.Latitude,
 			Longitude: humanFull.Longitude,
 		}
+	}
+	return out
+}
+
+// snapshotAccounts lists the human's linked accounts; nil store => empty.
+func snapshotAccounts(deps *TrackingDeps, id string) []v2AccountItem {
+	out := make([]v2AccountItem, 0)
+	if deps.Accounts == nil {
+		return out
+	}
+	list, err := deps.Accounts.List(id)
+	if err != nil {
+		log.Errorf("v2 snapshot: accounts %s: %s", id, err)
+		return out
+	}
+	for _, a := range list {
+		out = append(out, accountToItem(a))
 	}
 	return out
 }

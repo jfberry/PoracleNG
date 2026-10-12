@@ -141,6 +141,7 @@ func registerAllHumaOpsForTest(humaAPI huma.API) {
 	RegisterV2Locations(humaAPI, trackingDeps)
 	RegisterV2Profiles(humaAPI, trackingDeps)
 	RegisterV2Mutes(humaAPI, trackingDeps)
+	RegisterV2Accounts(humaAPI, trackingDeps)
 
 	// Strict v2 roles.
 	RegisterV2Roles(humaAPI, &RoleDeps{})
