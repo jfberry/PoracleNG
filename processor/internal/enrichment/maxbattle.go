@@ -140,12 +140,10 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 			}
 
 			// Shiny possibility (mirrors raid).
-			if e.ShinyProvider != nil {
-				if e.ShinyProvider.GetShinyRate(mb.BattlePokemonID) > 0 {
-					m["shinyPossible"] = true
+			if sf := e.shinyFacts(mb.BattlePokemonID, mb.BattlePokemonForm, mb.BattlePokemonCostume, lat, lon); sf.answered {
+				m["shinyPossible"] = sf.possible
+				if sf.possible {
 					m["shinyPossibleEmojiKey"] = "shiny"
-				} else {
-					m["shinyPossible"] = false
 				}
 			}
 		}
