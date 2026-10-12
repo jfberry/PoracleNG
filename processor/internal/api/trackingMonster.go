@@ -526,8 +526,8 @@ func keepStoredPersonal(updates []db.MonsterTrackingAPI, keep map[int64]bool, tr
 		stored[tracked[i].UID] = tracked[i].Personal
 	}
 	for i := range updates {
-		if keep[updates[i].UID] {
-			updates[i].Personal = stored[updates[i].UID]
+		if p, ok := stored[updates[i].UID]; ok && keep[updates[i].UID] {
+			updates[i].Personal = p
 		}
 	}
 }

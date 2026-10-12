@@ -54,6 +54,9 @@ func TestV1Monster_PersonalCreateAndMask(t *testing.T) {
 	r, ms := newV1PersonalHarness(t)
 	v1PostMonster(t, r, `{"pokemon_id":25,"personal":1}`)
 	v1PostMonster(t, r, `{"pokemon_id":26,"personal":7}`)
+	if n := len(ms.AllRows()); n != 2 {
+		t.Fatalf("want 2 rows, got %d", n)
+	}
 	for _, row := range ms.AllRows() {
 		want := 1
 		if row.PokemonID == 26 {
@@ -70,9 +73,9 @@ func TestV1Monster_PersonalCreateAndMask(t *testing.T) {
 func TestV1Monster_KeepStoredPersonal(t *testing.T) {
 	tracked := []db.MonsterTrackingAPI{{UID: 5, Personal: 1}, {UID: 6, Personal: 3}}
 	updates := []db.MonsterTrackingAPI{
-		{UID: 5, MinIV: 90},   // omitted -> keep 1
-		{UID: 6, Personal: 0}, // explicit 0 -> not in keep set, stays 0
-		{UID: 99, MinIV: 10},  // omitted but not stored -> 0
+		{UID: 5, MinIV: 90},               // omitted -> keep 1
+		{UID: 6, Personal: 0},             // explicit 0 -> not in keep set, stays 0
+		{UID: 99, MinIV: 10, Personal: 2}, // omitted, not stored -> left as sent
 	}
 	keepStoredPersonal(updates, map[int64]bool{5: true, 99: true}, tracked)
 	if updates[0].Personal != 1 || updates[0].MinIV != 90 {
@@ -81,7 +84,7 @@ func TestV1Monster_KeepStoredPersonal(t *testing.T) {
 	if updates[1].Personal != 0 {
 		t.Fatalf("uid6 explicit clear lost: %+v", updates[1])
 	}
-	if updates[2].Personal != 0 {
+	if updates[2].Personal != 2 {
 		t.Fatalf("uid99: %+v", updates[2])
 	}
 }
