@@ -1,0 +1,45 @@
+# Keeping personalshiny in sync with Golbat
+
+This package copies Golbat's personal shiny implementation so Poracle's
+alerts agree with a Golbat-backed map for the same spawn, rates and player.
+
+- **Upstream:** UnownHash/Golbat#423 — "Add personal shiny/background filtering and annotation to the pokemon v3 scan"
+- **Pinned commit:** `13f90b3d31e2cf5245754b7715a79aff1f75b954` (PR head; re-pin to the merge commit once #423 merges)
+
+## File mapping
+
+| Poracle | Golbat |
+|---|---|
+| `javarandom/javarandom.go`, `javarandom/javarandom_test.go` | `derive/javarandom/` — verbatim |
+| `rates.go` | `decoder/api_pokemon_shiny.go`: `shinyScale`, `defaultShinyCutoff`, `shinyPrediction`/`cutoff`, `shinyVariant`, `shinyRate`, `shinyRates`, `StartShinyRates`, `refreshShinyRates` |
+| `roll.go` | `decoder/api_pokemon_shiny.go`: `maxPersonalPlayers`, `maxPersonalPlayerIDBytes`, `personalLookup`, `shinyPlayer` (`rolls`, `generator`), `shinyScan` (`rate`, `zoneAt`, `shinyCutoff`, `backgroundCutoff`), `backgroundRoll` |
+| `adapter.go` | Poracle only; `Evaluate` + `Evaluation.player` are the two halves of `shinyScan.annotate` |
+| `roll_test.go`, `adapter_test.go`, `rates_test.go` | `decoder/api_pokemon_shiny_test.go` vectors: `TestPersonalShinyScan` (rolls + annotation), `TestPersonalDrawOrder`, `TestShinyZonePerSpawn`, `TestShinyRatesRejectMissingList` |
+
+Not copied: the scan request plumbing (`ScanPokemonWithShiny`, `matchClause`,
+`match`, `first`, the `add` closure, `ErrPersonalRequest`) — Poracle evaluates
+webhooks, not scan requests.
+
+## Intentional differences (each marked `// Poracle:` in the code)
+
+1. Package globals (`shinyRatesSnapshot`, `config.Config.ShinyRates`) are fields on `Rates`; `StartShinyRates` is `(*Rates).Start` with a matching `Stop`; refresh outcomes are recorded for `Status`.
+2. `refreshShinyRates`' loop variable `r` is `rt` (the receiver is `r`).
+3. Timezone lookup uses `geo.TimezoneName` (tzf **default** finder, no UTC fallback) instead of `tz.SearchTimezone` (tzf **full** finder). Within ~111 m of a zone border the two can disagree, so results can differ only where the feed has per-timezone overrides active there. Accepted.
+4. `personalLookup` reads the webhook, not Golbat's Pokemon record. The webhook has no `is_ditto`; a detected Ditto arrives as `pokemon_id` 132 with the disguise in `display_pokemon_id`, which the existing checks cover. Out-of-range costumes are rejected like costume 255.
+5. `maxPersonalPlayers` / `maxPersonalPlayerIDBytes` are exported as `MaxPlayers` / `MaxPlayerIDBytes` and enforced per human by the account store.
+6. The "not loaded yet" warning says "personal shiny alerts" instead of "personal scans".
+7. Poracle-only uses of the feed: `ShinyVariant` / `Boosted` (shinyPossible, shinyRate, `!info`).
+
+## Updating
+
+```bash
+cd /path/to/Golbat && git fetch origin
+git diff 13f90b3d31e2cf5245754b7715a79aff1f75b954..origin/main -- \
+  decoder/api_pokemon_shiny.go decoder/api_pokemon_shiny_test.go \
+  derive/javarandom docs/personal-shinies.md
+```
+
+Port each change into the mapped file, re-copy any changed test vectors,
+run `go test ./internal/personalshiny/...`, then bump the pinned commit above.
+If Golbat changes draw order, eligibility or the feed format, its updated
+vectors will fail here until ported.
