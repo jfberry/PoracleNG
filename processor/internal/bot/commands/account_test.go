@@ -100,3 +100,27 @@ func TestAccountRemoveAndLabel(t *testing.T) {
 		t.Fatalf("list output: %s", out)
 	}
 }
+
+// A delegated channel admin may manage the channel they are in, but not
+// another channel or a webhook reached by a target override.
+func TestAccountDelegatedChannelAdminOnlyCurrentChannel(t *testing.T) {
+	ctx, accts := accountCtx(t, false, false)
+	ctx.Permissions.ChannelTracking = true
+	ctx.ChannelID = "chan1"
+
+	ctx.TargetID, ctx.TargetType = "chan1", "discord:channel"
+	if out := runAccount(ctx, "add", "abc"); !strings.Contains(out, "✅") {
+		t.Fatalf("delegated admin refused on own channel: %s", out)
+	}
+	ctx.TargetID, ctx.TargetType = "chan2", "discord:channel"
+	if out := runAccount(ctx, "add", "abc"); !strings.Contains(out, "🙅") {
+		t.Fatalf("delegated admin linked another channel: %s", out)
+	}
+	ctx.TargetID, ctx.TargetType = "https://discord.com/api/webhooks/1/x", "webhook"
+	if out := runAccount(ctx, "add", "abc"); !strings.Contains(out, "🙅") {
+		t.Fatalf("delegated channel admin linked a webhook: %s", out)
+	}
+	if list, _ := accts.List("chan2"); len(list) != 0 {
+		t.Fatalf("stored on chan2: %+v", list)
+	}
+}
