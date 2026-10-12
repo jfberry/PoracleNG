@@ -135,3 +135,17 @@ func TestGetTimezone_SimplifiedBoundaryOffsets(t *testing.T) {
 		t.Errorf("GetTimezone(%v, %v) = %q, want %q (simplified-boundary behaviour changed)", lat, lon, got, "Asia/Kolkata")
 	}
 }
+
+func TestTimezoneNameHasNoUTCFallback(t *testing.T) {
+	if got := TimezoneName(33.45, -112.07); got != "America/Phoenix" {
+		t.Fatalf("Phoenix = %q", got)
+	}
+	// Open ocean has no zone polygon in the default finder's data; Golbat's
+	// tz.SearchTimezone returns "" there and so must this.
+	if got := TimezoneName(0, -140); got != "" && got != "Etc/GMT+9" {
+		t.Fatalf("ocean = %q, want empty (or the Etc zone tzf assigns)", got)
+	}
+	if got := GetTimezone(0, -140); got == "" {
+		t.Fatal("GetTimezone must keep its UTC fallback")
+	}
+}
