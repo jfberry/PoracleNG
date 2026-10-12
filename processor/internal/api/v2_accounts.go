@@ -120,9 +120,14 @@ func RegisterV2Accounts(humaAPI huma.API, deps *TrackingDeps) {
 			return nil, accountStoreError("add", in.ID, err)
 		}
 		reloadState(deps)
+		// Read back for the stored created_at. The link already succeeded, so
+		// a failed read-back still answers 201, built from the request.
 		a, err := deps.Accounts.Resolve(in.ID, in.Body.PlayerID)
-		if err != nil || a == nil {
-			return nil, accountStoreError("add", in.ID, errors.Join(err, store.ErrAccountNotFound))
+		if err != nil {
+			log.Warnf("v2 accounts: add %s: read back: %s", in.ID, err)
+		}
+		if err != nil || a == nil || a.PlayerID != in.Body.PlayerID {
+			a = &db.PlayerAccount{ID: in.ID, PlayerID: in.Body.PlayerID, Label: in.Body.Label, CreatedAt: time.Now()}
 		}
 		out := &v2AccountCreatedOutput{Status: 201}
 		out.Body.Account = accountToItem(*a)

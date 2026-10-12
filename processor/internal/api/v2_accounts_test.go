@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -128,5 +130,35 @@ func TestV2Accounts_InSnapshot(t *testing.T) {
 	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/tracking", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"accounts":[{`) {
 		t.Fatalf("snapshot: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// resolveFailingAccounts links normally but fails every Resolve, as a DB
+// error after a successful insert would.
+type resolveFailingAccounts struct{ store.PlayerAccountStore }
+
+func (resolveFailingAccounts) Resolve(string, string) (*db.PlayerAccount, error) {
+	return nil, errors.New("connection reset")
+}
+
+func TestV2Accounts_AddSucceedsWhenReadBackFails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	humaAPI := NewHumaAPI(r, r.Group("/api"), "test")
+	humans := store.NewMockHumanStore()
+	humans.AddHuman(&store.Human{ID: "u1", Type: "discord:user", Name: "User1", Enabled: true, Language: "en", CurrentProfileNo: 1})
+	accounts := store.NewMockPlayerAccountStore()
+	RegisterV2Accounts(humaAPI, &TrackingDeps{Humans: humans, Accounts: resolveFailingAccounts{accounts}, Config: &config.Config{}})
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/accounts", `{"player_id":"User_ABC","label":"main"}`)
+	if w.Code != 201 {
+		t.Fatalf("add with failing read-back: %d %s (the link was stored)", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"player_id":"User_ABC"`) || !strings.Contains(body, `"label":"main"`) || !strings.Contains(body, `"created_at"`) {
+		t.Fatalf("body: %s", body)
+	}
+	if list, _ := accounts.List("u1"); len(list) != 1 {
+		t.Fatalf("stored = %+v", list)
 	}
 }
