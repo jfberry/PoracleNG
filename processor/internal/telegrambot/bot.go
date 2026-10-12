@@ -436,7 +436,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 		if cmd.CommandKey == "cmd.poracle" {
 			remainingArgs = cmd.Args
 		} else {
-			target, args, err := bot.BuildTarget(ctx, cmd.Args)
+			target, args, err := bot.BuildTargetFor(ctx, cmd.CommandKey, cmd.Args)
 			if err != nil {
 				_, _ = b.sendTopicMessage(chatID, threadID, bot.LocalizeTargetError(b.Translations.For(userLang), err))
 				continue
@@ -458,6 +458,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 			}
 		}
 
+		ctx.VerbatimArgs = cmd.VerbatimArgs
 		replies := bot.RunLocked(handler, ctx, remainingArgs)
 		replies = bot.ApplyMaintenanceSuffix(replies, b.Dispatcher, b.Translations.For(userLang).T("cmd.maintenance.active_suffix"))
 		b.sendReplies(chatID, threadID, m.From.ID, replies)

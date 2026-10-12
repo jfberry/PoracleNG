@@ -23,6 +23,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/logbuffer"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
@@ -37,9 +38,15 @@ import (
 // BotDeps holds shared dependencies needed by both Discord and Telegram bots.
 // Platform-specific bot Config structs embed this to avoid duplication.
 type BotDeps struct {
-	DB            *sqlx.DB
-	Humans        store.HumanStore
-	Tracking      *store.TrackingStores
+	DB       *sqlx.DB
+	Humans   store.HumanStore
+	Tracking *store.TrackingStores
+	// PlayerAccounts manages linked game accounts (!account). nil disables
+	// the command.
+	PlayerAccounts store.PlayerAccountStore
+	// ShinyRates is the [shiny_rates] feed (never nil in production; may not
+	// be loaded). Used by !info and !poracle-admin status.
+	ShinyRates    *personalshiny.Rates
 	Cfg           *config.Config
 	StateMgr      *state.Manager
 	GameData      *gamedata.GameData
@@ -343,10 +350,16 @@ type CommandContext struct {
 	AreaLogic *AreaLogic
 
 	// Injected dependencies
-	DB            *sqlx.DB // DEPRECATED — use Humans/Tracking stores. Kept during migration.
-	Humans        store.HumanStore
-	Tracking      *store.TrackingStores
-	MuteStore     *mute.Store
+	DB             *sqlx.DB // DEPRECATED — use Humans/Tracking stores. Kept during migration.
+	Humans         store.HumanStore
+	Tracking       *store.TrackingStores
+	MuteStore      *mute.Store
+	PlayerAccounts store.PlayerAccountStore
+	ShinyRates     *personalshiny.Rates
+	// VerbatimArgs are the command's arguments exactly as typed (original
+	// case, underscores kept), set by the host before Run. Commands that take
+	// opaque values (player IDs) read them from here; Args are normalised.
+	VerbatimArgs  []string
 	Config        *config.Config
 	StateMgr      *state.Manager
 	GameData      *gamedata.GameData
@@ -423,6 +436,8 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		Humans:             deps.Humans,
 		Tracking:           deps.Tracking,
 		MuteStore:          deps.MuteStore,
+		PlayerAccounts:     deps.PlayerAccounts,
+		ShinyRates:         deps.ShinyRates,
 		StateMgr:           deps.StateMgr,
 		GameData:           deps.GameData,
 		Translations:       deps.Translations,
