@@ -76,7 +76,7 @@ alert and makes Golbat a hard dependency of the processor.
 ```sql
 CREATE TABLE IF NOT EXISTS `player_accounts` (
   `uid`        INT PRIMARY KEY AUTO_INCREMENT,
-  `id`         VARCHAR(50)  NOT NULL,
+  `id`         VARCHAR(255) NOT NULL,
   `player_id`  VARBINARY(256) NOT NULL,
   `label`      VARCHAR(64)  NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -87,8 +87,11 @@ CREATE TABLE IF NOT EXISTS `player_accounts` (
 ALTER TABLE `monsters` ADD COLUMN `personal` TINYINT NOT NULL DEFAULT 0;
 ```
 
-- `id` is the human ID. Accounts are per human, **not** per profile.
-- `player_id` is `VARBINARY` so uniqueness and lookups are case-sensitive and byte-exact under any table collation; 50×4 + 256 bytes keeps the unique key under InnoDB's 767-byte limit on older MariaDB.
+- `id` is the human ID. Accounts are per human, **not** per profile. It is
+  `VARCHAR(255)` like `humans.id`, because webhook humans are keyed by their
+  webhook URL (well over 50 characters). The unique keys therefore need large
+  index prefixes, which `humans.id` already requires of every install.
+- `player_id` is `VARBINARY` so uniqueness and lookups are case-sensitive and byte-exact under any table collation.
 - `player_id` is an opaque, case-sensitive string of 1–256 bytes (Golbat's
   limits). Uniqueness is per human: the same player ID may be linked to
   several humans (shared household account, a channel tracking a group's

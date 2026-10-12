@@ -14,7 +14,7 @@ func openPlayerAccountsDB(t *testing.T) PlayerAccountStore {
 	exec("DROP TABLE IF EXISTS `player_accounts`")
 	exec("CREATE TABLE `player_accounts` (" +
 		"`uid` INT PRIMARY KEY AUTO_INCREMENT," +
-		"`id` VARCHAR(50) NOT NULL," +
+		"`id` VARCHAR(255) NOT NULL," +
 		"`player_id` VARBINARY(256) NOT NULL," +
 		"`label` VARCHAR(64) NULL," +
 		"`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
@@ -31,4 +31,8 @@ func TestSQLPlayerAccounts(t *testing.T) {
 
 func TestSQLPlayerAccountsLimit(t *testing.T) {
 	runPlayerAccountStoreLimitContract(t, openPlayerAccountsDB(t))
+}
+
+func TestSQLPlayerAccountsLongID(t *testing.T) {
+	runPlayerAccountStoreLongIDContract(t, openPlayerAccountsDB(t))
 }
