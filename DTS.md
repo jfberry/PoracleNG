@@ -396,13 +396,13 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 
 ### Other
 
-Personal fields (`personalShiny`, `personalShinyAccounts`, `personalBackground`, `personalBackgroundAccounts`, `hasLinkedAccounts`) are set for every matched user with linked accounts, regardless of which rule matched. They are empty in `!poracle-test` and editor previews. Example:
+Personal fields (`personalShiny`, `personalShinyAccounts`, `personalBackground`, `personalBackgroundAccounts`, `hasLinkedAccounts`) are set for every matched user with linked accounts, regardless of which rule matched. `hasLinkedAccounts` is always set for such users; the four `personal*` fields are absent when the spawn could not be evaluated (the `[shiny_rates]` feed is not configured or not yet loaded, or the spawn is ineligible). Only sightings whose `seen_type` is `wild` or `encounter` are evaluated (as Golbat does), so personal rules never match, and these fields are never set, for scanners that don't send `seen_type`. They are empty in `!poracle-test` and editor previews. Example:
 
 ```handlebars
 {{#if personalShiny}}✨ Shiny for {{join personalShinyAccounts ", "}}{{/if}}
 ```
 
-When `[shiny_rates]` is configured, `shinyPossible` is feed-backed (variant-aware: costume/form/boost); `shinyStats` keeps its observed meaning (rolling-window stats).
+When `[shiny_rates]` is configured, `shinyPossible` is feed-backed (the feed's rate for the species/form/costume, with per-timezone event overrides applied at the spawn's location); `shinyStats` keeps its observed meaning (rolling-window stats).
 
 | Field | Type | Description |
 |-------|------|-------------|

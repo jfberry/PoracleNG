@@ -227,6 +227,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		if ps.enricher.PVPDisplay != nil && perLang != nil && len(matched) > 0 {
 			perUser = ps.enricher.PokemonPerUser(perLang, matched)
 		}
+		// Like per-user PVP, prior-only recipients (priorOnlyUsers) deliberately get no personal fields.
 		perUser = enrichment.AnnotatePersonal(perUser, matched, processed.Personal)
 		metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
 
