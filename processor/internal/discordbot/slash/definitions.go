@@ -504,12 +504,12 @@ func accountOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		subCommand(bundle, "account.list", "list", "List your linked game accounts"),
 		subCommand(bundle, "account.add", "add", "Link a game account (player ID)",
 			stringOpt(bundle, "account.add.player_id", "player_id", "Your in-game player ID (exactly as shown)", true, false),
-			stringOpt(bundle, "account.add.label", "label", "Optional short name, e.g. main or alt", false, false)),
+			stringOpt(bundle, "account.add.name", "name", "Optional short name, e.g. main or alt", false, false)),
 		subCommand(bundle, "account.remove", "remove", "Unlink a game account",
-			stringOpt(bundle, "account.remove.account", "account", "Player ID or label", true, false)),
-		subCommand(bundle, "account.label", "label", "Set or clear an account's label",
-			stringOpt(bundle, "account.label.account", "account", "Player ID or label", true, false),
-			stringOpt(bundle, "account.label.label", "label", "New label (leave empty to clear)", false, false)),
+			stringOpt(bundle, "account.remove.account", "account", "Name or player ID", true, false)),
+		subCommand(bundle, "account.rename", "rename", "Rename an account (or clear its name)",
+			stringOpt(bundle, "account.rename.account", "account", "Name or player ID", true, false),
+			stringOpt(bundle, "account.rename.name", "name", "New name (leave empty to clear)", false, false)),
 	}
 }
 

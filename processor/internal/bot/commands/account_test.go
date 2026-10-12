@@ -35,7 +35,7 @@ func runAccount(ctx *bot.CommandContext, verbatim ...string) string {
 
 func TestAccountSelfServiceAddKeepsIDVerbatim(t *testing.T) {
 	ctx, accts := accountCtx(t, true, false)
-	out := runAccount(ctx, "add", "User_ABC", "Main")
+	out := runAccount(ctx, "add", "Main", "User_ABC")
 	if !strings.Contains(out, "✅") {
 		t.Fatalf("add: %s", out)
 	}
@@ -75,15 +75,15 @@ func TestAccountChannelTargetsAdminOnly(t *testing.T) {
 	}
 }
 
-func TestAccountRemoveAndLabel(t *testing.T) {
+func TestAccountRemoveAndRename(t *testing.T) {
 	ctx, accts := accountCtx(t, true, false)
-	runAccount(ctx, "add", "Abc_1", "main")
+	runAccount(ctx, "add", "main", "Abc_1")
 	runAccount(ctx, "add", "def")
-	if out := runAccount(ctx, "label", "def", "alt"); !strings.Contains(out, "✅") {
-		t.Fatalf("label: %s", out)
+	if out := runAccount(ctx, "rename", "def", "alt"); !strings.Contains(out, "✅") {
+		t.Fatalf("rename: %s", out)
 	}
-	if out := runAccount(ctx, "label", "def", "MAIN"); !strings.Contains(out, "🙅") {
-		t.Fatalf("duplicate label accepted: %s", out)
+	if out := runAccount(ctx, "rename", "def", "MAIN"); !strings.Contains(out, "🙅") {
+		t.Fatalf("duplicate name accepted: %s", out)
 	}
 	if out := runAccount(ctx, "remove", "Main"); !strings.Contains(out, "✅") {
 		t.Fatalf("remove by label: %s", out)
@@ -135,9 +135,9 @@ func TestApplyAccountKeepsVerbatimArgs(t *testing.T) {
 	reg.Register(&AccountCommand{})
 	ctx.Registry = reg
 
-	verbatim := []string{"u2", "|", "account", "add", "User_ABC", "Main"}
+	verbatim := []string{"u2", "|", "account", "add", "Main", "User_ABC"}
 	ctx.VerbatimArgs = verbatim
-	lower := []string{"u2", "|", "account", "add", "user abc", "main"}
+	lower := []string{"u2", "|", "account", "add", "main", "user abc"}
 	out := (&ApplyCommand{}).Run(ctx, lower)
 	list, _ := accts.List("u2")
 	if len(list) != 1 || list[0].PlayerID != "User_ABC" || list[0].Label != "Main" {
@@ -150,5 +150,54 @@ func TestApplyAccountKeepsVerbatimArgs(t *testing.T) {
 	(&ApplyCommand{}).Run(ctx, []string{"u2", "|", "account", "add", "other"})
 	if list, _ = accts.List("u2"); len(list) != 2 || list[1].PlayerID != "other" {
 		t.Fatalf("fallback stored = %+v", list)
+	}
+}
+
+func TestAccountAddThreeArgsIsUsage(t *testing.T) {
+	ctx, accts := accountCtx(t, true, false)
+	out := runAccount(ctx, "add", "a", "b", "c")
+	if !strings.Contains(out, "Valid commands are") {
+		t.Fatalf("expected usage: %s", out)
+	}
+	if list, _ := accts.List("u1"); len(list) != 0 {
+		t.Fatalf("stored: %+v", list)
+	}
+}
+
+func TestAccountAddIDOnlyIsUnnamed(t *testing.T) {
+	ctx, accts := accountCtx(t, true, false)
+	runAccount(ctx, "add", "Solo_ID")
+	list, _ := accts.List("u1")
+	if len(list) != 1 || list[0].PlayerID != "Solo_ID" || list[0].Label != "" {
+		t.Fatalf("stored = %+v", list)
+	}
+}
+
+func TestAccountRenameByIDAndClear(t *testing.T) {
+	ctx, accts := accountCtx(t, true, false)
+	runAccount(ctx, "add", "main", "Abc_1")
+	if out := runAccount(ctx, "rename", "Abc_1", "alt"); !strings.Contains(out, "✅") {
+		t.Fatalf("rename by id: %s", out)
+	}
+	if list, _ := accts.List("u1"); list[0].Label != "alt" {
+		t.Fatalf("after rename = %+v", list)
+	}
+	if out := runAccount(ctx, "rename", "alt"); !strings.Contains(out, "✅") {
+		t.Fatalf("clear: %s", out)
+	}
+	if list, _ := accts.List("u1"); list[0].Label != "" {
+		t.Fatalf("after clear = %+v", list)
+	}
+	if out := runAccount(ctx, "label", "Abc_1", "x"); strings.Contains(out, "✅") {
+		t.Fatalf("label subcommand should be gone: %s", out)
+	}
+}
+
+func TestAccountBareShowsListThenUsage(t *testing.T) {
+	ctx, _ := accountCtx(t, true, false)
+	runAccount(ctx, "add", "main", "Abc_1")
+	out := runAccount(ctx)
+	if !strings.Contains(out, "main") || !strings.Contains(out, "Valid commands are") {
+		t.Fatalf("bare output: %s", out)
 	}
 }

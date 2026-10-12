@@ -346,14 +346,14 @@ Both sections go into `config.example.toml` and the config-editor schema.
 
 | Form | Who |
 |---|---|
-| `!account` / `!account list` | anyone, own accounts: label, masked ID, date |
-| `!account add <player-id> [label]` | self-service or admin |
-| `!account remove <player-id\|label>` | self-service or admin; exact player ID first, then label |
-| `!account label <player-id> <label>` | self-service or admin |
+| `!account` / `!account list` | anyone, own accounts: name, masked ID, date (bare `!account` also prints the usage line, like `!location`) |
+| `!account add <name> <player-id>` / `!account add <player-id>` | self-service or admin; name first like `!location add`; one arg = unnamed account; more than two args = usage error |
+| `!account remove <name\|player-id>` | self-service or admin; exact player ID first, then name |
+| `!account rename <name\|player-id> [new-name]` | self-service or admin; omit the new name to clear it (replaces the earlier `label` subcommand) |
 
-- **Player IDs must survive parsing verbatim.** `ParsedCommand` gains `VerbatimArgs` (original case, no underscore substitution), copied to `CommandContext.VerbatimArgs`; `!account` reads IDs and labels from it. `BuildTarget` strips any argument beginning `user`/`name`, so hosts call `BuildTargetFor`, which for `cmd.account` only recognises `user:<id>` / `name:<name>`.
+- **Player IDs must survive parsing verbatim.** `ParsedCommand` gains `VerbatimArgs` (original case, no underscore substitution), copied to `CommandContext.VerbatimArgs`; `!account` reads IDs and names from it. `BuildTarget` strips any argument beginning `user`/`name`, so hosts call `BuildTargetFor`, which for `cmd.account` only recognises `user:<id>` / `name:<name>`.
 - Translatable command and message keys in `en.json` and the locale files.
-- Slash command `/account` with `list|add|remove|label` subcommands.
+- Slash command `/account` with `list|add|remove|rename` subcommands (`add`: required `player_id`, optional `name`). Renaming for `!location`/`!profile` is tracked in #256.
 
 ### `!track`
 
