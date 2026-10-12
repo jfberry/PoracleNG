@@ -69,6 +69,27 @@ func runPlayerAccountStoreContract(t *testing.T, s PlayerAccountStore) {
 	}
 }
 
+// runPlayerAccountStoreLongIDContract checks that a webhook human, whose ID
+// is its (long) webhook URL, can link accounts.
+func runPlayerAccountStoreLongIDContract(t *testing.T, s PlayerAccountStore) {
+	t.Helper()
+	long := "https://discord.com/api/webhooks/" + strings.Repeat("w", 200-len("https://discord.com/api/webhooks/"))
+	if len(long) != 200 {
+		t.Fatalf("test id length %d", len(long))
+	}
+	if err := s.Add(long, "Player1", "main"); err != nil {
+		t.Fatalf("add for 200-char human id: %v", err)
+	}
+	a, err := s.Resolve(long, "main")
+	if err != nil || a == nil || a.PlayerID != "Player1" || a.ID != long {
+		t.Fatalf("resolve for 200-char human id: %+v %v", a, err)
+	}
+	list, err := s.List(long)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list for 200-char human id: %+v %v", list, err)
+	}
+}
+
 // runPlayerAccountStoreLimitContract expects an empty store for human "lim".
 func runPlayerAccountStoreLimitContract(t *testing.T, s PlayerAccountStore) {
 	t.Helper()
@@ -88,4 +109,8 @@ func TestMockPlayerAccounts(t *testing.T) {
 
 func TestMockPlayerAccountsLimit(t *testing.T) {
 	runPlayerAccountStoreLimitContract(t, NewMockPlayerAccountStore())
+}
+
+func TestMockPlayerAccountsLongID(t *testing.T) {
+	runPlayerAccountStoreLongIDContract(t, NewMockPlayerAccountStore())
 }
