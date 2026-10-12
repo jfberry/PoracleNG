@@ -421,7 +421,7 @@ When `[shiny_rates]` is configured, `shinyPossible` is feed-backed (the feed's r
 | `shinyRate` | int | Expected shiny rate (1 in N) from the `[shiny_rates]` feed. Also on `quest` and `nest`. Absent without the feed or for variants the feed doesn't list |
 | `shinyRateBoosted` | bool | The feed's shiny rate here is above the 1/512 base (an event). Same availability as `shinyRate` |
 | `personalShiny` | bool | Per-user (pokemon only). True when the pokemon is shiny for one of the user's linked accounts, whichever of their rules matched |
-| `personalShinyAccounts` | array | Labels of the accounts it is shiny for; unlabelled accounts appear as `…` plus the last 4 characters of the player ID (full IDs are never emitted) |
+| `personalShinyAccounts` | array | Names of the accounts it is shiny for; unnamed accounts appear as `…` plus the last 4 characters of the player ID (full IDs are never emitted) |
 | `personalBackground` | bool | Per-user. True when the special background applies to a linked account |
 | `personalBackgroundAccounts` | array | Same format as `personalShinyAccounts`, for the background |
 | `hasLinkedAccounts` | bool | Per-user. The user has at least one linked account |
