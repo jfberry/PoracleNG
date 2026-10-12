@@ -1,6 +1,10 @@
 package enrichment
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
+)
 
 type fakeObserved map[int]float64
 
@@ -11,8 +15,11 @@ type fakeFeed map[[3]int]struct {
 	p         float64
 }
 
-func (f fakeFeed) ShinyVariant(id, form, costume int, _, _ float64) (bool, float64, bool) {
+func (f fakeFeed) ShinyVariantForm(id, form, defaultForm, costume int, _, _ float64) (bool, float64, bool) {
 	v, ok := f[[3]int{id, form, costume}]
+	if !ok && form == 0 && defaultForm != 0 {
+		v, ok = f[[3]int{id, defaultForm, costume}]
+	}
 	return v.supported, v.p, ok
 }
 
@@ -58,5 +65,20 @@ func TestShinyFactsBaseRateNotBoosted(t *testing.T) {
 	e := &Enricher{ShinyFeed: fakeFeed{{25, 0, 0}: {true, 1.0 / 512}}}
 	if f := e.shinyFacts(25, 0, 0, 0, 0); f.boosted || f.oneIn != 512 {
 		t.Fatalf("1/512 = %+v", f)
+	}
+}
+
+func TestShinyFactsFormZeroUsesDefaultForm(t *testing.T) {
+	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+		{ID: 25, Form: 0}: {PokemonID: 25, DefaultFormID: 598},
+	}}
+	e := &Enricher{GameData: gd, ShinyFeed: fakeFeed{{25, 598, 0}: {true, 0.04}}}
+	if f := e.shinyFacts(25, 0, 0, 0, 0); !f.answered || !f.possible || f.oneIn != 25 {
+		t.Fatalf("form 0 via default form = %+v", f)
+	}
+	// Nil GameData: no fallback, nothing listed under form 0.
+	e = &Enricher{ShinyFeed: fakeFeed{{25, 598, 0}: {true, 0.04}}}
+	if f := e.shinyFacts(25, 0, 0, 0, 0); f.answered {
+		t.Fatalf("nil GameData = %+v", f)
 	}
 }

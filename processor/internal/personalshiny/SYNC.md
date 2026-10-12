@@ -28,7 +28,7 @@ webhooks, not scan requests.
 4. `personalLookup` reads the webhook, not Golbat's Pokemon record. The webhook has no `is_ditto`; a detected Ditto arrives as `pokemon_id` 132 with the disguise in `display_pokemon_id`, which the existing checks cover. Out-of-range costumes are rejected like costume 255.
 5. `maxPersonalPlayers` / `maxPersonalPlayerIDBytes` are exported as `MaxPlayers` / `MaxPlayerIDBytes` and enforced per human by the account store.
 6. The "not loaded yet" warning says "personal shiny alerts" instead of "personal scans".
-7. Poracle-only uses of the feed: `ShinyVariant` / `BaseShinyVariant` (override-free variant lookup for `!info`'s base rate) / `Boosted` (shinyPossible, shinyRate, `!info`).
+7. Poracle-only uses of the feed: `ShinyVariant` / `BaseShinyVariant` (override-free variant lookup for `!info`'s base rate) / `ShinyVariantForm` / `BaseShinyVariantForm` (the same lookups, retrying a form-0 miss under the species' masterfile default/NORMAL form, since the game keys many species' normal variant under its own form id) / `Boosted` (shinyPossible, shinyRate, `!info`). `Evaluate` (the personal roll) never uses the default-form fallback: it keeps Golbat's behaviour.
 
 ## Updating
 

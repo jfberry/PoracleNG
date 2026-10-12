@@ -6,7 +6,7 @@ import "math"
 // personalshiny.Rates). known=false when the feed has not loaded or does not
 // list the variant.
 type ShinyFeed interface {
-	ShinyVariant(pokemonID, form, costume int, lat, lon float64) (supported bool, probability float64, known bool)
+	ShinyVariantForm(pokemonID, form, defaultForm, costume int, lat, lon float64) (supported bool, probability float64, known bool)
 }
 
 // shinyFacts is what the shiny template fields are built from.
@@ -29,7 +29,7 @@ func (e *Enricher) shinyFacts(pokemonID, form, costume int, lat, lon float64) sh
 		f.possible = f.observed > 0
 	}
 	if e.ShinyFeed != nil {
-		if supported, p, known := e.ShinyFeed.ShinyVariant(pokemonID, form, costume, lat, lon); known {
+		if supported, p, known := e.ShinyFeed.ShinyVariantForm(pokemonID, form, e.GameData.DefaultForm(pokemonID), costume, lat, lon); known {
 			f.answered = true
 			f.possible = supported
 			if supported && p > 0 && p <= 1 {

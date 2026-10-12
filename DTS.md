@@ -402,7 +402,7 @@ Personal fields (`personalShiny`, `personalShinyAccounts`, `personalBackground`,
 {{#if personalShiny}}✨ Shiny for {{join personalShinyAccounts ", "}}{{/if}}
 ```
 
-When `[shiny_rates]` is configured, `shinyPossible` is feed-backed (the feed's rate for the species/form/costume, with per-timezone event overrides applied at the spawn's location); `shinyStats` keeps its observed meaning (rolling-window stats).
+When `[shiny_rates]` is configured, `shinyPossible` is feed-backed (the feed's rate for the species/form/costume, with per-timezone event overrides applied at the spawn's location); `shinyStats` keeps its observed meaning (rolling-window stats). Form 0 lookups use the species' default (NORMAL) form from the masterfile, since many species have no form 0 in the game and the feed keys them by their own form id.
 
 | Field | Type | Description |
 |-------|------|-------------|
