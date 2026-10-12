@@ -408,6 +408,8 @@ These rules govern who can execute commands, what they target, and where they ca
 | **`user:ID` override** | Admin only — targets the specified user by ID | Bypasses channel check (explicit target) |
 | **`name:webhookname` override** | Admin or webhook admin — targets the named webhook | Bypasses channel check (explicit target) |
 
+Hosts call `bot.BuildTargetFor(ctx, cmdKey, args)`; for `cmd.account` only `user:<id>` / `name:<name>` (with the colon) are treated as overrides, so a case-sensitive player ID that happens to start with `user`/`name` is not mistaken for one.
+
 #### Exceptions to BuildTarget
 
 | Command | Behavior | Reason |
@@ -469,6 +471,7 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 - `!mute <scope> <value> [duration:1h]` / `!unmute <scope> <value>` — silence alerts for a gym, pokemon species, area, pokestop, or station for a time-bounded window. `!mute everything [duration:1h]` self-mutes the user across all alert types. Per-type aliases work too (`!raid mute id:X` ≡ `!mute raid id:X`). Mutes are listed by `!tracked`. See the "Mute Infrastructure" section for store + matcher integration.
 - `!poracle-admin <group> [subcommand] [args]` (also `!pa`) — administrative umbrella for live operations, admin-only. Groups: `slash` (slash-command lifecycle, incl. `list` — registered commands as Discord `</name:id>` mentions), `reload` (dts/geofence/state), `status` (health snapshot), `ratelimit` (inspect/reset alert limits), `summary` (summary buffer), `cache` (geocoder stats/clear), `maintenance` (pause/resume delivery), `emoji` (emoji config inspection), `reconcile` (Discord role sync), `config` (effective config dump), `warnings` (captured WARN/ERROR log buffer). See `docs/admin-commands/` for design and smoke-test checklist.
 - `!backup <name>` / `!restore <name>` (admin) — per-profile tracking template saved to `backups/<name>.json` covering every tracking table (`backupTables`; not profiles or summary schedules). Restore **replaces**: table/column names from the file are validated (allow-listed table, strict identifier, real column via information_schema) before anything changes, then in one transaction every backup table is cleared for the target's current profile and refilled from the file (empty/absent tables end up empty). `!script` emits re-runnable commands for every tracking type, including `!maxbattle` and `!fort`.
+- `!account <add|remove|label|list> …` (`/account` slash) — link game player IDs for personal shiny/background tracking; `!track … personalshiny|personalbackground` (slash: `personal_shiny` / `personal_background`)
 - `!poracle` — register/start
 - `!profile` — switch/create/delete profiles
 - `!area` — add/remove geofence areas
@@ -581,7 +584,11 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | GET/POST/DELETE | `/api/v2/humans/{id}/mutes` | v2 mutes; `tracking_type` required for `scope=tracking` |
 | GET | `/api/snapshots/{messageID}?target={id}` | Inspect a delivered-message snapshot (admin diagnostics; 503 if `[snapshots] enabled = false`) |
 | GET | `/api/dts/actions` | List registered button actions + their scopes/params (drives the config editor's button UI) |
-| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`, `costume`, `customMaps`) so clients can do explicit feature detection without probing endpoints |
+| GET | `/api/v2/humans/{id}/accounts` | List linked game accounts (personal shiny) |
+| POST | `/api/v2/humans/{id}/accounts` | Link a game account (201; 409 duplicate; 422 invalid/over 50) |
+| PUT | `/api/v2/humans/{id}/accounts/{player_id}` | Set/clear account label (`player_id` URL-escaped) |
+| DELETE | `/api/v2/humans/{id}/accounts/{player_id}` | Unlink a game account |
+| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`, `costume`, `customMaps`, `personalShiny`) so clients can do explicit feature detection without probing endpoints |
 | GET | `/metrics` | Prometheus metrics |
 | GET | `/openapi.json` | OpenAPI 3.1 spec (whole `/api` + `/api/v2` surface; public) |
 | GET | `/docs` | Interactive API docs (public) |
@@ -764,6 +771,10 @@ The store is a separate pogreb instance from the geocoder cache — different wo
 
 Tracking mutes are table-aware: uids are per-table, so `mute.Entry.RuleTable` and `MatchedUser.RuleTable` carry the table, and the matcher compares `mute.Event.MatchedRuleUID` **and** the table (populated per matched user in `cmd/processor/helpers.go`) against `tracking`-scope entries. An untyped tracking entry matches nothing. v2 mutes: `tracking_type` (any of the 11 type names; `incident` maps to `invasion`; GET returns the canonical name) is required for `scope=tracking` and a `422` otherwise; `POST` checks the uid is the human's rule in that table on any profile (status stays 200); `DELETE ?scope=tracking&tracking_type=&value=`. Bot: `!<type> mute id:N` keeps the type; bare `!mute id:N` looks the uid up in the current profile (one hit is typed; several are refused with `msg.mute.uid_ambiguous`; none is refused); bare `!unmute id:N` resolves from the active mutes (ambiguous refused). `!tracked` shows "<type> rule <uid>". An alert mute button with `scope=tracking` writes one typed entry per `TrackingUID`.
 
+## Personal Shiny
+
+`internal/personalshiny/` copies Golbat#423's per-player shiny/background roll (SHA-1 of LE encounter ID ‖ player ID seeding `java.util.Random`, draws against the variant's rate) and its rate feed (`[shiny_rates] url` → `GET <url>/v1/rates?compact=1`). Keep it diffable with Golbat: see `internal/personalshiny/SYNC.md` (file mapping, pinned commit, deviations, update recipe). Users link game accounts (`player_accounts` table, `!account`, `/account`, `/api/v2/humans/{id}/accounts`; `[player_accounts] self_service` gates non-admin linking). Accounts load onto `db.Human.Accounts` in state. `monsters.personal` is a bitmask (1 shiny, 2 background, 4/8 reserved for per-player sizes); the pokemon handler builds a per-webhook `personalshiny.Checker` that the matcher consults last and `enrichment.AnnotatePersonal` uses for the per-user `personal*` DTS fields. Fail closed: before the feed's first load personal rules match nothing. No Ditto/disguised/nearby-only predictions (Golbat's eligibility). The same feed backs `shinyPossible`/`shinyRate`/`shinyRateBoosted` (`enrichment/shinyinfo.go`; emitted for pokemon, quest, nest), falling back to observed stats when the feed is absent or does not list the variant; `Rates.BaseShinyVariant` is the override-free lookup behind `!info <pokemon>`'s "Expected shiny rate", and `!info shiny` shows "Boosted right now". `!poracle-admin status` has a "Shiny rates" section. Player IDs are case-sensitive: `!account` reads `CommandContext.VerbatimArgs` (set by the Discord text bot, Telegram bot, `/api/command`, the slash dispatcher and autocreate), and hosts resolve targets via `bot.BuildTargetFor(ctx, cmdKey, args)`, which for `cmd.account` only recognises `user:<id>`/`name:<name>` (with colon) overrides, so IDs starting with `user`/`name` survive. Slash: `/account` (list/add/remove/label) and `/track` options `personal_shiny` / `personal_background`. Migration `000010_personal_shiny`; `player_id` is `VARBINARY(256)` (case-sensitive). `/health` advertises capability `personalShiny`.
+
 ## Button Actions
 
 `internal/buttons/` defines the operator-authored `Def` schema; `internal/buttonactions/` is the dispatch registry; `internal/discordbot/buttons.go` is the click handler.
@@ -846,6 +857,7 @@ MySQL (or MariaDB). Key tables:
 - `forts` — fort update tracking (fort_type, include_empty, change_types)
 - `maxbattle` — max battle tracking (pokemon_id, level, gmax, move)
 - `profiles` — user profiles (profile_no, name, pokemon/raid/egg/invasion area overrides)
+- `player_accounts` — linked game accounts per human (`player_id` VARBINARY(256), optional unique `label`; max 50 per human) used by personal shiny/background tracking
 - `user_locations` — per-user saved named locations (label → lat/lon) referenced by per-rule `override_location_label`
 
 All tracking tables have: `id` (FK to humans), `profile_no`, `distance`, `template`, `clean`, `ping`, `override_location_label` (nullable string), `override_areas` (nullable JSON array).
@@ -925,7 +937,7 @@ Why `URLWithBytes` exists: before this mode, a single event fanning out to N Dis
 
 Single TOML file at `config/config.toml`, used by the processor. See `config/config.example.toml` for all options with comments.
 
-Key sections: `[processor]`, `[database]`, `[geofence]`, `[pvp]`, `[weather]`, `[discord]`, `[telegram]`, `[geocoding]`, `[tuning]`, `[tracking]`, `[alert_limits]`, `[stats]`, `[logging]`.
+Key sections: `[processor]`, `[database]`, `[geofence]`, `[pvp]`, `[weather]`, `[discord]`, `[telegram]`, `[geocoding]`, `[tuning]`, `[tracking]`, `[alert_limits]`, `[stats]`, `[logging]`, `[shiny_rates]`, `[player_accounts]`.
 
 The legacy `[alerter]` section is still read for backward-compatible `api_secret` only (users upgrading from older versions); all other alerter functionality has been absorbed into the processor.
 
