@@ -396,6 +396,14 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 
 ### Other
 
+Personal fields (`personalShiny`, `personalShinyAccounts`, `personalBackground`, `personalBackgroundAccounts`, `hasLinkedAccounts`) are set for every matched user with linked accounts, regardless of which rule matched. They are empty in `!poracle-test` and editor previews. Example:
+
+```handlebars
+{{#if personalShiny}}✨ Shiny for {{join personalShinyAccounts ", "}}{{/if}}
+```
+
+When `[shiny_rates]` is configured, `shinyPossible` is feed-backed (variant-aware: costume/form/boost); `shinyStats` keeps its observed meaning (rolling-window stats).
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `encountered` | bool | Whether pokemon was encountered (has IV data) |
@@ -410,6 +418,13 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `ultraBeast` | bool | Is an ultra beast |
 | `shinyPossible` | bool | Can this pokemon be shiny |
 | `shinyStats` | int | Shiny rate (1 in N) |
+| `shinyRate` | number | Expected shiny rate (1 in N) from the `[shiny_rates]` feed. Also on `quest` and `nest`. Absent without the feed |
+| `shinyRateBoosted` | number | Shiny rate (1 in N) while the species is boosted (event/weather boost per feed). Same availability as `shinyRate` |
+| `personalShiny` | bool | Per-user (pokemon only). True when the pokemon is shiny for one of the user's linked accounts, whichever of their rules matched |
+| `personalShinyAccounts` | array | Labels (or player IDs) of the accounts it is shiny for |
+| `personalBackground` | bool | Per-user. True when the special background applies to a linked account |
+| `personalBackgroundAccounts` | array | Labels (or player IDs) of those accounts |
+| `hasLinkedAccounts` | bool | Per-user. The user has at least one linked account |
 | `shinyPossibleEmoji` | string | Shiny sparkle emoji (empty if not shiny possible) |
 | `rarityGroup` | int | Rarity group (1-6) |
 | `rarityName` | string | Translated rarity name |

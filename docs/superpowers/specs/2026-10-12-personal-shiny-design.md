@@ -1,6 +1,6 @@
 # Personal shiny and background alerting — design
 
-**Status:** proposed
+**Status:** implemented (see plans/2026-10-12-personal-shiny.md)
 **Date:** 2026-10-12
 **Upstream reference:** UnownHash/Golbat#423 (personal shiny/background
 filtering on the v3 scan), pinned at `13f90b3` until it merges.
