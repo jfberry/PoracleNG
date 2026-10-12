@@ -253,8 +253,6 @@ var raidFields = []FieldDef{
 	{Name: "boostingWeathersEmoji", Type: "string", Description: "Concatenated emoji string for every weather that boosts the raid boss's types", Category: "weather"},
 	// Other
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
-	{Name: "shinyRate", Type: "int", Description: "Expected shiny rate as 1-in-N from the [shiny_rates] feed at this location (absent without the feed or for unlisted variants)", Category: "other"},
-	{Name: "shinyRateBoosted", Type: "bool", Description: "The feed's shiny rate here is above the 1/512 base (an event)", Category: "other"},
 	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
 	{Name: "megaEvolutions", Type: "array", Description: "Mega evolution entries", Category: "other"},
 	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
@@ -299,6 +297,8 @@ var questFields = []FieldDef{
 	{Name: "conditionStringEng", Type: "string", Description: "English copy of conditionString", Category: "quest"},
 	{Name: "conditionList", Type: "array", Description: "Quest conditions as objects with type/name/formatted", Category: "quest"},
 	{Name: "conditionListEng", Type: "array", Description: "English copy of conditionList", Category: "quest"},
+	{Name: "shinyRate", Type: "int", Description: "Expected shiny rate as 1-in-N from the [shiny_rates] feed at this location (absent without the feed or for unlisted variants)", Category: "other"},
+	{Name: "shinyRateBoosted", Type: "bool", Description: "The feed's shiny rate here is above the 1/512 base (an event)", Category: "other"},
 }
 
 var invasionFields = []FieldDef{

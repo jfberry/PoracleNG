@@ -1816,8 +1816,6 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	ps.shinyRates = personalshiny.NewRates(cfg.ShinyRates.URL, cfg.ShinyRates.Token)
 	if cfg.ShinyRates.URL != "" {
 		ps.enricher.ShinyFeed = ps.shinyRates
-	}
-	if cfg.ShinyRates.URL != "" {
 		ps.shinyRates.Start(ps.ctx)
 		log.Infof("Shiny rates: refreshing from %s every 5m", cfg.ShinyRates.URL)
 	}
