@@ -124,3 +124,31 @@ func TestAccountDelegatedChannelAdminOnlyCurrentChannel(t *testing.T) {
 		t.Fatalf("stored on chan2: %+v", list)
 	}
 }
+
+// !apply gives each sub-command its own verbatim args, so a player ID
+// linked through apply keeps its case and underscores.
+func TestApplyAccountKeepsVerbatimArgs(t *testing.T) {
+	ctx, accts := accountCtx(t, false, true)
+	humans := ctx.Humans.(*store.MockHumanStore)
+	humans.AddHuman(&store.Human{ID: "u2", Type: bot.TypeDiscordUser, Name: "U2", Enabled: true, CurrentProfileNo: 1, Language: "en"})
+	reg := bot.NewRegistry()
+	reg.Register(&AccountCommand{})
+	ctx.Registry = reg
+
+	verbatim := []string{"u2", "|", "account", "add", "User_ABC", "Main"}
+	ctx.VerbatimArgs = verbatim
+	lower := []string{"u2", "|", "account", "add", "user abc", "main"}
+	out := (&ApplyCommand{}).Run(ctx, lower)
+	list, _ := accts.List("u2")
+	if len(list) != 1 || list[0].PlayerID != "User_ABC" || list[0].Label != "Main" {
+		t.Fatalf("stored = %+v; replies = %+v", list, out)
+	}
+
+	// Without usable verbatim args the sub-command still gets its own
+	// (normalised) args, not apply's.
+	ctx.VerbatimArgs = nil
+	(&ApplyCommand{}).Run(ctx, []string{"u2", "|", "account", "add", "other"})
+	if list, _ = accts.List("u2"); len(list) != 2 || list[1].PlayerID != "other" {
+		t.Fatalf("fallback stored = %+v", list)
+	}
+}
