@@ -68,7 +68,7 @@ func TestPersonalDrawOrder(t *testing.T) {
 	r.snapshot.Store(&shinyRates{variants: map[shinyVariant]shinyRate{
 		{25, 0, 0}: {Pokemon: 25, Prediction: shinyPrediction{Probability: 0.1, Supported: true}, Background: background},
 		{26, 0, 0}: {Pokemon: 26, Prediction: shinyPrediction{Supported: false}, Background: background},
-	}, backgroundMaximum: map[int16]uint32{25: background.cutoff(0), 26: background.cutoff(0)}})
+	}})
 	at := func(id int) Result {
 		return r.Evaluate(&webhook.PokemonWebhook{EncounterID: "1", PokemonID: id, SeenType: "wild"}).For(accounts(testPlayers...))
 	}
@@ -99,6 +99,10 @@ func TestEvaluateEligibility(t *testing.T) {
 		"nearby cell":      func(p *webhook.PokemonWebhook) { p.SeenType = "nearby_cell" },
 		"no seen type":     func(p *webhook.PokemonWebhook) { p.SeenType = "" },
 		"costume 255":      func(p *webhook.PokemonWebhook) { p.Costume = 255 },
+		"costume -1":       func(p *webhook.PokemonWebhook) { p.Costume = -1 },
+		"costume 300":      func(p *webhook.PokemonWebhook) { p.Costume = 300 },
+		"lure wild":        func(p *webhook.PokemonWebhook) { p.SeenType = "lure_wild" },
+		"lure encounter":   func(p *webhook.PokemonWebhook) { p.SeenType = "lure_encounter" },
 		"bad encounter id": func(p *webhook.PokemonWebhook) { p.EncounterID = "abc" },
 	} {
 		p := wildPikachu()
