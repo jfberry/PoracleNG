@@ -184,6 +184,25 @@ func (r *Rates) ShinyVariant(pokemonID, form, costume int, lat, lon float64) (su
 	return p.Supported, p.Probability, true
 }
 
+// BaseShinyVariant is ShinyVariant without any zone override applied: the
+// feed's base rate. (Resolving a fixed point such as (0, 0) is not enough —
+// tzf assigns it "Etc/GMT", which an override could in principle name.)
+func (r *Rates) BaseShinyVariant(pokemonID, form, costume int) (supported bool, probability float64, known bool) {
+	if r == nil {
+		return false, 0, false
+	}
+	snap := r.snapshot.Load()
+	if snap == nil {
+		return false, 0, false
+	}
+	s := &shinyScan{rates: snap, zone: func(float64, float64) string { return "" }}
+	rate, ok := s.rate(pokemonID, form, costume)
+	if !ok {
+		return false, 0, false
+	}
+	return rate.Prediction.Supported, rate.Prediction.Probability, true
+}
+
 // VariantRate is a variant whose shiny rate is above the 1/512 base.
 type VariantRate struct {
 	PokemonID, Form, Costume int

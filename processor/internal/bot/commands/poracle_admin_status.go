@@ -90,6 +90,10 @@ func statusReport(ctx *bot.CommandContext, verbose bool) []bot.Reply {
 	sb.WriteString("\n\n")
 	sb.WriteString(renderSummaryBufferSection(ctx, tr))
 
+	// Section 10b: Shiny-rate feed.
+	sb.WriteString("\n\n")
+	sb.WriteString(renderShinyRatesSection(ctx, tr))
+
 	// Section 11: Tracking counts.
 	sb.WriteString("\n\n")
 	sb.WriteString(renderTrackingSection(ctx, tr))
@@ -419,6 +423,28 @@ func renderAlertLimitsSection(ctx *bot.CommandContext, tr translator) string {
 		bannedCount,
 	))
 
+	return sb.String()
+}
+
+// renderShinyRatesSection reports the [shiny_rates] feed state.
+func renderShinyRatesSection(ctx *bot.CommandContext, tr translator) string {
+	var sb strings.Builder
+	sb.WriteString(tr.T("cmd.poracle_admin.status.section.shiny_rates"))
+	st := ctx.ShinyRates.Status()
+	sb.WriteString("\n  ")
+	switch {
+	case !st.Configured:
+		sb.WriteString(tr.T("cmd.poracle_admin.status.label.shiny_rates_off"))
+		return sb.String()
+	case st.Loaded:
+		sb.WriteString(indicatorGreen + " " + tr.Tf("cmd.poracle_admin.status.label.shiny_rates_loaded",
+			st.Variants, formatDuration(time.Since(st.LastSuccess).Round(time.Second))))
+	default:
+		sb.WriteString(indicatorYellow + " " + tr.T("cmd.poracle_admin.status.label.shiny_rates_waiting"))
+	}
+	if st.LastError != "" {
+		sb.WriteString("\n  " + tr.Tf("cmd.poracle_admin.status.label.shiny_rates_error", st.LastError))
+	}
 	return sb.String()
 }
 
