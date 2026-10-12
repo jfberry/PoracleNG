@@ -93,8 +93,9 @@ ALTER TABLE `monsters` ADD COLUMN `personal` TINYINT NOT NULL DEFAULT 0;
   index prefixes, which `humans.id` already requires of every install.
 - `player_id` is `VARBINARY` so uniqueness and lookups are case-sensitive and byte-exact under any table collation.
 - `player_id` is a case-sensitive string of 1–256 ASCII letters and digits
-  (enforced on input only; the roll itself stays byte-for-byte Golbat). Uniqueness is per human: the same player ID may be linked to
-  several humans (shared household account, a channel tracking a group's
+  (enforced on input only; the roll itself stays byte-for-byte Golbat).
+  Uniqueness is per human: the same player ID may be linked to several
+  humans (shared household account, a channel tracking a group's
   accounts).
 - `label` is optional, unique per human, compared case-insensitively
   (as `user_locations` labels are). NULL labels do not collide.
