@@ -109,6 +109,18 @@ type PokemonMatcher struct {
 	// IncludeMegaEvolution is the server default for rules with
 	// PVPRankingEvolution == 0: when true those rules also match mega entries.
 	IncludeMegaEvolution bool
+
+	// personalAllows overrides how a personal rule is answered; nil uses
+	// ProcessedPokemon.Personal. Test seam only.
+	personalAllows func(p *ProcessedPokemon, humanID string, bits int) bool
+}
+
+// allowsPersonal answers a rule's personal bits for its human.
+func (m *PokemonMatcher) allowsPersonal(p *ProcessedPokemon, humanID string, bits int) bool {
+	if m.personalAllows != nil {
+		return m.personalAllows(p, humanID, bits)
+	}
+	return p.Personal.Allows(humanID, bits)
 }
 
 // Match returns all matched users for a pokemon along with the geofence
@@ -160,12 +172,18 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]we
 
 	// Validate humans
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(pokemon.Latitude, pokemon.Longitude)
-	users := ValidateHumans(
+	// Personal bits are answered last, inside human validation: they are the
+	// only check that hashes, and only humans the sighting can reach (enabled,
+	// profile, area/distance, strict locations) have their accounts hashed.
+	users := validateHumans(
 		matched,
 		pokemon.Latitude, pokemon.Longitude,
 		matchedAreaNames,
 		m.AreaSecurityEnabled && m.StrictLocations,
 		st.Humans,
+		func(rule *db.MonsterTracking) bool {
+			return rule.Personal == 0 || m.allowsPersonal(pokemon, rule.ID, rule.Personal)
+		},
 	)
 	return users, ConvertAreas(areas)
 }
@@ -322,11 +340,6 @@ func (m *PokemonMatcher) matchMonsters(
 			continue
 		}
 		if data.Size > monster.MaxSize {
-			continue
-		}
-
-		// Personal last: it is the only check that hashes.
-		if monster.Personal != 0 && !data.Personal.Allows(monster.ID, monster.Personal) {
 			continue
 		}
 

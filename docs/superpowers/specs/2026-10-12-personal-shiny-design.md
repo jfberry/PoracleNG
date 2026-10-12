@@ -60,7 +60,7 @@ player_accounts (MySQL) ──► state.State.Accounts (per human)
                                         │
 pokemon webhook ─► ProcessPokemonWebhook ─► Rates.Evaluate(webhook) ─► Evaluation
                                         │
-                     matchMonsters: rule.personal bits ─► Evaluation.For(accounts)
+                     human validation: rule.personal bits ─► Evaluation.For(accounts)
                                         │
                      per-user enrichment: personalShiny[Accounts], personalBackground[Accounts]
 ```
@@ -218,8 +218,10 @@ has per-timezone overrides active there. Accepted; documented in `SYNC.md`.
 - `matching.ProcessedPokemon` gains `Personal *personalshiny.Evaluation`,
   set in `ProcessPokemon` after `ProcessPokemonWebhook` when `[shiny_rates]`
   is configured.
-- In `matchMonsters` the personal check is the **last** filter (the only
-  one that hashes). Rules with `personal == 0` skip it. A rule with
+- The personal check is the **last** filter (the only one that hashes). It
+  runs inside human validation, after the enabled/profile/area/distance/
+  strict-location checks, so only humans the sighting can reach have their
+  accounts hashed. Rules with `personal == 0` skip it. A rule with
   `personal != 0` fails if the evaluation is nil, the human has no linked
   accounts, or any required bit has no hitting account.
 - `Evaluation.For` is memoised per human per webhook, so several personal
