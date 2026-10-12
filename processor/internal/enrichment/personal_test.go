@@ -66,6 +66,21 @@ func TestAnnotatePersonal(t *testing.T) {
 		t.Fatalf("merge = %v", out["u1"])
 	}
 
+	// No evaluation (feed not loaded, or ineligible spawn): only
+	// hasLinkedAccounts is known; the personal fields stay absent.
+	out = AnnotatePersonal(nil, matched, personalshiny.NewChecker(nil, humans))
+	if out["u1"]["hasLinkedAccounts"] != true {
+		t.Fatalf("unevaluated hasLinkedAccounts = %v", out["u1"])
+	}
+	for _, k := range []string{"personalShiny", "personalShinyAccounts", "personalBackground", "personalBackgroundAccounts"} {
+		if v, ok := out["u1"][k]; ok {
+			t.Fatalf("unevaluated spawn set %s = %v", k, v)
+		}
+	}
+	if _, ok := out["u2"]; ok {
+		t.Fatalf("unevaluated: user without accounts got fields: %v", out["u2"])
+	}
+
 	// Nil checker (feature off): untouched.
 	if got := AnnotatePersonal(nil, matched, nil); got != nil {
 		t.Fatalf("nil checker = %v", got)

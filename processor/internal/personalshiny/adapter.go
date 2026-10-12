@@ -112,6 +112,10 @@ func NewChecker(ev *Evaluation, humans map[string]*db.Human) *Checker {
 	return &Checker{ev: ev, humans: humans}
 }
 
+// Evaluated reports whether the spawn was evaluated: the feed is loaded and
+// the pokemon is eligible. Nil-safe.
+func (c *Checker) Evaluated() bool { return c != nil && c.ev != nil }
+
 // Result returns the human's hits; ok is false when the human has no linked
 // accounts (or is unknown). A nil evaluation yields an empty Result with ok
 // still true for linked humans.

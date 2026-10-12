@@ -183,6 +183,12 @@ func TestCheckerAllowsAndMemo(t *testing.T) {
 	if res, ok := c.Result("shinyuser"); !ok || len(res.Shiny) != 0 {
 		t.Fatalf("unloaded Result = %+v, %v", res, ok)
 	}
+	if c.Evaluated() || nilChecker.Evaluated() {
+		t.Fatal("Evaluated without an evaluation")
+	}
+	if !NewChecker(r.Evaluate(wildPikachu()), humans).Evaluated() {
+		t.Fatal("not Evaluated with a loaded feed and eligible spawn")
+	}
 }
 
 func TestShinyVariantAndBoosted(t *testing.T) {
