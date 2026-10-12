@@ -194,8 +194,10 @@
       form: alola
       costume: "1"
       size: xl
-  text: "!track 25 iv100 great5 ultra10 little7 d250 clean edit template:pvp form:alola costume:1 size:xl"
-  expected_tokens: ["25", iv100, great5, ultra10, little7, d250, clean, edit, "template:pvp", "form:alola", "costume:1", "size:xl"]
+      personal_shiny: true
+      personal_background: true
+  text: "!track 25 iv100 great5 ultra10 little7 d250 clean edit template:pvp form:alola costume:1 size:xl personalshiny personalbackground"
+  expected_tokens: ["25", iv100, great5, ultra10, little7, d250, clean, edit, "template:pvp", "form:alola", "costume:1", "size:xl", personalshiny, personalbackground]
 
 # -----------------------------------------------------------------------------
 # /raid — boss XOR level
@@ -1028,3 +1030,49 @@
       areas: midtown
   text: "!fort pokestop location:Work area:midtown"
   expected_tokens: [pokestop, "location:Work", "area:midtown"]
+
+# -----------------------------------------------------------------------------
+# /account — linked game accounts for personal shiny / background alerts.
+# Player IDs and labels are passed through verbatim (case-sensitive).
+# -----------------------------------------------------------------------------
+- name: account-list
+  description: /account list — list linked accounts
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      list: _bare
+  text: "!account list"
+  expected_tokens: [list]
+
+- name: account-add
+  description: /account add — link an account with a label
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      add.player_id: User_ABC
+      add.label: Main
+  text: "!account add User_ABC Main"
+  expected_tokens: [add, User_ABC, Main]
+
+- name: account-remove
+  description: /account remove — unlink an account
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      remove.account: Main
+  text: "!account remove Main"
+  expected_tokens: [remove, Main]
+
+- name: account-label
+  description: /account label — relabel an account
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      label.account: User_ABC
+      label.label: alt
+  text: "!account label User_ABC alt"
+  expected_tokens: [label, User_ABC, alt]
