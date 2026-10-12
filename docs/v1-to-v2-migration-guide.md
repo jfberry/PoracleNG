@@ -90,7 +90,7 @@ rules have `uid` 0, response has `"dry_run": true`), and rules in `updated` carr
 | `PUT /api/v2/humans/{id}/accounts/{player_id}` | Body `{label}` (empty clears); returns `{status:"ok"}`; `404 account not found` |
 | `DELETE /api/v2/humans/{id}/accounts/{player_id}` | Returns `{status:"ok"}`; `404 account not found` |
 
-`player_id` is case-sensitive and must be URL-escaped (`/` as `%2F`). The snapshot's `accounts` array has the same items. The v2 pokemon rule gains `personal_shiny` / `personal_background` (booleans, `null` when false, full-replace on PUT); v1 exposes the same via the `personal` bitmask (1 shiny, 2 background; kept when omitted on a by-uid update).
+`player_id` is 1-256 ASCII letters/digits, case-sensitive. The snapshot's `accounts` array has the same items. The v2 pokemon rule gains `personal_shiny` / `personal_background` (booleans, `null` when false, full-replace on PUT); v1 exposes the same via the `personal` bitmask (1 shiny, 2 background; kept when omitted on a by-uid update).
 
 ## Endpoint mapping — profiles
 

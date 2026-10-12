@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ErrInvalidPlayerID       = errors.New("player id must be 1-256 bytes")
+	ErrInvalidPlayerID       = errors.New("player id must be 1-256 ASCII letters or digits")
 	ErrInvalidAccountLabel   = errors.New("account label must be at most 64 characters")
 	ErrDuplicateAccount      = errors.New("player account already linked")
 	ErrDuplicateAccountLabel = errors.New("account label already in use")
@@ -34,10 +34,19 @@ type PlayerAccountStore interface {
 	Resolve(humanID, ref string) (*db.PlayerAccount, error)
 }
 
-// ValidatePlayerID enforces Golbat's limits: nonempty, at most 256 bytes.
+// ValidatePlayerID accepts only 1-256 ASCII letters and digits
+// (case-sensitive). This is an input rule: the personalshiny roll still
+// hashes whatever bytes it is given, exactly like Golbat.
 func ValidatePlayerID(id string) error {
 	if id == "" || len(id) > personalshiny.MaxPlayerIDBytes {
 		return ErrInvalidPlayerID
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		isAlnum := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+		if !isAlnum {
+			return ErrInvalidPlayerID
+		}
 	}
 	return nil
 }

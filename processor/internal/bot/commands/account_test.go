@@ -35,17 +35,17 @@ func runAccount(ctx *bot.CommandContext, verbatim ...string) string {
 
 func TestAccountSelfServiceAddKeepsIDVerbatim(t *testing.T) {
 	ctx, accts := accountCtx(t, true, false)
-	out := runAccount(ctx, "add", "Main", "User_ABC")
+	out := runAccount(ctx, "add", "Main", "UserABC9")
 	if !strings.Contains(out, "✅") {
 		t.Fatalf("add: %s", out)
 	}
 	list, _ := accts.List("u1")
-	if len(list) != 1 || list[0].PlayerID != "User_ABC" || list[0].Label != "Main" {
+	if len(list) != 1 || list[0].PlayerID != "UserABC9" || list[0].Label != "Main" {
 		t.Fatalf("stored = %+v", list)
 	}
-	runAccount(ctx, "add", "username_9")
+	runAccount(ctx, "add", "username9")
 	list, _ = accts.List("u1")
-	if len(list) != 2 || list[1].PlayerID != "username_9" {
+	if len(list) != 2 || list[1].PlayerID != "username9" {
 		t.Fatalf("user-prefixed id = %+v", list)
 	}
 }
@@ -77,7 +77,7 @@ func TestAccountChannelTargetsAdminOnly(t *testing.T) {
 
 func TestAccountRemoveAndRename(t *testing.T) {
 	ctx, accts := accountCtx(t, true, false)
-	runAccount(ctx, "add", "main", "Abc_1")
+	runAccount(ctx, "add", "main", "Abc1")
 	runAccount(ctx, "add", "def")
 	if out := runAccount(ctx, "rename", "def", "alt"); !strings.Contains(out, "✅") {
 		t.Fatalf("rename: %s", out)
@@ -135,12 +135,12 @@ func TestApplyAccountKeepsVerbatimArgs(t *testing.T) {
 	reg.Register(&AccountCommand{})
 	ctx.Registry = reg
 
-	verbatim := []string{"u2", "|", "account", "add", "Main", "User_ABC"}
+	verbatim := []string{"u2", "|", "account", "add", "Main", "UserABC9"}
 	ctx.VerbatimArgs = verbatim
-	lower := []string{"u2", "|", "account", "add", "main", "user abc"}
+	lower := []string{"u2", "|", "account", "add", "main", "userabc9"}
 	out := (&ApplyCommand{}).Run(ctx, lower)
 	list, _ := accts.List("u2")
-	if len(list) != 1 || list[0].PlayerID != "User_ABC" || list[0].Label != "Main" {
+	if len(list) != 1 || list[0].PlayerID != "UserABC9" || list[0].Label != "Main" {
 		t.Fatalf("stored = %+v; replies = %+v", list, out)
 	}
 
@@ -166,17 +166,17 @@ func TestAccountAddThreeArgsIsUsage(t *testing.T) {
 
 func TestAccountAddIDOnlyIsUnnamed(t *testing.T) {
 	ctx, accts := accountCtx(t, true, false)
-	runAccount(ctx, "add", "Solo_ID")
+	runAccount(ctx, "add", "SoloID")
 	list, _ := accts.List("u1")
-	if len(list) != 1 || list[0].PlayerID != "Solo_ID" || list[0].Label != "" {
+	if len(list) != 1 || list[0].PlayerID != "SoloID" || list[0].Label != "" {
 		t.Fatalf("stored = %+v", list)
 	}
 }
 
 func TestAccountRenameByIDAndClear(t *testing.T) {
 	ctx, accts := accountCtx(t, true, false)
-	runAccount(ctx, "add", "main", "Abc_1")
-	if out := runAccount(ctx, "rename", "Abc_1", "alt"); !strings.Contains(out, "✅") {
+	runAccount(ctx, "add", "main", "Abc1")
+	if out := runAccount(ctx, "rename", "Abc1", "alt"); !strings.Contains(out, "✅") {
 		t.Fatalf("rename by id: %s", out)
 	}
 	if list, _ := accts.List("u1"); list[0].Label != "alt" {
@@ -188,16 +188,27 @@ func TestAccountRenameByIDAndClear(t *testing.T) {
 	if list, _ := accts.List("u1"); list[0].Label != "" {
 		t.Fatalf("after clear = %+v", list)
 	}
-	if out := runAccount(ctx, "label", "Abc_1", "x"); strings.Contains(out, "✅") {
+	if out := runAccount(ctx, "label", "Abc1", "x"); strings.Contains(out, "✅") {
 		t.Fatalf("label subcommand should be gone: %s", out)
 	}
 }
 
 func TestAccountBareShowsListThenUsage(t *testing.T) {
 	ctx, _ := accountCtx(t, true, false)
-	runAccount(ctx, "add", "main", "Abc_1")
+	runAccount(ctx, "add", "main", "Abc1")
 	out := runAccount(ctx)
 	if !strings.Contains(out, "main") || !strings.Contains(out, "Valid commands are") {
 		t.Fatalf("bare output: %s", out)
+	}
+}
+
+func TestAccountAddRejectsNonAlphanumericID(t *testing.T) {
+	ctx, accts := accountCtx(t, true, false)
+	out := runAccount(ctx, "add", "main", "User_ABC")
+	if !strings.Contains(out, "Player IDs are 1") {
+		t.Fatalf("expected invalid_id message, got: %s", out)
+	}
+	if list, _ := accts.List("u1"); len(list) != 0 {
+		t.Fatalf("stored = %+v", list)
 	}
 }
