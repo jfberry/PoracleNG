@@ -59,6 +59,18 @@ func (s *sqlPlayerAccountStore) Add(humanID, playerID, label string) error {
 	if n >= personalshiny.MaxPlayers {
 		return ErrTooManyAccounts
 	}
+	// Case-insensitive uniqueness is enforced here, not by the column
+	// collation (the unique key is only case-insensitive under *_ci).
+	if label != "" {
+		var taken int
+		if err := s.db.Get(&taken, `SELECT COUNT(*) FROM player_accounts WHERE id = ? AND LOWER(label) = LOWER(?)`,
+			humanID, label); err != nil {
+			return err
+		}
+		if taken > 0 {
+			return ErrDuplicateAccountLabel
+		}
+	}
 	if _, err := s.db.Exec(`INSERT INTO player_accounts (id, player_id, label) VALUES (?, ?, ?)`,
 		humanID, playerID, nullLabel(label)); err != nil {
 		if dup := duplicateKind(err); dup != nil {
@@ -92,6 +104,16 @@ func (s *sqlPlayerAccountStore) SetLabel(humanID, playerID, label string) error 
 	}
 	if exists == 0 {
 		return ErrAccountNotFound
+	}
+	if label != "" {
+		var taken int
+		if err := s.db.Get(&taken, `SELECT COUNT(*) FROM player_accounts WHERE id = ? AND LOWER(label) = LOWER(?) AND player_id <> ?`,
+			humanID, label, playerID); err != nil {
+			return err
+		}
+		if taken > 0 {
+			return ErrDuplicateAccountLabel
+		}
 	}
 	if _, err := s.db.Exec(`UPDATE player_accounts SET label = ? WHERE id = ? AND player_id = ?`,
 		nullLabel(label), humanID, playerID); err != nil {
