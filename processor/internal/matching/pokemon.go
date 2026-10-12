@@ -5,6 +5,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -40,6 +41,11 @@ type ProcessedPokemon struct {
 	Encountered bool
 	PVPBestRank map[int][]pvp.LeagueRank
 	PVPEvoData  map[int]map[int][]pvp.LeagueRank
+
+	// Personal answers rules' personal bits (per-player shiny/background).
+	// Set by the webhook handler after ProcessPokemonWebhook; nil when the
+	// feature is off, in which case every personal rule fails.
+	Personal *personalshiny.Checker
 }
 
 // ProcessPokemonWebhook converts a raw webhook into ProcessedPokemon with computed fields.
@@ -316,6 +322,11 @@ func (m *PokemonMatcher) matchMonsters(
 			continue
 		}
 		if data.Size > monster.MaxSize {
+			continue
+		}
+
+		// Personal last: it is the only check that hashes.
+		if monster.Personal != 0 && !data.Personal.Allows(monster.ID, monster.Personal) {
 			continue
 		}
 
