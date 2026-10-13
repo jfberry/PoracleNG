@@ -53,6 +53,7 @@ type shinyRate struct {
 }
 type shinyRates struct {
 	variants          map[shinyVariant]shinyRate
+	unsupported       map[int16]bool // species without a released shiny
 	maximum           map[int16]uint32
 	backgroundMaximum map[int16]uint32
 }
@@ -185,7 +186,8 @@ func (r *Rates) refreshShinyRates(ctx context.Context) (err error) {
 		return fmt.Errorf("status %d", res.StatusCode)
 	}
 	var feed struct {
-		Rates *[]shinyRate `json:"rates"`
+		Rates       *[]shinyRate `json:"rates"`
+		Unsupported []int        `json:"unsupportedPokemon"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&feed); err != nil {
 		return err
@@ -195,6 +197,10 @@ func (r *Rates) refreshShinyRates(ctx context.Context) (err error) {
 		return fmt.Errorf("rates response has no rates list")
 	}
 	next := &shinyRates{variants: make(map[shinyVariant]shinyRate), maximum: make(map[int16]uint32), backgroundMaximum: make(map[int16]uint32)}
+	next.unsupported = make(map[int16]bool, len(feed.Unsupported))
+	for _, p := range feed.Unsupported {
+		next.unsupported[int16(p)] = true
+	}
 	// Poracle: loop variable renamed r → rt (r is the receiver).
 	for _, rt := range *feed.Rates {
 		next.variants[shinyVariant{rt.Pokemon, rt.Form, rt.Costume}] = rt

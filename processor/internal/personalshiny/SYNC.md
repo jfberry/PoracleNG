@@ -4,17 +4,17 @@ This package copies Golbat's personal shiny implementation so Poracle's
 alerts agree with a Golbat-backed map for the same spawn, rates and player.
 
 - **Upstream:** UnownHash/Golbat#423 — "Add personal shiny/background filtering and annotation to the pokemon v3 scan"
-- **Pinned commit:** `13f90b3d31e2cf5245754b7715a79aff1f75b954` (PR head; re-pin to the merge commit once #423 merges)
+- **Pinned commit:** `06c3aba26b75553ce413e10f7229931ce4f4b81f` (PR head; re-pin to the merge commit once #423 merges)
 
 ## File mapping
 
 | Poracle | Golbat |
 |---|---|
 | `javarandom/javarandom.go`, `javarandom/javarandom_test.go` | `derive/javarandom/` — verbatim |
-| `rates.go` | `decoder/api_pokemon_shiny.go`: `shinyScale`, `defaultShinyCutoff`, `shinyPrediction`/`cutoff`, `shinyVariant`, `shinyRate`, `shinyRates`, `StartShinyRates`, `refreshShinyRates` |
-| `roll.go` | `decoder/api_pokemon_shiny.go`: `maxPersonalPlayers`, `maxPersonalPlayerIDBytes`, `personalLookup`, `shinyPlayer` (`rolls`, `generator`), `shinyScan` (`rate`, `zoneAt`, `shinyCutoff`, `backgroundCutoff`), `backgroundRoll` |
+| `rates.go` | `decoder/api_pokemon_shiny.go`: `shinyScale`, `defaultShinyCutoff`, `shinyPrediction`/`cutoff`, `shinyVariant`, `shinyRate`, `shinyRates` (incl. `unsupported`), `StartShinyRates`, `refreshShinyRates` |
+| `roll.go` | `decoder/api_pokemon_shiny.go`: `maxPersonalPlayers`, `maxPersonalPlayerIDBytes`, `personalLookup`, `shinyPlayer` (`rolls`, `generator`), `shinyScan` (`rate`, incl. the `unsupported` species branch, `zoneAt`, `shinyCutoff`, `backgroundCutoff`), `backgroundRoll` |
 | `adapter.go` | Poracle only; `Evaluate` + `Evaluation.player` are the two halves of `shinyScan.annotate` |
-| `roll_test.go`, `adapter_test.go`, `rates_test.go` | `decoder/api_pokemon_shiny_test.go` vectors: `TestPersonalShinyScan` (rolls + annotation), `TestPersonalDrawOrder`, `TestShinyZonePerSpawn`, `TestShinyRatesRejectMissingList` |
+| `roll_test.go`, `adapter_test.go`, `rates_test.go` | `decoder/api_pokemon_shiny_test.go` vectors: `TestPersonalShinyScan` (rolls + annotation), `TestPersonalDrawOrder`, `TestShinyZonePerSpawn`, `TestShinyRatesRejectMissingList`, `TestShinyRatesUnsupportedSpecies` |
 
 Not copied: the scan request plumbing (`ScanPokemonWithShiny`, `matchClause`,
 `match`, `first`, the `add` closure, `ErrPersonalRequest`) — Poracle evaluates
@@ -34,7 +34,7 @@ webhooks, not scan requests.
 
 ```bash
 cd /path/to/Golbat && git fetch origin
-git diff 13f90b3d31e2cf5245754b7715a79aff1f75b954..origin/main -- \
+git diff 06c3aba26b75553ce413e10f7229931ce4f4b81f..origin/main -- \
   decoder/api_pokemon_shiny.go decoder/api_pokemon_shiny_test.go \
   derive/javarandom docs/personal-shinies.md
 ```
