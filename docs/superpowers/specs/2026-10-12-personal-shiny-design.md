@@ -3,7 +3,7 @@
 **Status:** implemented (see plans/2026-10-12-personal-shiny.md)
 **Date:** 2026-10-12
 **Upstream reference:** UnownHash/Golbat#423 (personal shiny/background
-filtering on the v3 scan), pinned at `13f90b3` until it merges.
+filtering on the v3 scan), pinned at `06c3aba` until it merges.
 
 ## Problem
 
@@ -201,7 +201,7 @@ func (r *Rates) Variant(pokemonID, form, costume int, lat, lon float64) (v Varia
   `display_pokemon_id`, so the adapter maps Golbat's checks onto
   `pokemon_id == 132` and `display_pokemon_id` set and different from
   `pokemon_id`. Non-numeric encounter IDs are ineligible.
-- **Unknown variant:** 1/512 shiny, no background.
+- **Unknown variant:** 1/512 shiny, no background, unless their species is listed in the feed's `unsupportedPokemon` (never shiny: known + unsupported, no shiny draw, so the background draw is the first).
 - **Timezone overrides** are resolved per spawn location.
 - **Rates are read at processing time**, as Golbat reads them at scan time.
 
@@ -280,7 +280,7 @@ ObservedRate(pokemonID int) float64   // existing shinyStats source
    `round(1 / probability)`.
 3. **URL configured but feed not yet loaded, or variant not listed:** fall
    back to observed stats for `shinyPossible`; `shinyRate` not set.
-   (Golbat's "unknown ⇒ 1/512" applies to the personal roll only — using it
+   (Golbat's "unknown ⇒ 1/512", unless the species is in `unsupportedPokemon`, applies to the personal roll only — using it
    for a "possible" badge would mark unreleased shinies as possible.)
 
 `supported` means the shiny is released, wherever the pokemon is
