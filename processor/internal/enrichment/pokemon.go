@@ -191,11 +191,19 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	e.addLocationFields(m, pokemon.Latitude, pokemon.Longitude)
 
 	// Static map tile
+	pending := e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, monsterTileFields(pokemon), tileMode, pokemon.EncounterID)
+
+	e.setFallbackImg(m, e.FallbackImgURL)
+	return m, pending
+}
+
+// monsterTileFields are the webhook fields of the monster static map payload.
+func monsterTileFields(pokemon *webhook.PokemonWebhook) map[string]any {
 	weather := pokemon.BoostedWeather
 	if weather == 0 {
 		weather = pokemon.Weather
 	}
-	pending := e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, map[string]any{
+	return map[string]any{
 		"pokemon_id":         pokemon.PokemonID,
 		"display_pokemon_id": pokemon.DisplayPokemonID,
 		"pokemonId":          pokemon.PokemonID,
@@ -205,10 +213,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"confirmedTime":      pokemon.DisappearTimeVerified || pokemon.Verified,
 		"weather":            weather,
 		"seen_type":          pokemon.SeenType,
-	}, tileMode, pokemon.EncounterID)
-
-	e.setFallbackImg(m, e.FallbackImgURL)
-	return m, pending
+	}
 }
 
 // enrichPokemonGameData adds game data enrichment fields that are universal

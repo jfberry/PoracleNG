@@ -1,6 +1,11 @@
 package enrichment
 
-import "github.com/pokemon/poracleng/processor/internal/webhook"
+import (
+	"maps"
+
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
+)
 
 // PersonalShinyIcons swaps imgUrl, imgUrlAlt and stickerUrl for the shiny
 // variant for every user the pokemon is personally shiny for, so their alert
@@ -20,6 +25,20 @@ func (e *Enricher) PersonalShinyIcons(perUser map[string]map[string]any, pokemon
 			m[k] = v
 		}
 	}
+}
+
+// PersonalShinyTile returns the enrichment for the users the pokemon is
+// personally shiny for: a copy of base with the shiny sprites and a static map
+// of its own, so the map shows the shiny sprite too. Call it before base is
+// handed to a tile gate, the copy must not race with the base tile's write.
+func (e *Enricher) PersonalShinyTile(base map[string]any, pokemon *webhook.PokemonWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
+	m := maps.Clone(base)
+	delete(m, "staticMap")
+	delete(m, "staticmap")
+	for k, v := range e.shinyPokemonIcons(pokemon) {
+		m[k] = v
+	}
+	return m, e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, monsterTileFields(pokemon), tileMode, pokemon.EncounterID)
 }
 
 func (e *Enricher) shinyPokemonIcons(p *webhook.PokemonWebhook) map[string]string {
