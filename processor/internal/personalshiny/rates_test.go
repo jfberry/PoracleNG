@@ -113,3 +113,18 @@ func TestCutoff(t *testing.T) {
 		}
 	}
 }
+
+// Mirrors Golbat's TestShinyRatesUnsupportedSpecies.
+func TestShinyRatesUnsupportedSpecies(t *testing.T) {
+	// 931 has no entry but is listed as never shiny; 25 has no entry and is not.
+	r := loadedRates(t, `{"rates":[],"unsupportedPokemon":[132,931]}`)
+	s := &shinyScan{rates: r.snapshot.Load(), zone: r.zone}
+	rate931, ok931 := s.rate(931, 2601, 0)
+	rate25, ok25 := s.rate(25, 0, 0)
+	if cutoff, capable := s.shinyCutoff(rate931, ok931, 0, 0); capable || cutoff != 0 {
+		t.Errorf("unsupported species: cutoff %d capable %v", cutoff, capable)
+	}
+	if cutoff, capable := s.shinyCutoff(rate25, ok25, 0, 0); !capable || cutoff != defaultShinyCutoff {
+		t.Errorf("unlisted species: cutoff %d capable %v", cutoff, capable)
+	}
+}

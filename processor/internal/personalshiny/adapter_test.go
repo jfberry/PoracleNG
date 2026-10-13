@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -252,5 +253,44 @@ func TestShinyVariantFormDefaultFallback(t *testing.T) {
 	}
 	if _, _, ok := nilRates.BaseShinyVariantForm(25, 0, 598, 0); ok {
 		t.Fatal("nil rates known")
+	}
+}
+
+// An unsupported species (feed `unsupportedPokemon`) never rolls shiny and
+// resolves as known + unsupported, for every form and costume.
+func TestUnsupportedSpecies(t *testing.T) {
+	r := loadedRates(t, `{"rates":[],"unsupportedPokemon":[931]}`)
+	wild := &webhook.PokemonWebhook{EncounterID: "1", PokemonID: 931, Form: 2601, Latitude: 33.45, Longitude: -112.07, SeenType: "wild"}
+	ev := r.Evaluate(wild)
+	if ev == nil || ev.shinyCapable || ev.shinyCutoff != 0 || ev.backgroundCutoff != 0 {
+		t.Fatalf("unsupported evaluation = %+v", ev)
+	}
+	// Golbat's three test players, many encounters: never shiny.
+	for enc := 1; enc <= 2000; enc++ {
+		wild.EncounterID = strconv.Itoa(enc)
+		if res := r.Evaluate(wild).For(accounts(testPlayers...)); len(res.Shiny) != 0 || len(res.Background) != 0 {
+			t.Fatalf("encounter %d: %+v", enc, res)
+		}
+	}
+	for _, form := range []int{0, 2601} {
+		if s, p, ok := r.ShinyVariant(931, form, 0, 33.45, -112.07); !ok || s || p != 0 {
+			t.Fatalf("ShinyVariant form %d = %v %v %v", form, s, p, ok)
+		}
+		if s, _, ok := r.BaseShinyVariant(931, form, 0); !ok || s {
+			t.Fatalf("BaseShinyVariant form %d = %v %v", form, s, ok)
+		}
+	}
+	// Known for any form, so the default-form retry is not needed.
+	if s, _, ok := r.ShinyVariantForm(931, 0, 2601, 0, 0, 0); !ok || s {
+		t.Fatalf("ShinyVariantForm = %v %v", s, ok)
+	}
+	if s, _, ok := r.BaseShinyVariantForm(931, 0, 2601, 0); !ok || s {
+		t.Fatalf("BaseShinyVariantForm = %v %v", s, ok)
+	}
+	if _, _, ok := r.ShinyVariant(25, 0, 0, 0, 0); ok {
+		t.Fatal("unlisted species reported known")
+	}
+	if got := r.Boosted(33.45, -112.07); len(got) != 0 {
+		t.Fatalf("Boosted = %+v", got)
 	}
 }

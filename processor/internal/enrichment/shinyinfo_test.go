@@ -82,3 +82,18 @@ func TestShinyFactsFormZeroUsesDefaultForm(t *testing.T) {
 		t.Fatalf("nil GameData = %+v", f)
 	}
 }
+
+// personalshiny.Rates reports a species listed in the feed's
+// unsupportedPokemon as known + unsupported for every form, so the observed
+// stats must not turn shinyPossible back on.
+func TestShinyFactsUnsupportedSpeciesBeatsObserved(t *testing.T) {
+	e := &Enricher{
+		ShinyProvider: fakeObserved{931: 480},
+		ShinyFeed:     fakeFeed{{931, 0, 0}: {false, 0}, {931, 2601, 0}: {false, 0}},
+	}
+	for _, form := range []int{0, 2601} {
+		if f := e.shinyFacts(931, form, 0, 0, 0); !f.answered || f.possible || f.oneIn != 0 || f.boosted {
+			t.Fatalf("form %d unsupported = %+v", form, f)
+		}
+	}
+}
