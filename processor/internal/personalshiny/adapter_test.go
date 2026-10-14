@@ -62,14 +62,16 @@ func TestEvaluateMatchesGolbatAnnotate(t *testing.T) {
 	}
 }
 
-// Mirrors Golbat's TestPersonalDrawOrder.
+// Mirrors Golbat's TestPersonalDrawOrder. Poracle: the filter path
+// (shinyScan.match) is not copied; backgroundRoll stands in for it.
 func TestPersonalDrawOrder(t *testing.T) {
 	background := &shinyPrediction{Probability: 0.2, Supported: true}
 	r := NewRates("x", "")
-	r.snapshot.Store(&shinyRates{variants: map[shinyVariant]shinyRate{
-		{25, 0, 0}: {Pokemon: 25, Prediction: shinyPrediction{Probability: 0.1, Supported: true}, Background: background},
-		{26, 0, 0}: {Pokemon: 26, Prediction: shinyPrediction{Supported: false}, Background: background},
-	}})
+	r.snapshot.Store(newShinyRates([]shinyRate{
+		{Pokemon: 25, Prediction: shinyPrediction{Probability: 0.1, Supported: true}, Background: background},
+		{Pokemon: 26, Prediction: shinyPrediction{Supported: false}, Background: background},
+		{Pokemon: 29, Prediction: shinyPrediction{Probability: 0, Supported: true}, Background: background},
+	}, nil, nil))
 	at := func(id int) Result {
 		return r.Evaluate(&webhook.PokemonWebhook{EncounterID: "1", PokemonID: id, SeenType: "wild"}).For(accounts(testPlayers...))
 	}
@@ -77,15 +79,57 @@ func TestPersonalDrawOrder(t *testing.T) {
 	if res := at(25); !slices.Equal(playerIDs(res.Shiny), []string{" Trainer-é "}) || !slices.Equal(playerIDs(res.Background), []string{"0123456789abcdef"}) {
 		t.Fatalf("capable: %+v", res)
 	}
-	// Never shiny: no shiny draw, so the background is the first draw.
-	if res := at(26); len(res.Shiny) != 0 || !slices.Equal(playerIDs(res.Background), []string{" Trainer-é "}) {
-		t.Fatalf("not capable: %+v", res)
+	// Never shiny, whether unsupported or at probability 0: no shiny draw,
+	// so the background is the first draw.
+	for _, pokemon := range []int{26, 29} {
+		if res := at(pokemon); len(res.Shiny) != 0 || !slices.Equal(playerIDs(res.Background), []string{" Trainer-é "}) {
+			t.Fatalf("%d not capable: %+v", pokemon, res)
+		}
 	}
 	// backgroundRoll (Golbat's filter path) agrees with the annotate path.
 	for _, id := range testPlayers {
 		want := id == " Trainer-é "
 		if got := backgroundRoll(false, newShinyPlayer(id), 1) < background.cutoff(0); got != want {
 			t.Errorf("backgroundRoll %q = %v, want %v", id, got, want)
+		}
+	}
+}
+
+// Mirrors Golbat's TestShinyCapabilityIgnoresTimezone, through Evaluate
+// with the webhook's location.
+func TestShinyCapabilityIgnoresTimezone(t *testing.T) {
+	// Capability comes from the base rate; a timezone override changes only
+	// the cutoff. Rolls as in TestPersonalDrawOrder.
+	r := NewRates("x", "")
+	if z := r.zone(33.45, -112.07); z != "America/Phoenix" {
+		t.Skipf("timezone data changed: %s", z)
+	}
+	background := &shinyPrediction{Probability: 0.2, Supported: true}
+	phoenix := func(p shinyPrediction) map[string]shinyPrediction {
+		return map[string]shinyPrediction{"America/Phoenix": p}
+	}
+	r.snapshot.Store(newShinyRates([]shinyRate{
+		// Never shiny, even where an override claims otherwise.
+		{Pokemon: 27, Prediction: shinyPrediction{Supported: false}, Overrides: phoenix(shinyPrediction{Probability: 1, Supported: true}), Background: background},
+		// Shiny-capable everywhere, with no chance in Phoenix.
+		{Pokemon: 28, Prediction: shinyPrediction{Probability: 1, Supported: true}, Overrides: phoenix(shinyPrediction{Supported: false}), Background: background},
+	}, nil, nil))
+	for _, tc := range []struct {
+		pokemon           int
+		lat, lon          float64
+		shiny, background []string
+	}{
+		{27, 33.45, -112.07, nil, []string{" Trainer-é "}},
+		{27, 0, 0, nil, []string{" Trainer-é "}},
+		{28, 33.45, -112.07, nil, []string{"0123456789abcdef"}},
+		{28, 0, 0, testPlayers, []string{"0123456789abcdef"}},
+	} {
+		res := r.Evaluate(&webhook.PokemonWebhook{EncounterID: "1", PokemonID: tc.pokemon, Latitude: tc.lat, Longitude: tc.lon, SeenType: "wild"}).For(accounts(testPlayers...))
+		if got := playerIDs(res.Shiny); !slices.Equal(got, tc.shiny) {
+			t.Errorf("%d at %v,%v: shiny %v", tc.pokemon, tc.lat, tc.lon, got)
+		}
+		if got := playerIDs(res.Background); !slices.Equal(got, tc.background) {
+			t.Errorf("%d at %v,%v: background %v", tc.pokemon, tc.lat, tc.lon, got)
 		}
 	}
 }
@@ -194,10 +238,10 @@ func TestCheckerAllowsAndMemo(t *testing.T) {
 
 func TestShinyVariantAndBoosted(t *testing.T) {
 	r := loadedRates(t, testFeed)
-	if s, p, ok := r.ShinyVariant(25, 0, 0, 33.45, -112.07); !ok || !s || p != 0.05 {
+	if s, p, ok := r.ShinyVariant(25, 0, 0, 33.45, -112.07); !ok || !s || p != onCutoff(0.05) {
 		t.Fatalf("Phoenix override = %v %v %v", s, p, ok)
 	}
-	if s, p, ok := r.ShinyVariant(25, 0, 0, 51.5, 0); !ok || !s || p != 0.1 {
+	if s, p, ok := r.ShinyVariant(25, 0, 0, 51.5, 0); !ok || !s || p != onCutoff(0.1) {
 		t.Fatalf("base = %v %v %v", s, p, ok)
 	}
 	if _, _, ok := r.ShinyVariant(1, 0, 0, 0, 0); ok {
@@ -235,10 +279,10 @@ func TestShinyVariantFormDefaultFallback(t *testing.T) {
 	if _, _, ok := r.ShinyVariant(25, 0, 0, 51.5, 0); ok {
 		t.Fatal("plain lookup of form 0 must not resolve (Golbat behaviour)")
 	}
-	if s, p, ok := r.ShinyVariantForm(25, 0, 598, 0, 51.5, 0); !ok || !s || p != 0.05 {
+	if s, p, ok := r.ShinyVariantForm(25, 0, 598, 0, 51.5, 0); !ok || !s || p != onCutoff(0.05) {
 		t.Fatalf("default-form fallback with override = %v %v %v", s, p, ok)
 	}
-	if s, p, ok := r.BaseShinyVariantForm(25, 0, 598, 0); !ok || !s || p != 0.1 {
+	if s, p, ok := r.BaseShinyVariantForm(25, 0, 598, 0); !ok || !s || p != onCutoff(0.1) {
 		t.Fatalf("base default-form fallback = %v %v %v", s, p, ok)
 	}
 	if _, _, ok := r.ShinyVariantForm(25, 0, 0, 0, 51.5, 0); ok {
@@ -292,5 +336,85 @@ func TestUnsupportedSpecies(t *testing.T) {
 	}
 	if got := r.Boosted(33.45, -112.07); len(got) != 0 {
 		t.Fatalf("Boosted = %+v", got)
+	}
+}
+
+// onCutoff is a feed probability as the variant lookups report it: the
+// 24-bit cutoff the roll compares against, over shinyScale.
+func onCutoff(p float64) float64 {
+	return float64(shinyPrediction{Probability: p, Supported: true}.cutoff(0)) / shinyScale
+}
+
+// Poracle-only: the variant lookups read the normalised cutoffs. supported
+// is the base capability (overrides never change it), probability 0 is not
+// capable, the feed fallback never makes an unlisted variant known, and
+// Boosted compares cutoffs at the location with the 1/512 cutoff.
+func TestShinyVariantCutoffs(t *testing.T) {
+	r := loadedRates(t, `{"rates":[
+		{"pokemon":27,"form":0,"costume":0,"prediction":{"probability":0.5,"supported":false},"overrides":{"America/Phoenix":{"probability":1,"supported":true}}},
+		{"pokemon":28,"form":0,"costume":0,"prediction":{"probability":0.04,"supported":true},"overrides":{"America/Phoenix":{"probability":0,"supported":false}}},
+		{"pokemon":29,"form":0,"costume":0,"prediction":{"probability":0,"supported":true}},
+		{"pokemon":30,"form":0,"costume":0,"prediction":{"probability":0.001953125,"supported":true}},
+		{"pokemon":31,"form":0,"costume":0,"prediction":{"probability":2,"supported":true}}
+	],"fallback":{"probability":0.015625,"supported":true}}`)
+	if r.zone(33.45, -112.07) != "America/Phoenix" {
+		t.Skip("timezone data changed")
+	}
+	for _, tc := range []struct {
+		pokemon   int
+		lat, lon  float64
+		supported bool
+		oneIn     int
+	}{
+		{27, 33.45, -112.07, false, 0}, // override cannot make it capable
+		{27, 51.5, 0, false, 0},
+		{28, 33.45, -112.07, true, 0}, // capable, no chance here
+		{28, 51.5, 0, true, 25},
+		{29, 51.5, 0, false, 0}, // probability 0: not capable
+		{30, 51.5, 0, true, 512},
+		{31, 51.5, 0, true, 64}, // invalid probability takes the fallback
+	} {
+		s, p, ok := r.ShinyVariant(tc.pokemon, 0, 0, tc.lat, tc.lon)
+		if !ok || s != tc.supported || OneIn(p) != tc.oneIn {
+			t.Errorf("ShinyVariant(%d at %v,%v) = %v %v %v", tc.pokemon, tc.lat, tc.lon, s, p, ok)
+		}
+	}
+	if s, p, ok := r.BaseShinyVariant(28, 0, 0); !ok || !s || OneIn(p) != 25 {
+		t.Errorf("BaseShinyVariant(28) = %v %v %v", s, p, ok)
+	}
+	if s, _, ok := r.BaseShinyVariant(27, 0, 0); !ok || s {
+		t.Errorf("BaseShinyVariant(27) = %v %v", s, ok)
+	}
+	// The feed fallback is a roll assumption, not a known rate.
+	if _, _, ok := r.ShinyVariant(1, 0, 0, 51.5, 0); ok {
+		t.Error("unlisted variant reported known")
+	}
+	// 27 is not capable, so its Phoenix override is not an event; 28 is
+	// above 1/512 only outside Phoenix; 30 is exactly 1/512.
+	got := r.Boosted(33.45, -112.07)
+	if len(got) != 1 || got[0].PokemonID != 31 || got[0].OneIn != 64 {
+		t.Errorf("Boosted Phoenix = %+v", got)
+	}
+	got = r.Boosted(51.5, 0)
+	if len(got) != 2 || got[0].PokemonID != 28 || got[0].OneIn != 25 || got[1].PokemonID != 31 {
+		t.Errorf("Boosted London = %+v", got)
+	}
+}
+
+func TestOneIn(t *testing.T) {
+	for _, tc := range []struct {
+		p    float64
+		want int
+	}{
+		{float64(defaultShinyCutoff) / shinyScale, 512},
+		{onCutoff(1.0 / 25), 25},
+		{onCutoff(0.04), 25},
+		{onCutoff(1.0 / 64), 64},
+		{onCutoff(0.1), 10},
+		{0, 0},
+	} {
+		if got := OneIn(tc.p); got != tc.want {
+			t.Errorf("OneIn(%v) = %d, want %d", tc.p, got, tc.want)
+		}
 	}
 }

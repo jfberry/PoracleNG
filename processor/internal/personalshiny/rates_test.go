@@ -114,17 +114,104 @@ func TestCutoff(t *testing.T) {
 	}
 }
 
-// Mirrors Golbat's TestShinyRatesUnsupportedSpecies.
+// Mirrors Golbat's TestShinyRatesUnsupportedSpecies. Poracle: the
+// shinyMaximum assertion is not ported (Poracle has no scan-filter path, so
+// shinyMaximum is not copied).
 func TestShinyRatesUnsupportedSpecies(t *testing.T) {
 	// 931 has no entry but is listed as never shiny; 25 has no entry and is not.
 	r := loadedRates(t, `{"rates":[],"unsupportedPokemon":[132,931]}`)
 	s := &shinyScan{rates: r.snapshot.Load(), zone: r.zone}
-	rate931, ok931 := s.rate(931, 2601, 0)
-	rate25, ok25 := s.rate(25, 0, 0)
-	if cutoff, capable := s.shinyCutoff(rate931, ok931, 0, 0); capable || cutoff != 0 {
+	rate931, rate25 := s.rate(931, 2601, 0), s.rate(25, 0, 0)
+	if cutoff, capable := s.shinyCutoff(rate931, 0, 0), rate931.capable(); capable || cutoff != 0 {
 		t.Errorf("unsupported species: cutoff %d capable %v", cutoff, capable)
 	}
-	if cutoff, capable := s.shinyCutoff(rate25, ok25, 0, 0); !capable || cutoff != defaultShinyCutoff {
+	if cutoff, capable := s.shinyCutoff(rate25, 0, 0), rate25.capable(); !capable || cutoff != defaultShinyCutoff {
 		t.Errorf("unlisted species: cutoff %d capable %v", cutoff, capable)
+	}
+}
+
+// Mirrors Golbat's TestShinyRatesNormalize.
+func TestShinyRatesNormalize(t *testing.T) {
+	phoenix := func(p shinyPrediction) map[string]shinyPrediction {
+		return map[string]shinyPrediction{"America/Phoenix": p}
+	}
+	base := shinyPrediction{Probability: 1.0 / 512, Supported: true}
+	background := shinyPrediction{Probability: 0.04, Supported: true}
+	// As in the live feed: every override matches its base, here once only
+	// after rounding to a cutoff. Nothing needs a timezone.
+	rates := newShinyRates([]shinyRate{
+		{Pokemon: 1, Prediction: base, Overrides: phoenix(shinyPrediction{Probability: 0.0019531, Supported: true})},
+		{Pokemon: 2, Prediction: base, Overrides: phoenix(base),
+			Background: &background, BackgroundOverrides: phoenix(background)},
+		// Not capable: overrides cannot change that, so none are kept.
+		{Pokemon: 3, Prediction: shinyPrediction{Supported: true}, Overrides: phoenix(base)},
+	}, nil, nil)
+	if rates.zoned {
+		t.Error("snapshot with only no-op overrides is zoned")
+	}
+	for v, c := range rates.variants {
+		if c.shinyOverrides != nil || c.backgroundOverrides != nil {
+			t.Errorf("%v kept overrides %+v", v, c)
+		}
+	}
+	if c := rates.variants[shinyVariant{2, 0, 0}]; c.shiny != defaultShinyCutoff || c.background != background.cutoff(0) {
+		t.Errorf("cutoffs %+v", c)
+	}
+	if m := rates.maximum[3]; m != 0 {
+		t.Errorf("not-capable species maximum %d", m)
+	}
+
+	// A real override survives, marks the snapshot, and raises the maximum.
+	rates = newShinyRates([]shinyRate{
+		{Pokemon: 1, Prediction: base, Overrides: map[string]shinyPrediction{"America/Phoenix": {Probability: 0.25, Supported: true}, "America/Denver": base}},
+		{Pokemon: 2, Prediction: base, BackgroundOverrides: phoenix(shinyPrediction{Probability: 0.1, Supported: true})},
+	}, nil, nil)
+	if !rates.zoned {
+		t.Error("snapshot with effective overrides is not zoned")
+	}
+	if c := rates.variants[shinyVariant{1, 0, 0}]; len(c.shinyOverrides) != 1 || c.shinyOverrides["America/Phoenix"] != shinyScale/4 {
+		t.Errorf("shiny overrides %v", c.shinyOverrides)
+	}
+	if rates.maximum[1] != shinyScale/4 || rates.backgroundMaximum[2] == 0 {
+		t.Errorf("maxima %v %v", rates.maximum, rates.backgroundMaximum)
+	}
+	// Poracle: the zone resolver is the Rates' (geo.TimezoneName).
+	zone := NewRates("", "").zone
+	s := &shinyScan{rates: rates, zone: zone}
+	if got := s.shinyCutoff(rates.variants[shinyVariant{1, 0, 0}], 0, 0); got != defaultShinyCutoff {
+		t.Errorf("default cutoff %d", got)
+	}
+	if zone(33.45, -112.07) != "America/Phoenix" {
+		t.Skip("timezone data changed")
+	}
+	if got := s.shinyCutoff(rates.variants[shinyVariant{1, 0, 0}], 33.45, -112.07); got != shinyScale/4 {
+		t.Errorf("Phoenix cutoff %d", got)
+	}
+}
+
+// Mirrors Golbat's TestShinyRatesFallback. Poracle: the shinyMaximum
+// assertion is not ported (shinyMaximum is not copied).
+func TestShinyRatesFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		fallback string
+		want     uint32
+	}{
+		{"omitted", ``, defaultShinyCutoff},
+		{"published", `,"fallback":{"probability":0.00390625,"assumed":true,"supported":true}`, shinyScale / 256},
+		{"zero", `,"fallback":{"probability":0,"supported":true}`, 0},
+	} {
+		r := loadedRates(t, `{"rates":[{"pokemon":1,"form":0,"costume":0,"prediction":{"probability":2,"supported":true}}],"unsupportedPokemon":[931]`+tc.fallback+`}`)
+		s := &shinyScan{rates: r.snapshot.Load(), zone: r.zone}
+		// Unlisted variants, and listed ones with an invalid probability,
+		// take the fallback; a zero fallback leaves them not capable.
+		for _, rate := range []shinyCutoffs{s.rate(25, 0, 0), s.rate(1, 0, 0)} {
+			if rate.shiny != tc.want || rate.capable() != (tc.want > 0) {
+				t.Errorf("%s: cutoffs %+v", tc.name, rate)
+			}
+		}
+		if rate := s.rate(931, 0, 0); rate.capable() {
+			t.Errorf("%s: unsupported species capable", tc.name)
+		}
 	}
 }

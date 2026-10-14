@@ -37,8 +37,8 @@ func TestShinyZonePerSpawn(t *testing.T) {
 			t.Skipf("timezone data changed: corner %v is %s", c, z)
 		}
 	}
-	s := &shinyScan{zone: r.zone}
-	if z := s.zoneAt(map[string]shinyPrediction{"America/Phoenix": {}}, 35.812, -110.195); z != "America/Phoenix" {
+	s := &shinyScan{rates: &shinyRates{zoned: true}, zone: r.zone}
+	if z := s.zoneAt(map[string]uint32{"America/Phoenix": 1}, 35.812, -110.195); z != "America/Phoenix" {
 		t.Fatalf("zone = %q", z)
 	}
 }
