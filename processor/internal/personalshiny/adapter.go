@@ -52,10 +52,11 @@ func (r *Rates) Evaluate(p *webhook.PokemonWebhook) *Evaluation {
 		return nil
 	}
 	s := &shinyScan{rates: snap, zone: r.zone}
-	rate, ok := s.rate(p.PokemonID, p.Form, int(personal)-1)
+	rate := s.rate(p.PokemonID, p.Form, int(personal)-1)
 	ev := &Evaluation{encounter: id}
-	ev.shinyCutoff, ev.shinyCapable = s.shinyCutoff(rate, ok, p.Latitude, p.Longitude)
-	ev.backgroundCutoff = s.backgroundCutoff(rate, ok, p.Latitude, p.Longitude)
+	ev.shinyCapable = rate.capable()
+	ev.shinyCutoff = s.shinyCutoff(rate, p.Latitude, p.Longitude)
+	ev.backgroundCutoff = s.backgroundCutoff(rate, p.Latitude, p.Longitude)
 	return ev
 }
 
@@ -157,20 +158,23 @@ func (c *Checker) Allows(humanID string, bits int) bool {
 	return true
 }
 
-// prediction resolves a variant's shiny prediction at a location: the
-// timezone override when one applies, else the base prediction. Poracle only
-// (used for shinyPossible / shinyRate / !info, not for rolls).
-func (s *shinyScan) prediction(rate shinyRate, lat, lon float64) shinyPrediction {
-	if override, found := rate.Overrides[s.zoneAt(rate.Overrides, lat, lon)]; found {
-		return override
+// listed returns a variant's cutoffs when the feed decides it: the variant
+// is listed, or its species is listed as never shiny. Poracle only (used for
+// shinyPossible / shinyRate / !info, not for rolls): Golbat's fallback rate
+// for other unlisted variants is a roll assumption, and as a "shiny
+// possible" badge it would flag unreleased shinies, so they report unknown.
+func (s *shinyScan) listed(pokemon, form, costume int) (shinyCutoffs, bool) {
+	if _, ok := s.rates.variants[shinyVariant{pokemon, form, costume}]; !ok && !s.rates.unsupported[int16(pokemon)] {
+		return shinyCutoffs{}, false
 	}
-	return rate.Prediction
+	return s.rate(pokemon, form, costume), true
 }
 
-// ShinyVariant reports the feed's view of a variant at a location. known is
-// false when the feed has not loaded or does not list the variant; callers
-// then fall back to observed stats (Golbat's "unknown ⇒ 1/512" is for rolls
-// only — as a "shiny possible" badge it would flag unreleased shinies).
+// ShinyVariant reports the feed's view of a variant at a location. supported
+// is the variant's base capability (an override never changes it), and
+// probability the cutoff at the location over shinyScale. known is false
+// when the feed has not loaded or does not decide the variant (see listed);
+// callers then fall back to observed stats.
 func (r *Rates) ShinyVariant(pokemonID, form, costume int, lat, lon float64) (supported bool, probability float64, known bool) {
 	if r == nil {
 		return false, 0, false
@@ -180,12 +184,11 @@ func (r *Rates) ShinyVariant(pokemonID, form, costume int, lat, lon float64) (su
 		return false, 0, false
 	}
 	s := &shinyScan{rates: snap, zone: r.zone}
-	rate, ok := s.rate(pokemonID, form, costume)
+	rate, ok := s.listed(pokemonID, form, costume)
 	if !ok {
 		return false, 0, false
 	}
-	p := s.prediction(rate, lat, lon)
-	return p.Supported, p.Probability, true
+	return rate.capable(), float64(s.shinyCutoff(rate, lat, lon)) / shinyScale, true
 }
 
 // BaseShinyVariant is ShinyVariant without any zone override applied: the
@@ -199,12 +202,12 @@ func (r *Rates) BaseShinyVariant(pokemonID, form, costume int) (supported bool, 
 	if snap == nil {
 		return false, 0, false
 	}
-	s := &shinyScan{rates: snap, zone: func(float64, float64) string { return "" }}
-	rate, ok := s.rate(pokemonID, form, costume)
+	s := &shinyScan{rates: snap}
+	rate, ok := s.listed(pokemonID, form, costume)
 	if !ok {
 		return false, 0, false
 	}
-	return rate.Prediction.Supported, rate.Prediction.Probability, true
+	return rate.capable(), float64(rate.shiny) / shinyScale, true
 }
 
 // ShinyVariantForm is ShinyVariant for callers that may hold form 0 for a
@@ -233,8 +236,8 @@ type VariantRate struct {
 	OneIn                    int
 }
 
-// Boosted lists the variants whose shiny probability at the location is
-// above 1/512 (an event), sorted by pokemon, form, costume.
+// Boosted lists the shiny-capable variants whose cutoff at the location is
+// above the 1/512 cutoff (an event), sorted by pokemon, form, costume.
 func (r *Rates) Boosted(lat, lon float64) []VariantRate {
 	if r == nil {
 		return nil
@@ -246,9 +249,9 @@ func (r *Rates) Boosted(lat, lon float64) []VariantRate {
 	s := &shinyScan{rates: snap, zone: r.zone}
 	var out []VariantRate
 	for v, rate := range snap.variants {
-		p := s.prediction(rate, lat, lon)
-		if p.Supported && p.Probability > 1.0/512 && p.Probability <= 1 {
-			out = append(out, VariantRate{PokemonID: v.Pokemon, Form: v.Form, Costume: v.Costume, OneIn: oneIn(p.Probability)})
+		// 1/512 here is the event threshold, not the feed's fallback.
+		if cutoff := s.shinyCutoff(rate, lat, lon); rate.capable() && cutoff > defaultShinyCutoff {
+			out = append(out, VariantRate{PokemonID: v.Pokemon, Form: v.Form, Costume: v.Costume, OneIn: oneIn(float64(cutoff) / shinyScale)})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
