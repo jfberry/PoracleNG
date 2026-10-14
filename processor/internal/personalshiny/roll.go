@@ -9,6 +9,14 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+// dittoPokemonId is Ditto's species. A known Ditto has its own shiny roll at
+// a fixed rate, so the feed's rates (and its unsupportedPokemon entry for
+// Ditto) never apply to it.
+const dittoPokemonId = 132
+
+// dittoShinyCutoff is the 1/64 Ditto shiny rate on a 24-bit roll.
+const dittoShinyCutoff = shinyScale / 64
+
 // Cost is candidates x players x ID length, so both are bounded. 256 bytes
 // covers every known player ID format with room to spare.
 // Poracle: exported, and applied per human (store limits) rather than per
@@ -16,23 +24,44 @@ import (
 const MaxPlayers = 50
 const MaxPlayerIDBytes = 256
 
-// personalLookup packs roll eligibility and costume into one byte:
-// 0 means never personally shiny or background-eligible (Ditto, disguised,
-// or seen only as nearby), otherwise costume+1.
+// personalLookup packs roll eligibility and costume into PokemonLookup's
+// spare byte: 0 means never personally shiny or background-eligible
+// (disguised, Ditto not known as one, or seen only as nearby), otherwise
+// costume+1. A known Ditto is 1: its rule ignores costume, and an eligible
+// lookup with PokemonId 132 is always a known Ditto (see isKnownDitto).
 // Poracle: Golbat reads its Pokemon record and stores the byte in
-// PokemonLookup; Poracle reads the webhook. The webhook has no is_ditto:
-// Golbat sends a detected Ditto as pokemon_id 132 with the disguise in
-// display_pokemon_id, which the pokemon_id (132) and display checks cover.
-// Golbat's costume is a uint8, so out-of-range webhook values are rejected
-// with 255.
+// PokemonLookup; Poracle reads the webhook, which has no is_ditto (see
+// isKnownDitto), so Golbat's IsDitto check is covered by the pokemon_id 132
+// check. Golbat's costume is a uint8, so out-of-range webhook values are
+// rejected with 255.
 func personalLookup(p *webhook.PokemonWebhook) uint8 {
+	if p.SeenType != "wild" && p.SeenType != "encounter" {
+		return 0
+	}
+	if isKnownDitto(p) {
+		return 1
+	}
 	costume := p.Costume
-	if p.PokemonID == 132 || costume < 0 || costume >= math.MaxUint8 ||
-		p.DisplayPokemonID != 0 && p.DisplayPokemonID != p.PokemonID ||
-		p.SeenType != "wild" && p.SeenType != "encounter" {
+	if p.PokemonID == dittoPokemonId || costume < 0 || costume >= math.MaxUint8 ||
+		p.DisplayPokemonID != 0 && p.DisplayPokemonID != p.PokemonID {
 		return 0
 	}
 	return uint8(costume) + 1
+}
+
+// isKnownDitto reports whether Golbat has identified the record as a Ditto:
+// setDittoAttributes sets IsDitto and species 132 together, whether from
+// detectDitto's scan evidence or the encounter-ID roll (markDittoFromRoll),
+// and resetDittoAttributes clears both. Until then a disguised Ditto looks
+// like its disguise and takes that species' rule; nothing can tell it apart.
+// Species 132 without IsDitto (an undisguised Ditto) is not covered by the
+// Ditto rule's evidence and stays ineligible.
+// Poracle: the webhook has no is_ditto. setDittoAttributes also sets
+// display_pokemon_id to the disguise, and resetDittoAttributes clears it, so
+// on the webhook a known Ditto is pokemon_id 132 with a nonzero
+// display_pokemon_id; an undisguised 132 (display 0) stays ineligible.
+func isKnownDitto(p *webhook.PokemonWebhook) bool {
+	return p.PokemonID == dittoPokemonId && p.DisplayPokemonID != 0
 }
 
 // shinyPlayer is used by one scan goroutine. It remembers only the last
@@ -66,6 +95,17 @@ func (p *shinyPlayer) rolls(encounter uint64) (first, second uint32) {
 	first, second = rng.Next(24), rng.Next(24)
 	p.last, p.lastValid, p.lastFirst, p.lastSecond = encounter, true, first, second
 	return first, second
+}
+
+// dittoRoll is the third draw, the Ditto shiny roll. The game takes all three
+// draws for a Ditto whatever the disguise's rates: the first two are the
+// disguise's shiny and background rolls, which never apply (a disguise is
+// never shiny). Dittos are rare, so this is not cached.
+func (p *shinyPlayer) dittoRoll(encounter uint64) uint32 {
+	rng := p.generator(encounter)
+	rng.Next(24)
+	rng.Next(24)
+	return rng.Next(24)
 }
 
 // generator is the player's fresh generator for an encounter.

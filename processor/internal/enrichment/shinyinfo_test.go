@@ -1,9 +1,13 @@
 package enrichment
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 )
 
 type fakeObserved map[int]float64
@@ -95,5 +99,27 @@ func TestShinyFactsUnsupportedSpeciesBeatsObserved(t *testing.T) {
 		if f := e.shinyFacts(931, form, 0, 0, 0); !f.answered || f.possible || f.oneIn != 0 || f.boosted {
 			t.Fatalf("form %d unsupported = %+v", form, f)
 		}
+	}
+}
+
+// A Ditto alert (pokemon 132) reports the fixed 1/64 Ditto shiny rate from
+// the real feed adapter, even though the feed lists 132 as unsupported and
+// observed stats say otherwise.
+func TestShinyFactsDitto(t *testing.T) {
+	feed := `{"rates":[],"unsupportedPokemon":[132]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(feed)) }))
+	t.Cleanup(server.Close)
+	r := personalshiny.NewRates(server.URL, "", 0)
+	r.Start(context.Background())
+	t.Cleanup(r.Stop)
+	for i := 0; !r.Loaded(); i++ {
+		if i > 2000 {
+			t.Fatal("feed never loaded")
+		}
+		waitMillis(1)
+	}
+	e := &Enricher{ShinyProvider: fakeObserved{}, ShinyFeed: r}
+	if f := e.shinyFacts(132, 0, 0, 51.5, 0); !f.answered || !f.possible || f.oneIn != 64 {
+		t.Fatalf("Ditto = %+v", f)
 	}
 }
