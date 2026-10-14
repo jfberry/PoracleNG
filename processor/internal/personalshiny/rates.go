@@ -22,6 +22,8 @@ import (
 )
 
 const shinyScale = 1 << 24
+
+// defaultShinyCutoff applies when the feed does not publish a fallback.
 const defaultShinyCutoff = shinyScale / 512
 
 type shinyPrediction struct {
@@ -30,7 +32,8 @@ type shinyPrediction struct {
 }
 
 // cutoff converts a probability to a threshold on a 24-bit roll. Invalid
-// probabilities use fallback: 1/512 for shiny, never for backgrounds.
+// probabilities use fallback: the feed's fallback for shiny, never for
+// backgrounds.
 func (p shinyPrediction) cutoff(fallback uint32) uint32 {
 	if !p.Supported {
 		return 0
@@ -51,11 +54,25 @@ type shinyRate struct {
 	Background          *shinyPrediction           `json:"background"`
 	BackgroundOverrides map[string]shinyPrediction `json:"background_overrides"`
 }
+
+// shinyCutoffs is a variant's rates in scan-ready form, built once per
+// refresh: integer cutoffs, and only the overrides that differ from the base
+// (nil when none do). A zero shiny cutoff means not shiny-capable, so such a
+// variant keeps no shiny overrides.
+type shinyCutoffs struct {
+	shiny               uint32
+	shinyOverrides      map[string]uint32
+	background          uint32
+	backgroundOverrides map[string]uint32
+}
+
 type shinyRates struct {
-	variants          map[shinyVariant]shinyRate
+	variants          map[shinyVariant]shinyCutoffs
 	unsupported       map[int16]bool // species without a released shiny
+	fallback          uint32         // shiny cutoff of unlisted variants
 	maximum           map[int16]uint32
 	backgroundMaximum map[int16]uint32
+	zoned             bool // some variant has an effective override
 }
 
 // Status is a point-in-time view of the feed for admin status output.
@@ -186,8 +203,9 @@ func (r *Rates) refreshShinyRates(ctx context.Context) (err error) {
 		return fmt.Errorf("status %d", res.StatusCode)
 	}
 	var feed struct {
-		Rates       *[]shinyRate `json:"rates"`
-		Unsupported []int        `json:"unsupportedPokemon"`
+		Rates       *[]shinyRate     `json:"rates"`
+		Unsupported []int            `json:"unsupportedPokemon"`
+		Fallback    *shinyPrediction `json:"fallback"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&feed); err != nil {
 		return err
@@ -196,30 +214,60 @@ func (r *Rates) refreshShinyRates(ctx context.Context) (err error) {
 	if feed.Rates == nil {
 		return fmt.Errorf("rates response has no rates list")
 	}
-	next := &shinyRates{variants: make(map[shinyVariant]shinyRate), maximum: make(map[int16]uint32), backgroundMaximum: make(map[int16]uint32)}
-	next.unsupported = make(map[int16]bool, len(feed.Unsupported))
-	for _, p := range feed.Unsupported {
+	r.snapshot.Store(newShinyRates(*feed.Rates, feed.Unsupported, feed.Fallback))
+	return nil
+}
+
+// newShinyRates normalizes a feed so scans compare integers and resolve a
+// timezone only where the answer depends on it. fallback is the feed's rate
+// for unlisted variants; 1/512 when it publishes none.
+func newShinyRates(rates []shinyRate, unsupported []int, fallback *shinyPrediction) *shinyRates {
+	next := &shinyRates{variants: make(map[shinyVariant]shinyCutoffs, len(rates)), maximum: make(map[int16]uint32), backgroundMaximum: make(map[int16]uint32)}
+	next.fallback = defaultShinyCutoff
+	if fallback != nil {
+		next.fallback = fallback.cutoff(defaultShinyCutoff)
+	}
+	next.unsupported = make(map[int16]bool, len(unsupported))
+	for _, p := range unsupported {
 		next.unsupported[int16(p)] = true
 	}
-	// Poracle: loop variable renamed r → rt (r is the receiver).
-	for _, rt := range *feed.Rates {
-		next.variants[shinyVariant{rt.Pokemon, rt.Form, rt.Costume}] = rt
-		// Unknown costumes/forms still default to 1/512 shiny and no background.
+	for _, r := range rates {
+		c := shinyCutoffs{shiny: r.Prediction.cutoff(next.fallback)}
+		if c.shiny > 0 {
+			c.shinyOverrides = effectiveOverrides(r.Overrides, c.shiny, next.fallback)
+		}
+		if r.Background != nil {
+			c.background = r.Background.cutoff(0)
+		}
+		c.backgroundOverrides = effectiveOverrides(r.BackgroundOverrides, c.background, 0)
+		next.zoned = next.zoned || c.shinyOverrides != nil || c.backgroundOverrides != nil
+		next.variants[shinyVariant{r.Pokemon, r.Form, r.Costume}] = c
 		// The per-species maxima are a cheap rejection before the exact variant.
-		bound := max(defaultShinyCutoff, rt.Prediction.cutoff(defaultShinyCutoff))
-		for _, p := range rt.Overrides {
-			bound = max(bound, p.cutoff(defaultShinyCutoff))
+		species := int16(r.Pokemon)
+		shiny, background := c.shiny, c.background
+		for _, cutoff := range c.shinyOverrides {
+			shiny = max(shiny, cutoff)
 		}
-		next.maximum[int16(rt.Pokemon)] = max(next.maximum[int16(rt.Pokemon)], bound)
-		background := uint32(0)
-		if rt.Background != nil {
-			background = rt.Background.cutoff(0)
+		for _, cutoff := range c.backgroundOverrides {
+			background = max(background, cutoff)
 		}
-		for _, p := range rt.BackgroundOverrides {
-			background = max(background, p.cutoff(0))
-		}
-		next.backgroundMaximum[int16(rt.Pokemon)] = max(next.backgroundMaximum[int16(rt.Pokemon)], background)
+		next.maximum[species] = max(next.maximum[species], shiny)
+		next.backgroundMaximum[species] = max(next.backgroundMaximum[species], background)
 	}
-	r.snapshot.Store(next)
-	return nil
+	return next
+}
+
+// effectiveOverrides converts overrides to cutoffs and drops those equal to
+// the base cutoff, comparing integers so near-equal probabilities collapse.
+func effectiveOverrides(overrides map[string]shinyPrediction, base, fallback uint32) map[string]uint32 {
+	var effective map[string]uint32
+	for zone, p := range overrides {
+		if cutoff := p.cutoff(fallback); cutoff != base {
+			if effective == nil {
+				effective = make(map[string]uint32)
+			}
+			effective[zone] = cutoff
+		}
+	}
+	return effective
 }

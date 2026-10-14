@@ -83,18 +83,20 @@ type shinyScan struct {
 	zone  func(lat, lon float64) string
 }
 
-func (s *shinyScan) rate(pokemon, form, costume int) (shinyRate, bool) {
-	rate, ok := s.rates.variants[shinyVariant{pokemon, form, costume}]
-	if !ok && s.rates.unsupported[int16(pokemon)] {
-		// A species the feed lists as never shiny: no shiny draw is taken,
-		// rather than falling back to 1/512.
-		return shinyRate{Pokemon: pokemon, Form: form, Costume: costume}, true
+// rate returns a variant's cutoffs. Unknown costumes/forms take the fallback
+// shiny rate and no background, unless the species is listed as never shiny.
+func (s *shinyScan) rate(pokemon, form, costume int) shinyCutoffs {
+	if rate, ok := s.rates.variants[shinyVariant{pokemon, form, costume}]; ok {
+		return rate
 	}
-	return rate, ok
+	if s.rates.unsupported[int16(pokemon)] {
+		return shinyCutoffs{}
+	}
+	return shinyCutoffs{shiny: s.rates.fallback}
 }
 
-func (s *shinyScan) zoneAt(overrides map[string]shinyPrediction, lat, lon float64) string {
-	if len(overrides) == 0 {
+func (s *shinyScan) zoneAt(overrides map[string]uint32, lat, lon float64) string {
+	if !s.rates.zoned || len(overrides) == 0 {
 		return ""
 	}
 	// Resolved per spawn: matching bbox corners do not imply the whole box
@@ -102,38 +104,34 @@ func (s *shinyScan) zoneAt(overrides map[string]shinyPrediction, lat, lon float6
 	return s.zone(lat, lon)
 }
 
-// shinyCutoff resolves the shiny threshold at a location. capable reports
-// whether the variant can be shiny there at all; only then does the game take
-// a draw for the shiny roll, which shifts every later draw.
-func (s *shinyScan) shinyCutoff(rate shinyRate, ok bool, lat, lon float64) (cutoff uint32, capable bool) {
-	if !ok {
-		return defaultShinyCutoff, true
+// capable reports whether the variant has a shiny roll at all; only then
+// does the game take a draw for it, which shifts every later draw. A shiny is
+// released per species and form, not per location, so this reads the base
+// cutoff only and never needs a timezone. A zero cutoff (probability 0, even
+// when marked supported) means no shiny is available, so no draw.
+func (c shinyCutoffs) capable() bool { return c.shiny > 0 }
+
+// shinyCutoff resolves the shiny threshold at a location. Overrides change
+// only the threshold; a variant that is not capable has none and stays 0.
+func (s *shinyScan) shinyCutoff(rate shinyCutoffs, lat, lon float64) uint32 {
+	if override, found := rate.shinyOverrides[s.zoneAt(rate.shinyOverrides, lat, lon)]; found {
+		return override
 	}
-	prediction := rate.Prediction
-	if override, found := rate.Overrides[s.zoneAt(rate.Overrides, lat, lon)]; found {
-		prediction = override
-	}
-	return prediction.cutoff(defaultShinyCutoff), prediction.Supported
+	return rate.shiny
 }
 
-func (s *shinyScan) backgroundCutoff(rate shinyRate, ok bool, lat, lon float64) uint32 {
-	if !ok {
-		return 0
+func (s *shinyScan) backgroundCutoff(rate shinyCutoffs, lat, lon float64) uint32 {
+	if override, found := rate.backgroundOverrides[s.zoneAt(rate.backgroundOverrides, lat, lon)]; found {
+		return override
 	}
-	if override, found := rate.BackgroundOverrides[s.zoneAt(rate.BackgroundOverrides, lat, lon)]; found {
-		return override.cutoff(0)
-	}
-	if rate.Background == nil {
-		return 0
-	}
-	return rate.Background.cutoff(0)
+	return rate.background
 }
 
 // backgroundRoll is the draw after the shiny roll, which the game takes only
 // when the variant can be shiny: the second draw if so, otherwise the first.
-func backgroundRoll(shinyCapable bool, player *shinyPlayer, encounter uint64) uint32 {
+func backgroundRoll(capable bool, player *shinyPlayer, encounter uint64) uint32 {
 	first, second := player.rolls(encounter)
-	if shinyCapable {
+	if capable {
 		return second
 	}
 	return first
