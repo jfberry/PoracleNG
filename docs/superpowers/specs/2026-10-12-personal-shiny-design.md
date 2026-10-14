@@ -43,8 +43,8 @@ seen, and unable to show event rates.
 ## Non-goals
 
 - Per-player height/weight (Golbat#424). Bitmask bits are reserved for it.
-- Ditto prediction. Golbat treats Ditto and disguised pokemon as never
-  eligible; so does Poracle.
+- Ditto backgrounds, and Dittos Golbat has not identified (see
+  "Behaviour": known Dittos are predicted since Golbat #423 @ bec2c23).
 - Verifying that a player ID belongs to the human linking it (see
   "Account linking policy" for the mitigation).
 - A shared Go module with Golbat. Golbat's implementation is still
@@ -191,17 +191,25 @@ func (r *Rates) Variant(pokemonID, form, costume int, lat, lon float64) (v Varia
   ID); `java.util.Random`; 24-bit draws compared against
   `ceil(probability × 2²⁴)`.
 - **Draw order:** the shiny draw is taken only if the variant can be shiny
-  at that location (`supported`, or unknown variant); the background draw
+  (base cutoff > 0: `supported` with a nonzero probability, or an unknown
+  variant at a nonzero fallback), regardless of location — an override
+  changes only the threshold; the background draw
   follows only if a background rate is on offer. So the background is the
   second draw for shiny-capable variants and the first otherwise.
-- **Eligibility** (Golbat's `personalLookup`): never Ditto, never
-  disguised, never costume 255, only `wild` and `encounter` seen types.
-  Poracle's webhook has no `is_ditto` field; Golbat's webhook reports a
-  detected Ditto as `pokemon_id` 132 with the disguise in
-  `display_pokemon_id`, so the adapter maps Golbat's checks onto
-  `pokemon_id == 132` and `display_pokemon_id` set and different from
-  `pokemon_id`. Non-numeric encounter IDs are ineligible.
-- **Unknown variant:** 1/512 shiny, no background, unless their species is listed in the feed's `unsupportedPokemon` (never shiny: known + unsupported, no shiny draw, so the background draw is the first).
+- **Eligibility** (Golbat's `personalLookup`): only `wild` and `encounter`
+  seen types; a known Ditto is eligible; otherwise never undisguised 132,
+  never disguised, never costume 255. Poracle's webhook has no `is_ditto`
+  field; Golbat sets `pokemon_id` 132 and the disguise in
+  `display_pokemon_id` together with `is_ditto` (and clears them together),
+  so a known Ditto is `pokemon_id == 132 && display_pokemon_id != 0`.
+  Non-numeric encounter IDs are ineligible.
+- **Ditto:** a known Ditto is shiny for a player iff the **third** draw is
+  below 1/64; it never has a background and ignores the feed (rates,
+  `fallback`, `unsupportedPokemon`). Limitations (upstream): covered only
+  once Golbat knows it is a Ditto — until then it is judged as its disguise
+  and may be reported shiny wrongly; no Ditto background has been observed.
+- **Unknown variant:** the feed's `fallback` shiny rate (1/512 if it
+  publishes none), no background, unless their species is listed in the feed's `unsupportedPokemon` (never shiny: known + unsupported, no shiny draw, so the background draw is the first).
 - **Timezone overrides** are resolved per spawn location.
 - **Rates are read at processing time**, as Golbat reads them at scan time.
 
@@ -231,8 +239,9 @@ has per-timezone overrides active there. Accepted; documented in `SYNC.md`.
   personal rules match unencountered wild spawns.
 - **Re-sends and reveals.** Each webhook is evaluated afresh; nothing is
   cached per encounter. With the species in the duplicate key (#245), a
-  Ditto reveal reaches change detection; it is ineligible, so no personal
-  match follows. Re-sends for users who already have a message take the
+  Ditto reveal reaches change detection; the revealed Ditto is evaluated
+  with the Ditto rule, so a personal match before the reveal (judged as the
+  disguise) may be followed by a different one after it. Re-sends for users who already have a message take the
   existing prior-message (reply/edit) path.
 
 ## Enrichment and template fields
@@ -275,9 +284,10 @@ ObservedRate(pokemonID int) float64   // existing shinyStats source
 1. **No `[shiny_rates] url` configured:** exactly today's behaviour — the
    observed-stats provider answers `shinyPossible`; `shinyRate` and
    `shinyRateBoosted` are not set.
-2. **URL configured, feed loaded, variant listed:** `shinyPossible` =
-   `prediction.supported` (timezone override applied); `shinyRate` =
-   `round(1 / probability)`.
+2. **URL configured, feed loaded, variant listed:** `shinyPossible` = the
+   base capability (`supported` with a nonzero probability; overrides never
+   change it); `shinyRate` = `round(2²⁴ / cutoff)` at the location. Pokemon
+   132 (Ditto) always reports possible at 1/64.
 3. **URL configured but feed not yet loaded, or variant not listed:** fall
    back to observed stats for `shinyPossible`; `shinyRate` not set.
    (Golbat's "unknown ⇒ 1/512", unless the species is in `unsupportedPokemon`, applies to the personal roll only — using it
@@ -428,9 +438,9 @@ DELETE /api/v2/humans/{id}/accounts/{player_id}
   fixtures; `Evaluation.For` must return the accounts Golbat's `annotate`
   would, including a background-only variant where the background is the
   first draw.
-- **Eligibility:** Ditto, disguised, nearby-only and unknown-variant cases;
-  a disguise → Ditto-reveal sequence yields no personal match after the
-  reveal.
+- **Eligibility:** undisguised 132, disguised, nearby-only and
+  unknown-variant cases; known Ditto evaluated with Golbat's pinned
+  `TestPersonalDittoShiny` vectors.
 - **Matcher:** each bit alone and combined; no accounts; feed not loaded;
   one hash per human across several rules; unencountered spawns match.
 - **Enrichment:** personal fields present without PVP display config;
