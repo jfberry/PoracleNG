@@ -16,6 +16,7 @@ import (
 // and enriched on one goroutine.
 type Evaluation struct {
 	encounter        uint64
+	ditto            bool // known Ditto: only the Ditto roll applies
 	shinyCutoff      uint32
 	shinyCapable     bool
 	backgroundCutoff uint32
@@ -34,7 +35,8 @@ type Result struct {
 // Evaluate resolves the webhook's variant, cutoffs and eligibility once. It
 // returns nil when the feed has not loaded (fail closed) or the pokemon can
 // never be personally shiny or background-eligible.
-// The body is the first half of Golbat's shinyScan.annotate.
+// The body is the first half of Golbat's shinyScan.annotate: a known Ditto
+// takes the Ditto rule, anything else its variant's cutoffs.
 func (r *Rates) Evaluate(p *webhook.PokemonWebhook) *Evaluation {
 	if r == nil {
 		return nil
@@ -51,9 +53,14 @@ func (r *Rates) Evaluate(p *webhook.PokemonWebhook) *Evaluation {
 	if personal == 0 {
 		return nil
 	}
+	ev := &Evaluation{encounter: id}
+	if isKnownDitto(p) {
+		// A known Ditto ignores the feed (rates, fallback, unsupportedPokemon).
+		ev.ditto = true
+		return ev
+	}
 	s := &shinyScan{rates: snap, zone: r.zone}
 	rate := s.rate(p.PokemonID, p.Form, int(personal)-1)
-	ev := &Evaluation{encounter: id}
 	ev.shinyCapable = rate.capable()
 	ev.shinyCutoff = s.shinyCutoff(rate, p.Latitude, p.Longitude)
 	ev.backgroundCutoff = s.backgroundCutoff(rate, p.Latitude, p.Longitude)
@@ -66,6 +73,13 @@ func (e *Evaluation) player(id string) playerResult {
 		return v
 	}
 	var res playerResult
+	if e.ditto {
+		// A known Ditto is shiny on the third draw at 1/64 and never has a
+		// background: no Ditto background has been observed.
+		res.shiny = newShinyPlayer(id).dittoRoll(e.encounter) < dittoShinyCutoff
+		e.remember(id, res)
+		return res
+	}
 	rng := newShinyPlayer(id).generator(e.encounter)
 	if e.shinyCapable && rng.Next(24) < e.shinyCutoff {
 		res.shiny = true
@@ -74,11 +88,15 @@ func (e *Evaluation) player(id string) playerResult {
 	if e.backgroundCutoff > 0 && rng.Next(24) < e.backgroundCutoff {
 		res.background = true
 	}
+	e.remember(id, res)
+	return res
+}
+
+func (e *Evaluation) remember(id string, res playerResult) {
 	if e.memo == nil {
 		e.memo = make(map[string]playerResult)
 	}
 	e.memo[id] = res
-	return res
 }
 
 // For evaluates a human's accounts. Nil-safe: a nil Evaluation hits nothing.
@@ -163,7 +181,14 @@ func (c *Checker) Allows(humanID string, bits int) bool {
 // shinyPossible / shinyRate / !info, not for rolls): Golbat's fallback rate
 // for other unlisted variants is a roll assumption, and as a "shiny
 // possible" badge it would flag unreleased shinies, so they report unknown.
+//
+// Poracle: species 132 reports the fixed Ditto rate (1/64, supported) for
+// every form and costume, whatever the feed says, so a Ditto alert shows
+// shinyPossible and shinyRate 64 instead of the feed's unsupported entry.
 func (s *shinyScan) listed(pokemon, form, costume int) (shinyCutoffs, bool) {
+	if pokemon == dittoPokemonId {
+		return shinyCutoffs{shiny: dittoShinyCutoff}, true
+	}
 	if _, ok := s.rates.variants[shinyVariant{pokemon, form, costume}]; !ok && !s.rates.unsupported[int16(pokemon)] {
 		return shinyCutoffs{}, false
 	}
