@@ -2,6 +2,8 @@ package personalshiny
 
 import (
 	"context"
+	"crypto/sha1" //nolint:gosec // see thirdDraw
+	"encoding/binary"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -9,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny/javarandom"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -137,9 +140,14 @@ func TestShinyCapabilityIgnoresTimezone(t *testing.T) {
 func TestEvaluateEligibility(t *testing.T) {
 	r := loadedRates(t, testFeed)
 	for name, mutate := range map[string]func(p *webhook.PokemonWebhook){
-		"ditto":            func(p *webhook.PokemonWebhook) { p.PokemonID = 132 },
-		"revealed ditto":   func(p *webhook.PokemonWebhook) { p.PokemonID = 132; p.DisplayPokemonID = 16 },
-		"disguised":        func(p *webhook.PokemonWebhook) { p.DisplayPokemonID = 16 },
+		"undisguised 132": func(p *webhook.PokemonWebhook) { p.PokemonID = 132 },
+		"disguised":       func(p *webhook.PokemonWebhook) { p.DisplayPokemonID = 16 },
+		"disguised, not known as Ditto": func(p *webhook.PokemonWebhook) {
+			p.PokemonID, p.DisplayPokemonID = 16, 19
+		},
+		"nearby Ditto": func(p *webhook.PokemonWebhook) {
+			p.PokemonID, p.DisplayPokemonID, p.SeenType = 132, 16, "nearby_stop"
+		},
 		"nearby stop":      func(p *webhook.PokemonWebhook) { p.SeenType = "nearby_stop" },
 		"nearby cell":      func(p *webhook.PokemonWebhook) { p.SeenType = "nearby_cell" },
 		"no seen type":     func(p *webhook.PokemonWebhook) { p.SeenType = "" },
@@ -161,6 +169,11 @@ func TestEvaluateEligibility(t *testing.T) {
 	p.DisplayPokemonID = 25 // display equal to species is not a disguise
 	if r.Evaluate(p) == nil {
 		t.Error("encounter with display == species: want eligible")
+	}
+	p = wildPikachu()
+	p.PokemonID, p.DisplayPokemonID = 132, 16
+	if ev := r.Evaluate(p); ev == nil || !ev.ditto {
+		t.Errorf("known Ditto: evaluation %+v, want a Ditto evaluation", ev)
 	}
 }
 
@@ -416,5 +429,83 @@ func TestOneIn(t *testing.T) {
 		if got := OneIn(tc.p); got != tc.want {
 			t.Errorf("OneIn(%v) = %d, want %d", tc.p, got, tc.want)
 		}
+	}
+}
+
+// thirdDraw is the Ditto shiny roll computed from scratch, independently of
+// shinyPlayer: the third Next(24) of the personal generator.
+func thirdDraw(encounter uint64, player string) uint32 {
+	input := make([]byte, 8+len(player))
+	binary.LittleEndian.PutUint64(input, encounter)
+	copy(input[8:], player)
+	digest := sha1.Sum(input) //nolint:gosec // the game seeds its generator with SHA-1; this is not a security use
+	rng := javarandom.New(binary.LittleEndian.Uint64(digest[:8]))
+	rng.Next(24)
+	rng.Next(24)
+	return rng.Next(24)
+}
+
+// Mirrors Golbat's TestPersonalDittoShiny, through Evaluate. Poracle: the
+// webhook has no is_ditto; a known Ditto is pokemon_id 132 with its
+// disguise in display_pokemon_id (see isKnownDitto). The filter path
+// (shinyScan.match / matchDitto) is not copied.
+func TestPersonalDittoShiny(t *testing.T) {
+	// Pidgey disguises at rate 1 would be shiny and have a background for
+	// everyone; a known Ditto must ignore that and the unsupportedPokemon
+	// entry for 132, and use only the third draw at 1/64.
+	r := loadedRates(t, `{"rates":[{"pokemon":16,"form":0,"costume":0,"prediction":{"probability":1,"supported":true},"background":{"probability":1,"supported":true}}],"unsupportedPokemon":[132]}`)
+	ditto := &webhook.PokemonWebhook{PokemonID: dittoPokemonId, DisplayPokemonID: 16, SeenType: "wild"}
+	if personalLookup(ditto) == 0 {
+		t.Fatal("known Ditto is not eligible")
+	}
+	// Pinned: 6 is a Ditto shiny for Player-ID:ABC/123 only, 26 for
+	// Trainer-é only. 25 is not, though Trainer-é's first two draws are
+	// below 1/64; 15 is not, though 0123456789abcdef's first is.
+	pinned := map[uint64][]string{1: nil, 6: {"Player-ID:ABC/123"}, 15: nil, 25: nil, 26: {" Trainer-é "}}
+	for encounter := uint64(1); encounter <= 1000; encounter++ {
+		var want []string
+		for _, id := range testPlayers {
+			if thirdDraw(encounter, id) < (1<<24)/64 {
+				want = append(want, id)
+			}
+		}
+		if pin, ok := pinned[encounter]; ok && !slices.Equal(want, pin) {
+			t.Fatalf("encounter %d: generator gives %v, pinned %v", encounter, want, pin)
+		}
+		ditto.EncounterID = strconv.FormatUint(encounter, 10)
+		res := r.Evaluate(ditto).For(accounts(testPlayers...))
+		// No Ditto background has been observed: never reported.
+		if got := playerIDs(res.Shiny); !slices.Equal(got, want) || res.Background != nil {
+			t.Fatalf("encounter %d: shiny %v background %v, want shiny %v", encounter, got, res.Background, want)
+		}
+		for _, id := range testPlayers {
+			if got := newShinyPlayer(id).dittoRoll(encounter) < dittoShinyCutoff; got != slices.Contains(want, id) {
+				t.Fatalf("encounter %d: dittoRoll %q = %v", encounter, id, got)
+			}
+		}
+	}
+}
+
+// Poracle-only: a known Ditto's variant lookups report its fixed 1/64 rate
+// whatever the feed says (here unsupportedPokemon lists 132), so its alert
+// shows shinyPossible and shinyRate 64. Unloaded feed: still unknown.
+func TestShinyVariantDitto(t *testing.T) {
+	r := loadedRates(t, `{"rates":[{"pokemon":132,"form":0,"costume":0,"prediction":{"probability":0,"supported":false}}],"unsupportedPokemon":[132]}`)
+	for _, form := range []int{0, 2} {
+		if s, p, ok := r.ShinyVariant(132, form, 0, 33.45, -112.07); !ok || !s || OneIn(p) != 64 {
+			t.Errorf("ShinyVariant(132, %d) = %v %v %v", form, s, p, ok)
+		}
+		if s, p, ok := r.BaseShinyVariant(132, form, 0); !ok || !s || OneIn(p) != 64 {
+			t.Errorf("BaseShinyVariant(132, %d) = %v %v %v", form, s, p, ok)
+		}
+	}
+	if s, p, ok := r.ShinyVariantForm(132, 0, 0, 0, 0, 0); !ok || !s || OneIn(p) != 64 {
+		t.Errorf("ShinyVariantForm(132) = %v %v %v", s, p, ok)
+	}
+	if got := r.Boosted(33.45, -112.07); len(got) != 0 {
+		t.Errorf("Boosted lists the Ditto: %+v", got)
+	}
+	if _, _, ok := NewRates("x", "", 0).ShinyVariant(132, 0, 0, 0, 0); ok {
+		t.Error("unloaded feed reported the Ditto known")
 	}
 }

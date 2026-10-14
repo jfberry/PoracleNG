@@ -144,3 +144,48 @@ func TestPersonalOnlyEvaluatedForValidatedHumans(t *testing.T) {
 		t.Fatalf("matched = %+v; want near's basic rule only (PVP personal rule gated)", matched)
 	}
 }
+
+// A known Ditto (pokemon_id 132 with a disguise) rolls on the third draw at
+// 1/64 and never has a background. At encounter 6 it is shiny for
+// "Player-ID:ABC/123" only (Golbat's pinned TestPersonalDittoShiny vector),
+// even though the feed lists 132 as unsupported and gives the disguise
+// rate 1 with a background.
+func TestPersonalRulesKnownDitto(t *testing.T) {
+	const feed = `{"rates":[{"pokemon":16,"form":0,"costume":0,"prediction":{"probability":1,"supported":true},"background":{"probability":1,"supported":true}}],"unsupportedPokemon":[132]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(feed)) }))
+	t.Cleanup(server.Close)
+	r := personalshiny.NewRates(server.URL, "", 0)
+	r.Start(context.Background())
+	t.Cleanup(r.Stop)
+	for i := 0; !r.Loaded(); i++ {
+		if i > 2000 {
+			t.Fatal("feed never loaded")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	lucky := makeHuman("lucky")
+	lucky.Accounts = []db.PlayerAccount{{PlayerID: "Player-ID:ABC/123"}}
+	other := makeHuman("other")
+	other.Accounts = []db.PlayerAccount{{PlayerID: " Trainer-é "}}
+	humans := map[string]*db.Human{"lucky": lucky, "other": other}
+	rule := func(id string, bits int) *db.MonsterTracking {
+		m := makeMonster(id, 132)
+		m.Personal = bits
+		return m
+	}
+	st := makeTestState([]*db.MonsterTracking{
+		rule("lucky", db.PersonalShiny),      // match
+		rule("lucky", db.PersonalBackground), // a Ditto never has a background
+		rule("other", db.PersonalShiny),      // not shiny for this player
+		rule("other", db.PersonalBackground),
+	}, humans)
+
+	ev := r.Evaluate(&webhook.PokemonWebhook{EncounterID: "6", PokemonID: 132, DisplayPokemonID: 16, Latitude: 51.5, SeenType: "wild"})
+	p := personalPikachu(personalshiny.NewChecker(ev, humans), true)
+	p.PokemonID = 132
+	matched, _ := (&PokemonMatcher{PVPQueryMaxRank: 100}).Match(p, st)
+	if len(matched) != 1 || matched[0].ID != "lucky" {
+		t.Fatalf("known Ditto matches = %+v; want lucky's personalshiny rule only", matched)
+	}
+}
