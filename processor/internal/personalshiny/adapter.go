@@ -177,10 +177,11 @@ func (c *Checker) Allows(humanID string, bits int) bool {
 }
 
 // listed returns a variant's cutoffs when the feed decides it: the variant
-// is listed, or its species is listed as never shiny. Poracle only (used for
-// shinyPossible / shinyRate / !info, not for rolls): Golbat's fallback rate
-// for other unlisted variants is a roll assumption, and as a "shiny
-// possible" badge it would flag unreleased shinies, so they report unknown.
+// is listed, or its species is listed as never shiny.
+// Poracle: only for shinyPossible / shinyRate / !info, not for rolls.
+// Golbat's fallback rate for other unlisted variants is a roll assumption,
+// and as a "shiny possible" badge it would flag unreleased shinies, so they
+// report unknown.
 //
 // Poracle: species 132 reports the fixed Ditto rate (1/64, supported) for
 // every form and costume, whatever the feed says, so a Ditto alert shows
