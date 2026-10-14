@@ -264,6 +264,7 @@ type VariantRate struct {
 
 // Boosted lists the shiny-capable variants whose cutoff at the location is
 // above the 1/512 cutoff (an event), sorted by pokemon, form, costume.
+// Ditto (132) is never listed: its 1/64 is its normal rate.
 func (r *Rates) Boosted(lat, lon float64) []VariantRate {
 	if r == nil {
 		return nil
@@ -275,6 +276,10 @@ func (r *Rates) Boosted(lat, lon float64) []VariantRate {
 	s := &shinyScan{rates: snap, zone: r.zone}
 	var out []VariantRate
 	for v, rate := range snap.variants {
+		// Ditto's 1/64 is its normal rate, never an event.
+		if v.Pokemon == dittoPokemonId {
+			continue
+		}
 		// 1/512 here is the event threshold, not the feed's fallback.
 		if cutoff := s.shinyCutoff(rate, lat, lon); rate.capable() && cutoff > defaultShinyCutoff {
 			out = append(out, VariantRate{PokemonID: v.Pokemon, Form: v.Form, Costume: v.Costume, OneIn: oneIn(float64(cutoff) / shinyScale)})

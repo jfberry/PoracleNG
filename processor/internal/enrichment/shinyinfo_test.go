@@ -119,7 +119,8 @@ func TestShinyFactsDitto(t *testing.T) {
 		waitMillis(1)
 	}
 	e := &Enricher{ShinyProvider: fakeObserved{}, ShinyFeed: r}
-	if f := e.shinyFacts(132, 0, 0, 51.5, 0); !f.answered || !f.possible || f.oneIn != 64 {
+	// 1/64 is Ditto's normal rate, not an event: never boosted.
+	if f := e.shinyFacts(132, 0, 0, 51.5, 0); !f.answered || !f.possible || f.oneIn != 64 || f.boosted {
 		t.Fatalf("Ditto = %+v", f)
 	}
 }
