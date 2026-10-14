@@ -228,6 +228,7 @@ func (r *Rates) BaseShinyVariant(pokemonID, form, costume int) (supported bool, 
 	if snap == nil {
 		return false, 0, false
 	}
+	// No zone: only base cutoffs are read, never shinyCutoff / zoneAt.
 	s := &shinyScan{rates: snap}
 	rate, ok := s.listed(pokemonID, form, costume)
 	if !ok {
