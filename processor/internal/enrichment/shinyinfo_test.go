@@ -106,7 +106,32 @@ func TestShinyFactsUnsupportedSpeciesBeatsObserved(t *testing.T) {
 // the real feed adapter, even though the feed lists 132 as unsupported and
 // observed stats say otherwise.
 func TestShinyFactsDitto(t *testing.T) {
-	feed := `{"rates":[],"unsupportedPokemon":[132]}`
+	e := &Enricher{ShinyProvider: fakeObserved{}, ShinyFeed: loadedFeed(t, `{"rates":[],"unsupportedPokemon":[132]}`)}
+	// 1/64 is Ditto's normal rate, not an event: never boosted.
+	if f := e.shinyFacts(132, 0, 0, 51.5, 0); !f.answered || !f.possible || f.oneIn != 64 || f.boosted {
+		t.Fatalf("Ditto = %+v", f)
+	}
+}
+
+// The shinyPossible badge follows the location: a variant capable at base
+// (so it still takes a shiny draw) with a zero override where it spawns is
+// not possible there.
+func TestShinyFactsZeroOverrideAtLocation(t *testing.T) {
+	r := loadedFeed(t, `{"rates":[{"pokemon":28,"form":0,"costume":0,"prediction":{"probability":0.04,"supported":true},"overrides":{"America/Phoenix":{"probability":0,"supported":false}}}]}`)
+	if s, p, ok := r.ShinyVariant(28, 0, 0, 33.45, -112.07); !ok || !s || p != 0 {
+		t.Skipf("timezone data changed: ShinyVariant at Phoenix = %v %v %v", s, p, ok)
+	}
+	e := &Enricher{ShinyProvider: fakeObserved{28: 480}, ShinyFeed: r}
+	if f := e.shinyFacts(28, 0, 0, 33.45, -112.07); !f.answered || f.possible || f.oneIn != 0 || f.boosted {
+		t.Fatalf("Phoenix (zero override) = %+v", f)
+	}
+	if f := e.shinyFacts(28, 0, 0, 51.5, 0); !f.possible || f.oneIn != 25 || !f.boosted {
+		t.Fatalf("London (base) = %+v", f)
+	}
+}
+
+func loadedFeed(t *testing.T, feed string) *personalshiny.Rates {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(feed)) }))
 	t.Cleanup(server.Close)
 	r := personalshiny.NewRates(server.URL, "", 0)
@@ -118,9 +143,5 @@ func TestShinyFactsDitto(t *testing.T) {
 		}
 		waitMillis(1)
 	}
-	e := &Enricher{ShinyProvider: fakeObserved{}, ShinyFeed: r}
-	// 1/64 is Ditto's normal rate, not an event: never boosted.
-	if f := e.shinyFacts(132, 0, 0, 51.5, 0); !f.answered || !f.possible || f.oneIn != 64 || f.boosted {
-		t.Fatalf("Ditto = %+v", f)
-	}
+	return r
 }

@@ -14,6 +14,10 @@ import (
 // Ditto) never apply to it.
 const dittoPokemonId = 132
 
+// DittoPokemonID is dittoPokemonId for callers outside the package (Ditto's
+// 1/64 is never reported as a boosted rate). Poracle only.
+const DittoPokemonID = dittoPokemonId
+
 // dittoShinyCutoff is the 1/64 Ditto shiny rate on a 24-bit roll.
 const dittoShinyCutoff = shinyScale / 64
 
