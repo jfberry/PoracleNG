@@ -285,8 +285,8 @@ ObservedRate(pokemonID int) float64   // existing shinyStats source
    observed-stats provider answers `shinyPossible`; `shinyRate` and
    `shinyRateBoosted` are not set.
 2. **URL configured, feed loaded, variant listed:** `shinyPossible` = the
-   base capability (`supported` with a nonzero probability; overrides never
-   change it); `shinyRate` = `round(2²⁴ / cutoff)` at the location. Pokemon
+   base capability (`supported` with a nonzero probability) and a nonzero
+   cutoff at the location (a zero override there turns the badge off); `shinyRate` = `round(2²⁴ / cutoff)` at the location. Pokemon
    132 (Ditto) always reports possible at 1/64.
 3. **URL configured but feed not yet loaded, or variant not listed:** fall
    back to observed stats for `shinyPossible`; `shinyRate` not set.

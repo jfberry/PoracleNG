@@ -1,10 +1,10 @@
 package enrichment
 
-import "math"
+import (
+	"math"
 
-// dittoPokemonID is Ditto's species. The feed adapter reports it at its
-// fixed 1/64 rate, which is its normal rate, not an event.
-const dittoPokemonID = 132
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
+)
 
 // ShinyFeed is the optional shiny-rate feed ([shiny_rates], implemented by
 // personalshiny.Rates). known=false when the feed has not loaded or does not
@@ -35,10 +35,13 @@ func (e *Enricher) shinyFacts(pokemonID, form, costume int, lat, lon float64) sh
 	if e.ShinyFeed != nil {
 		if supported, p, known := e.ShinyFeed.ShinyVariantForm(pokemonID, form, e.GameData.DefaultForm(pokemonID), costume, lat, lon); known {
 			f.answered = true
-			f.possible = supported
+			// supported is the base capability; the badge follows the
+			// location, so a zero override here means not possible here.
+			f.possible = supported && p > 0
 			if supported && p > 0 && p <= 1 {
 				f.oneIn = int(math.Round(1 / p))
-				f.boosted = p > 1.0/512 && pokemonID != dittoPokemonID
+				// Ditto's 1/64 is its normal rate, not an event.
+				f.boosted = p > 1.0/512 && pokemonID != personalshiny.DittoPokemonID
 			}
 		}
 	}
