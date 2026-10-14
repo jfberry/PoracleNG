@@ -449,13 +449,13 @@ func TestStatusReport_SummaryBufferSection(t *testing.T) {
 
 func TestStatusShinyRates(t *testing.T) {
 	ctx := statusCtx(t)
-	ctx.ShinyRates = personalshiny.NewRates("", "")
+	ctx.ShinyRates = personalshiny.NewRates("", "", 0)
 	text := statusText(statusReport(ctx, false))
 	if !strings.Contains(text, "Shiny rates") || !strings.Contains(text, "not configured") {
 		t.Fatalf("unconfigured: %q", text)
 	}
 
-	ctx.ShinyRates = personalshiny.NewRates("http://127.0.0.1:1", "")
+	ctx.ShinyRates = personalshiny.NewRates("http://127.0.0.1:1", "", 0)
 	text = statusText(statusReport(ctx, false))
 	if !strings.Contains(text, "not loaded yet") {
 		t.Fatalf("unloaded: %q", text)

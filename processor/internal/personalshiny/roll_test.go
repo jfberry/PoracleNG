@@ -31,7 +31,7 @@ func TestPersonalShinyScanRolls(t *testing.T) {
 func TestShinyZonePerSpawn(t *testing.T) {
 	// All four corners of this box are America/Denver, but the point inside is
 	// America/Phoenix; overrides must follow the spawn, not the box.
-	r := NewRates("", "")
+	r := NewRates("", "", 0)
 	for _, c := range [][2]float64{{35.5, -111.2}, {35.5, -109.8}, {36.3, -111.2}, {36.3, -109.8}} {
 		if z := r.zone(c[0], c[1]); z != "America/Denver" {
 			t.Skipf("timezone data changed: corner %v is %s", c, z)

@@ -2,6 +2,7 @@ package personalshiny
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,7 +18,7 @@ func TestRefreshLoadsFeed(t *testing.T) {
 		_, _ = w.Write([]byte(testFeed))
 	}))
 	defer server.Close()
-	r := NewRates(server.URL+"/", "test")
+	r := NewRates(server.URL+"/", "test", 0)
 	if r.Loaded() {
 		t.Fatal("loaded before refresh")
 	}
@@ -36,7 +37,7 @@ func TestRefreshLoadsFeed(t *testing.T) {
 func TestShinyRatesRejectMissingList(t *testing.T) {
 	for _, body := range []string{`{}`, `null`, `{"error":"down"}`, `{"rates":null}`} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }))
-		r := NewRates(server.URL, "")
+		r := NewRates(server.URL, "", 0)
 		good := &shinyRates{}
 		r.snapshot.Store(good)
 		if err := r.refreshShinyRates(context.Background()); err == nil {
@@ -57,7 +58,7 @@ func TestRefreshKeepsSnapshotOnHTTPError(t *testing.T) {
 		http.Error(w, "down", http.StatusBadGateway)
 	}))
 	defer server.Close()
-	r := NewRates(server.URL, "")
+	r := NewRates(server.URL, "", 0)
 	good := &shinyRates{}
 	r.snapshot.Store(good)
 	if err := r.refreshShinyRates(context.Background()); err == nil {
@@ -75,7 +76,7 @@ func TestRefreshDoesNotFollowRedirects(t *testing.T) {
 		http.Redirect(w, r, target.URL+r.URL.String(), http.StatusFound)
 	}))
 	defer redirect.Close()
-	r := NewRates(redirect.URL, "secret")
+	r := NewRates(redirect.URL, "secret", 0)
 	if err := r.refreshShinyRates(context.Background()); err == nil {
 		t.Fatal("redirect followed (and would leak the bearer token)")
 	}
@@ -88,7 +89,7 @@ func TestNilAndUnconfiguredRates(t *testing.T) {
 	}
 	nilRates.Start(context.Background()) // must not panic
 	nilRates.Stop()
-	r := NewRates("", "")
+	r := NewRates("", "", 0)
 	r.Start(context.Background()) // no URL: no goroutine
 	r.Stop()
 	if r.Status().Configured {
@@ -176,7 +177,7 @@ func TestShinyRatesNormalize(t *testing.T) {
 		t.Errorf("maxima %v %v", rates.maximum, rates.backgroundMaximum)
 	}
 	// Poracle: the zone resolver is the Rates' (geo.TimezoneName).
-	zone := NewRates("", "").zone
+	zone := NewRates("", "", 0).zone
 	s := &shinyScan{rates: rates, zone: zone}
 	if got := s.shinyCutoff(rates.variants[shinyVariant{1, 0, 0}], 0, 0); got != defaultShinyCutoff {
 		t.Errorf("default cutoff %d", got)
@@ -213,5 +214,40 @@ func TestShinyRatesFallback(t *testing.T) {
 		if rate := s.rate(931, 0, 0); rate.capable() {
 			t.Errorf("%s: unsupported species capable", tc.name)
 		}
+	}
+}
+
+// Mirrors Golbat's TestShinyRatesMaxBytes. Poracle: the limit is NewRates'
+// maxBytes (config [shiny_rates] max_bytes).
+func TestShinyRatesMaxBytes(t *testing.T) {
+	body := `{"rates":[{"pokemon":25,"form":0,"costume":0,"prediction":{"probability":0.1,"supported":true}}]}`
+	for _, tc := range []struct {
+		name     string
+		limit    int64
+		chunked  bool
+		tooLarge bool
+	}{
+		{"fits exactly", int64(len(body)), false, false},
+		{"over by one", int64(len(body)) - 1, false, true},
+		{"over by one, no length", int64(len(body)) - 1, true, true},
+		{"unset uses the default", 0, false, false},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tc.chunked {
+				w.(http.Flusher).Flush()
+			}
+			_, _ = w.Write([]byte(body))
+		}))
+		r := NewRates(server.URL, "", tc.limit)
+		good := &shinyRates{}
+		r.snapshot.Store(good)
+		err := r.refreshShinyRates(context.Background())
+		if got := errors.Is(err, errShinyRatesTooLarge); got != tc.tooLarge {
+			t.Errorf("%s: err = %v", tc.name, err)
+		}
+		if tc.tooLarge && r.snapshot.Load() != good {
+			t.Errorf("%s: replaced the last good snapshot", tc.name)
+		}
+		server.Close()
 	}
 }

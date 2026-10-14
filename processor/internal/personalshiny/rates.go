@@ -8,6 +8,7 @@ package personalshiny
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -25,6 +26,11 @@ const shinyScale = 1 << 24
 
 // defaultShinyCutoff applies when the feed does not publish a fallback.
 const defaultShinyCutoff = shinyScale / 512
+
+// defaultShinyRatesMaxBytes applies when [shiny_rates] max_bytes is unset.
+const defaultShinyRatesMaxBytes = 16 << 20
+
+var errShinyRatesTooLarge = errors.New("rate feed is too large")
 
 type shinyPrediction struct {
 	Probability float64 `json:"probability"`
@@ -92,6 +98,7 @@ type Status struct {
 // on this struct so the processor and tests own an instance.
 type Rates struct {
 	url, token string
+	maxBytes   int64 // [shiny_rates] max_bytes
 	// Scans read the current snapshot without locking; only the refresher swaps it.
 	snapshot atomic.Pointer[shinyRates]
 	// zone resolves the IANA zone of a spawn. Poracle: Golbat calls
@@ -104,9 +111,10 @@ type Rates struct {
 	done   chan struct{}
 }
 
-// NewRates returns an unstarted feed. An empty url means the feature is off.
-func NewRates(url, token string) *Rates {
-	r := &Rates{url: url, token: token, zone: geo.TimezoneName}
+// NewRates returns an unstarted feed. An empty url means the feature is off;
+// maxBytes <= 0 uses the 16 MiB default.
+func NewRates(url, token string, maxBytes int64) *Rates {
+	r := &Rates{url: url, token: token, maxBytes: maxBytes, zone: geo.TimezoneName}
 	r.status.Store(&Status{Configured: url != ""})
 	return r
 }
@@ -207,7 +215,24 @@ func (r *Rates) refreshShinyRates(ctx context.Context) (err error) {
 		Unsupported []int            `json:"unsupportedPokemon"`
 		Fallback    *shinyPrediction `json:"fallback"`
 	}
-	if err := json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&feed); err != nil {
+	// Poracle: the limit is the Rates' maxBytes, not config.Config.ShinyRates.
+	limit := r.maxBytes
+	if limit <= 0 {
+		limit = defaultShinyRatesMaxBytes
+	}
+	// Read one byte past the limit so an oversized feed fails by name rather
+	// than as a truncated-JSON parse error.
+	if res.ContentLength > limit {
+		return fmt.Errorf("%w: %d bytes exceeds [shiny_rates] max_bytes = %d", errShinyRatesTooLarge, res.ContentLength, limit)
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(body)) > limit {
+		return fmt.Errorf("%w: exceeds [shiny_rates] max_bytes = %d", errShinyRatesTooLarge, limit)
+	}
+	if err := json.Unmarshal(body, &feed); err != nil {
 		return err
 	}
 	// {} , null or an error object would otherwise replace good rates with none.
