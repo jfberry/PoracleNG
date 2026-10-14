@@ -26,7 +26,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   one of the user's linked game accounts: `!track … personalshiny|personalbackground`,
   `/track personal_shiny|personal_background`, v1 `personal` bitmask, v2
   `personal_shiny` / `personal_background`. Needs the new `[shiny_rates]`
-  feed; fails closed until it loads.
+  feed; fails closed until it loads. Synced with Golbat#423 @ bec2c23: known
+  Dittos roll at 1/64, the feed's `fallback` rate, and `[shiny_rates] max_bytes`.
 - **Linked game accounts.** `!account` / `/account` (list/add/remove/rename; `!account add <name> <player-id>`) and
   `GET|POST /api/v2/humans/{id}/accounts`, `PUT|DELETE …/accounts/{player_id}`;
   the v2 snapshot carries `accounts`. Player IDs are 1-256 ASCII
