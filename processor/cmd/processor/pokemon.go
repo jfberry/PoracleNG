@@ -393,26 +393,31 @@ func (ps *ProcessorService) pokemonEditFields(encounterID string) (string, time.
 // before any render worker reads it.
 func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	editKey, editMaxAge := ps.pokemonEditFields(in.encounterID)
+	// Every job below starts from this template and only sets what differs
+	// (users, tile gate, change fields, the personal-shiny enrichment), so a
+	// field added here reaches every bucket.
+	template := RenderJob{
+		AlertType:         "pokemon",
+		IsPokemon:         true,
+		IsEncountered:     in.isEncountered,
+		Enrichment:        in.enrichment,
+		PerLangEnrichment: in.perLang,
+		PerUserEnrichment: in.perUser,
+		WebhookFields:     in.webhookFields,
+		MatchedAreas:      in.matchedAreas,
+		LogReference:      in.encounterID,
+		ReplyKey:          in.encounterID,
+		EditKey:           editKey,
+		EditMaxAge:        editMaxAge,
+	}
+
 	if ps.dispatcher == nil {
 		if len(in.matched) == 0 {
 			return
 		}
-		job := RenderJob{
-			AlertType:         "pokemon",
-			IsPokemon:         true,
-			IsEncountered:     in.isEncountered,
-			Enrichment:        in.enrichment,
-			PerLangEnrichment: in.perLang,
-			PerUserEnrichment: in.perUser,
-			WebhookFields:     in.webhookFields,
-			MatchedUsers:      in.matched,
-			MatchedAreas:      in.matchedAreas,
-			TileGate:          ps.newTileGate(in.tilePending),
-			LogReference:      in.encounterID,
-			ReplyKey:          in.encounterID,
-			EditKey:           editKey,
-			EditMaxAge:        editMaxAge,
-		}
+		job := template
+		job.MatchedUsers = in.matched
+		job.TileGate = ps.newTileGate(in.tilePending)
 		if in.shiny == nil {
 			ps.renderCh <- job
 			return
@@ -425,7 +430,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 		return
 	}
 
-	gate := ps.newTileGate(in.tilePending)
+	template.TileGate = ps.newTileGate(in.tilePending)
 
 	// Bucket 1: matched users → `monster`, grouped by language. Users the
 	// pokemon is personally shiny for go out separately with their own map.
@@ -433,40 +438,13 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	if in.shiny != nil {
 		matched = withoutUsers(matched, in.shiny.users)
 		for _, users := range groupByLanguage(in.shiny.users, ps.cfg.General.Locale) {
-			ps.renderCh <- in.shiny.job(ps, RenderJob{
-				AlertType:         "pokemon",
-				IsPokemon:         true,
-				IsEncountered:     in.isEncountered,
-				PerLangEnrichment: in.perLang,
-				PerUserEnrichment: in.perUser,
-				WebhookFields:     in.webhookFields,
-				MatchedAreas:      in.matchedAreas,
-				LogReference:      in.encounterID,
-				ReplyKey:          in.encounterID,
-				EditKey:           editKey,
-				EditMaxAge:        editMaxAge,
-			}, users)
+			ps.renderCh <- in.shiny.job(ps, template, users)
 		}
 	}
-	if len(matched) > 0 {
-		for _, users := range groupByLanguage(matched, ps.cfg.General.Locale) {
-			ps.renderCh <- RenderJob{
-				AlertType:         "pokemon",
-				IsPokemon:         true,
-				IsEncountered:     in.isEncountered,
-				Enrichment:        in.enrichment,
-				PerLangEnrichment: in.perLang,
-				PerUserEnrichment: in.perUser,
-				WebhookFields:     in.webhookFields,
-				MatchedUsers:      users,
-				MatchedAreas:      in.matchedAreas,
-				TileGate:          gate,
-				LogReference:      in.encounterID,
-				ReplyKey:          in.encounterID,
-				EditKey:           editKey,
-				EditMaxAge:        editMaxAge,
-			}
-		}
+	for _, users := range groupByLanguage(matched, ps.cfg.General.Locale) {
+		job := template
+		job.MatchedUsers = users
+		ps.renderCh <- job
 	}
 
 	// Bucket 2: prior-only users → `monsterChanged`, grouped by language.
@@ -492,25 +470,13 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 			if perLangOriginal != nil {
 				orig = perLangOriginal[lang]
 			}
-			ps.renderCh <- RenderJob{
-				AlertType:         "pokemon",
-				IsPokemon:         true,
-				IsChange:          true,
-				IsEncountered:     in.isEncountered,
-				Enrichment:        in.enrichment,
-				PerLangEnrichment: ps.perLangWithChangeFields(in.perLang, lang, bucket),
-				PerUserEnrichment: in.perUser,
-				WebhookFields:     in.webhookFields,
-				MatchedUsers:      users,
-				MatchedAreas:      in.matchedAreas,
-				TileGate:          gate,
-				LogReference:      in.encounterID,
-				ReplyKey:          in.encounterID,
-				EditKey:           editKey,
-				EditMaxAge:        editMaxAge,
-				OriginalView:      orig,
-				ChangeType:        in.change.Type.String(),
-			}
+			job := template
+			job.IsChange = true
+			job.PerLangEnrichment = ps.perLangWithChangeFields(in.perLang, lang, bucket)
+			job.MatchedUsers = users
+			job.OriginalView = orig
+			job.ChangeType = in.change.Type.String()
+			ps.renderCh <- job
 		}
 	}
 }
