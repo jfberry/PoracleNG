@@ -2,6 +2,10 @@ package enrichment
 
 import "math"
 
+// dittoPokemonID is Ditto's species. The feed adapter reports it at its
+// fixed 1/64 rate, which is its normal rate, not an event.
+const dittoPokemonID = 132
+
 // ShinyFeed is the optional shiny-rate feed ([shiny_rates], implemented by
 // personalshiny.Rates). known=false when the feed has not loaded or does not
 // list the variant.
@@ -34,7 +38,7 @@ func (e *Enricher) shinyFacts(pokemonID, form, costume int, lat, lon float64) sh
 			f.possible = supported
 			if supported && p > 0 && p <= 1 {
 				f.oneIn = int(math.Round(1 / p))
-				f.boosted = p > 1.0/512
+				f.boosted = p > 1.0/512 && pokemonID != dittoPokemonID
 			}
 		}
 	}

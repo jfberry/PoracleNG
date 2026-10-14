@@ -508,4 +508,9 @@ func TestShinyVariantDitto(t *testing.T) {
 	if _, _, ok := NewRates("x", "", 0).ShinyVariant(132, 0, 0, 0, 0); ok {
 		t.Error("unloaded feed reported the Ditto known")
 	}
+	// Even a feed listing 132 above 1/512 does not make Ditto an event.
+	r = loadedRates(t, `{"rates":[{"pokemon":132,"form":0,"costume":0,"prediction":{"probability":0.1,"supported":true}},{"pokemon":25,"form":0,"costume":0,"prediction":{"probability":0.1,"supported":true}}]}`)
+	if got := r.Boosted(51.5, 0); len(got) != 1 || got[0].PokemonID != 25 {
+		t.Errorf("Boosted = %+v, want only 25", got)
+	}
 }
