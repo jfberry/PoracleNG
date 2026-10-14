@@ -607,6 +607,9 @@ type WeatherConfig struct {
 type ShinyRatesConfig struct {
 	URL   string `toml:"url"`
 	Token string `toml:"token"`
+	// MaxBytes caps the feed response; a larger one fails the refresh and
+	// keeps the previous rates. <= 0 means the 16 MiB default.
+	MaxBytes int64 `toml:"max_bytes"`
 }
 
 // PlayerAccountsConfig controls who may link game accounts.
@@ -1152,6 +1155,10 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if cfg.Snapshots.SweepIntervalMins <= 0 {
 		cfg.Snapshots.SweepIntervalMins = 60
+	}
+
+	if cfg.ShinyRates.MaxBytes <= 0 {
+		cfg.ShinyRates.MaxBytes = 16 << 20
 	}
 
 	// Validate autocreate config.

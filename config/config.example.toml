@@ -770,6 +770,7 @@ enabled = false
 [shiny_rates]
 url = ""
 token = ""                               # optional bearer token
+#max_bytes = 16777216                    # largest feed response accepted (default 16 MiB)
 
 # Who may link game accounts (!account / API). Player IDs cannot be
 # verified, so by default only admins (or a trusted API client) can link.

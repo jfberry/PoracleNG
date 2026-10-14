@@ -21,7 +21,7 @@ func loadedShinyRates(t *testing.T, feed string) *personalshiny.Rates {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(feed)) }))
 	t.Cleanup(server.Close)
-	r := personalshiny.NewRates(server.URL, "")
+	r := personalshiny.NewRates(server.URL, "", 0)
 	r.Start(context.Background())
 	t.Cleanup(r.Stop)
 	for i := 0; !r.Loaded(); i++ {
@@ -39,7 +39,7 @@ func TestShinyFeedInfoPokemon(t *testing.T) {
 	baseline := cmd.Run(ctx, []string{"pikachu"})[0].Text
 
 	// Unconfigured and nil feeds leave the output identical.
-	ctx.ShinyRates = personalshiny.NewRates("", "")
+	ctx.ShinyRates = personalshiny.NewRates("", "", 0)
 	if got := cmd.Run(ctx, []string{"pikachu"})[0].Text; got != baseline {
 		t.Fatalf("unconfigured feed changed output:\n%q\n%q", got, baseline)
 	}
@@ -71,7 +71,7 @@ func TestShinyFeedInfoShinyBoosted(t *testing.T) {
 	cmd := &InfoCommand{}
 	before := cmd.Run(ctx, []string{"shiny"})
 
-	ctx.ShinyRates = personalshiny.NewRates("", "")
+	ctx.ShinyRates = personalshiny.NewRates("", "", 0)
 	after := cmd.Run(ctx, []string{"shiny"})
 	if len(before) != len(after) || before[0].Text != after[0].Text {
 		t.Fatalf("unconfigured feed changed output: %v vs %v", before, after)

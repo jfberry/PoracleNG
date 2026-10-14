@@ -21,7 +21,7 @@ func personalChecker(t *testing.T, humans map[string]*db.Human, loaded bool) *pe
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(personalFeed)) }))
 	t.Cleanup(server.Close)
-	r := personalshiny.NewRates(server.URL, "")
+	r := personalshiny.NewRates(server.URL, "", 0)
 	if loaded {
 		r.Start(context.Background())
 		t.Cleanup(r.Stop)

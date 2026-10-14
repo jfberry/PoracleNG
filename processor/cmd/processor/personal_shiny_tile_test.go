@@ -19,7 +19,7 @@ func personalShinyChecker(t *testing.T, humans map[string]*db.Human) *personalsh
 	feed := `{"rates":[{"pokemon":25,"form":0,"costume":0,"prediction":{"probability":0.1,"supported":true}}]}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(feed)) }))
 	t.Cleanup(server.Close)
-	r := personalshiny.NewRates(server.URL, "")
+	r := personalshiny.NewRates(server.URL, "", 0)
 	r.Start(context.Background())
 	t.Cleanup(r.Stop)
 	for i := 0; !r.Loaded(); i++ {

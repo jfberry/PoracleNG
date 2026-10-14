@@ -1823,7 +1823,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		}
 	}
 
-	ps.shinyRates = personalshiny.NewRates(cfg.ShinyRates.URL, cfg.ShinyRates.Token)
+	ps.shinyRates = personalshiny.NewRates(cfg.ShinyRates.URL, cfg.ShinyRates.Token, cfg.ShinyRates.MaxBytes)
 	if cfg.ShinyRates.URL != "" {
 		ps.enricher.ShinyFeed = ps.shinyRates
 		ps.shinyRates.Start(ps.ctx)

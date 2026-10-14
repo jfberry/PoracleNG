@@ -34,7 +34,7 @@ func loadedRates(t *testing.T, feed string) *Rates {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(feed)) }))
 	t.Cleanup(server.Close)
-	r := NewRates(server.URL, "")
+	r := NewRates(server.URL, "", 0)
 	if err := r.refreshShinyRates(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestEvaluateMatchesGolbatAnnotate(t *testing.T) {
 // (shinyScan.match) is not copied; backgroundRoll stands in for it.
 func TestPersonalDrawOrder(t *testing.T) {
 	background := &shinyPrediction{Probability: 0.2, Supported: true}
-	r := NewRates("x", "")
+	r := NewRates("x", "", 0)
 	r.snapshot.Store(newShinyRates([]shinyRate{
 		{Pokemon: 25, Prediction: shinyPrediction{Probability: 0.1, Supported: true}, Background: background},
 		{Pokemon: 26, Prediction: shinyPrediction{Supported: false}, Background: background},
@@ -100,7 +100,7 @@ func TestPersonalDrawOrder(t *testing.T) {
 func TestShinyCapabilityIgnoresTimezone(t *testing.T) {
 	// Capability comes from the base rate; a timezone override changes only
 	// the cutoff. Rolls as in TestPersonalDrawOrder.
-	r := NewRates("x", "")
+	r := NewRates("x", "", 0)
 	if z := r.zone(33.45, -112.07); z != "America/Phoenix" {
 		t.Skipf("timezone data changed: %s", z)
 	}
@@ -165,7 +165,7 @@ func TestEvaluateEligibility(t *testing.T) {
 }
 
 func TestEvaluateUnloadedAndUnknownVariant(t *testing.T) {
-	if NewRates("x", "").Evaluate(wildPikachu()) != nil {
+	if NewRates("x", "", 0).Evaluate(wildPikachu()) != nil {
 		t.Fatal("evaluated before the feed loaded (must fail closed)")
 	}
 	var nilRates *Rates
@@ -247,7 +247,7 @@ func TestShinyVariantAndBoosted(t *testing.T) {
 	if _, _, ok := r.ShinyVariant(1, 0, 0, 0, 0); ok {
 		t.Fatal("unlisted variant reported known")
 	}
-	if _, _, ok := NewRates("x", "").ShinyVariant(25, 0, 0, 0, 0); ok {
+	if _, _, ok := NewRates("x", "", 0).ShinyVariant(25, 0, 0, 0, 0); ok {
 		t.Fatal("unloaded feed reported known")
 	}
 	got := r.Boosted(51.5, 0)
