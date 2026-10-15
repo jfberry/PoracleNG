@@ -43,6 +43,7 @@
   "tracking.template_fmt": "テンプレート: {0}",
   "tracking.clean": "自動削除",
   "tracking.edit": "編集",
+  "tracking.edit_default": "edit (default)",
   "tracking.summary": "summary",
   "tracking.distance_fmt": "距離: {0}m",
   "tracking.iv_fmt": "IV: {0}%-{1}%",
