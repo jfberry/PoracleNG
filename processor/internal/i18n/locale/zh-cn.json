@@ -43,6 +43,7 @@
   "tracking.template_fmt": "模板：{0}",
   "tracking.clean": "自动清理",
   "tracking.edit": "编辑",
+  "tracking.edit_default": "edit (default)",
   "tracking.summary": "summary",
   "tracking.distance_fmt": "距离：{0}米",
   "tracking.iv_fmt": "IV：{0}%-{1}%",
