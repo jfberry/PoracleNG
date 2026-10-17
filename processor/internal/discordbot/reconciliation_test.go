@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -134,5 +135,47 @@ func TestReconcileSingleUser_KnownUser_StillActive(t *testing.T) {
 		if c == "Create" || c == "Delete" || c == "SetAdminDisable" {
 			t.Errorf("unexpected mutating store call: %s", c)
 		}
+	}
+}
+
+// TestReconcileUser_EveryoneCommunityRole covers #261: a community whose
+// user_role is the guild ID (@everyone) must keep every guild member, even
+// one with no explicit roles. Discord omits @everyone from member.Roles, so
+// the role list has to come through discordroles.MemberRoleIDs.
+func TestReconcileUser_EveryoneCommunityRole(t *testing.T) {
+	const guildID = "1092147901393813588"
+	cases := []struct {
+		name        string
+		roles       []string
+		wantDisable bool
+	}{
+		{"member role list includes @everyone", discordroles.MemberRoleIDs(guildID, nil), false},
+		{"raw member.Roles without @everyone", nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			comm := config.CommunityConfig{Name: "Vila_Velha", AllowedAreas: []string{"Vila Velha"}}
+			comm.Discord.UserRole = []string{guildID}
+			cfg := minimalConfig()
+			cfg.General.RoleCheckMode = "disable-user"
+			cfg.Area = config.AreaConfig{Enabled: true, Communities: []config.CommunityConfig{comm}}
+
+			user := &store.Human{
+				ID:                  "member-1",
+				Type:                "discord:user",
+				Enabled:             true,
+				Name:                "Member",
+				CommunityMembership: []string{"vila_velha"},
+			}
+			ms := store.NewMockHumanStore()
+			ms.AddHuman(user)
+			r := newTestReconciliation(ms, cfg)
+
+			r.ReconcileUser(user.ID, user, &DiscordUserInfo{Name: "Member", Roles: tc.roles}, false, true)
+
+			if got := slices.Contains(ms.Calls, "SetAdminDisable"); got != tc.wantDisable {
+				t.Errorf("SetAdminDisable called=%v, want %v (calls %v)", got, tc.wantDisable, ms.Calls)
+			}
+		})
 	}
 }

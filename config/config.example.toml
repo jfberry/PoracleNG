@@ -120,6 +120,7 @@ strict_locations = false
 #   allowed_areas  - fences users are allowed to !area add
 #   location_fence - the single area used for checking strict_locations against
 #   discord        - registration channels and user roles for this community
+#                    (use the guild ID as a user_role for "every member of the server" — @everyone)
 #   telegram       - membership groups that qualify for access to this community
 #
 # [[area_security.communities]]
@@ -280,6 +281,7 @@ guilds = [""]
 #   not used in multi community (area security) mode
 channels = [""]
 # user_role - role IDs which automatically grant poracle access (without registration)
+#   the guild ID is the @everyone role and matches every member of that server
 #   not used in multi community (area security) mode
 user_role = [""]
 # admins - IDs of admins (can add channels with !channel add and perform other admin functions)
