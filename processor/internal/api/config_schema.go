@@ -585,8 +585,8 @@ var configSchema = []ConfigSection{
 		Title: "Shiny rates (personal shiny)",
 		Fields: []ConfigFieldDef{
 			{Name: "url", Type: "string", Default: "", Description: "Shiny-rate feed base URL, same format as Golbat [shiny_rates] (GET <url>/v1/rates?compact=1). Enables personal shiny/background tracking and feed-backed shinyPossible/shinyRate. Empty = off.", HotReload: false},
-			{Name: "token", Type: "string", Default: "", Description: "Optional bearer token for the shiny-rate feed", Sensitive: true, HotReload: false, DependsOn: &ConfigDependency{Field: "url", Value: ""}},
-			{Name: "max_bytes", Type: "int", Default: 16777216, Description: "Largest shiny-rate feed response accepted, in bytes (default 16 MiB). A larger response fails the refresh and keeps the previous rates.", Advanced: true, HotReload: false, DependsOn: &ConfigDependency{Field: "url", Value: ""}},
+			{Name: "token", Type: "string", Default: "", Description: "Optional bearer token for the shiny-rate feed", Sensitive: true, HotReload: false},
+			{Name: "max_bytes", Type: "int", Default: 16777216, Description: "Largest shiny-rate feed response accepted, in bytes (default 16 MiB). A larger response fails the refresh and keeps the previous rates.", Advanced: true, HotReload: false},
 		},
 	},
 
