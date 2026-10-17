@@ -428,8 +428,10 @@ func TestLookupRolesGuildUsesMemberRoles(t *testing.T) {
 	d := NewDispatcher(Config{})
 	ic := buildInteractionWithRoles("42", "guild-1", []string{"r1", "r2"})
 	got := d.lookupRoles(ic, "42")
-	if len(got) != 2 || got[0] != "r1" || got[1] != "r2" {
-		t.Errorf("lookupRoles=%v, want [r1 r2]", got)
+	// The guild ID is appended: it is the @everyone role, which Discord
+	// omits from member.Roles.
+	if len(got) != 3 || got[0] != "r1" || got[1] != "r2" || got[2] != "guild-1" {
+		t.Errorf("lookupRoles=%v, want [r1 r2 guild-1]", got)
 	}
 }
 
