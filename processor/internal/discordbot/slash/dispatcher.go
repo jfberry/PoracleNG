@@ -697,13 +697,14 @@ func (d *Dispatcher) commandAllowed(ic *discordgo.InteractionCreate, cmdKey stri
 // code paths:
 //
 //   - Guild interaction (ic.Member non-nil): use ic.Member.Roles —
-//     Discord already populated them in the interaction payload.
+//     Discord already populated them in the interaction payload — plus
+//     the guild's @everyone role (see discordroles.MemberRoleIDs).
 //   - DM interaction: union the user's roles across every guild in
 //     cfg.Discord.Guilds via discordroles.GetUserRoleIDs. Mirrors the
 //     text bot's fetchRoles DM branch and PoracleJS's getUserRoles.
 func (d *Dispatcher) lookupRoles(ic *discordgo.InteractionCreate, userID string) []string {
 	if ic != nil && ic.Member != nil {
-		return ic.Member.Roles
+		return discordroles.MemberRoleIDs(ic.GuildID, ic.Member.Roles)
 	}
 	if d.session == nil || d.cfgRoot == nil || len(d.cfgRoot.Discord.Guilds) == 0 || userID == "" {
 		return nil
