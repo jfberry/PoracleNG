@@ -421,7 +421,9 @@ When enabled, users belong to communities (determined by Discord roles or Telegr
 - `location_fence` — geographic restriction on alert delivery
 - Registration channels — where `!poracle` works for that community
 
-`AreaLogic.ValidateAndPrune` removes areas no longer permitted when community membership changes.
+`bot.PermittedAreas` (`internal/bot/permitted_areas.go`) is the single definition of the areas a human may hold. It is used by v2 set-areas, `override_areas` validation (v1 and v2 tracking writes, via `newOverrideContext`), v2 `GET …/areas` (with `trusted=true`) and both reconcilers; `!area` (`AreaLogic.GetAvailableAreas`) shares its community predicates. The community filter applies when `area_security.enabled`, the caller is not admin, and the human has a community membership or an `area_restriction`. Fences with `exemptFromAreaSecurity` bypass the community filter (this is not `userSelectable`, and it does not affect `strict_locations`; matching and delivery never read the flag).
+
+Reconciliation prunes through `bot.PruneForMembership` (`internal/bot/reconcile_prune.go`) using a denied set: a name is removed only if it is a currently loaded fence that `PermittedAreas` does not return, so names that are not loaded fences (e.g. after a partial geofence load) are left alone, and an empty fence list skips all pruning. Store methods: `StripOverrideAreas` and `StripUserAreas`. Discord prunes `override_areas` on every community change; `humans.area` and every profile are pruned only when `[reconciliation.discord] prune_user_areas = true` (default false, irreversible). Telegram prunes `humans.area` and every profile, opt-in via `[reconciliation.telegram] prune_user_areas`, and has no `override_areas` prune. A prune happens only on a community change; enabling the flag does not retroactively tidy existing users, and reactivating a disabled user does not prune.
 
 #### `everything` flag permissions (`tracking.everything_flag_permissions`)
 

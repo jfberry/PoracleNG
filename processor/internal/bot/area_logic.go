@@ -22,6 +22,9 @@ type AreaLogic struct {
 	cfg    *config.Config
 }
 
+// Fences returns the fence list this AreaLogic was built from.
+func (a *AreaLogic) Fences() []geofence.Fence { return a.fences }
+
 // NewAreaLogic creates a new AreaLogic from fence data and config.
 func NewAreaLogic(fences []geofence.Fence, cfg *config.Config) *AreaLogic {
 	return &AreaLogic{fences: fences, cfg: cfg}
@@ -29,8 +32,8 @@ func NewAreaLogic(fences []geofence.Fence, cfg *config.Config) *AreaLogic {
 
 // GetAvailableAreas returns the list of areas available to a user.
 // When area security is disabled, all user-selectable fences are returned.
-// When enabled, only fences whose names appear in the community's allowed
-// areas are returned.
+// When enabled, fences whose names appear in the community's allowed areas
+// are returned, plus any fence marked exemptFromAreaSecurity.
 //
 // Admins bypass both filters (matching PoracleJS area.js semantics):
 // they see every fence regardless of UserSelectable, and area_security
@@ -63,12 +66,15 @@ func (a *AreaLogic) GetAvailableAreas(communities []string, isAdmin bool) []Area
 		return areas
 	}
 
-	// Area security enabled — build allowed set from community config
-	allowedSet := a.buildAllowedSet(communities)
+	// Area security enabled. Same community predicates as PermittedAreas, so
+	// a fence is judged identically by !area and the API. The gate differs on
+	// purpose: !area always filters, because it is handed a membership list
+	// rather than a human.
+	allowedSet := communityAllowedSet(a.cfg.Area.Communities, communities)
 
 	var areas []AreaInfo
 	for _, f := range a.fences {
-		if f.UserSelectable && allowedSet[strings.ToLower(f.Name)] {
+		if f.UserSelectable && communityPermits(f, allowedSet) {
 			areas = append(areas, AreaInfo{
 				Name:           f.Name,
 				Group:          f.Group,
@@ -228,52 +234,4 @@ func (a *AreaLogic) FindFence(name string) *geofence.Fence {
 		}
 	}
 	return nil
-}
-
-// ValidateAndPrune removes areas from a user's list that are no longer permitted
-// given their current community membership. When area security is disabled, all
-// areas are valid. Returns the pruned list and the removed areas.
-// Used by reconciliation after community membership changes.
-func (a *AreaLogic) ValidateAndPrune(currentAreas []string, communities []string) (valid []string, removed []string) {
-	if !a.cfg.Area.Enabled {
-		return currentAreas, nil
-	}
-
-	allowedSet := a.buildAllowedSet(communities)
-	if len(allowedSet) == 0 {
-		// No communities → no allowed areas → all removed
-		return nil, currentAreas
-	}
-
-	for _, area := range currentAreas {
-		if allowedSet[strings.ToLower(area)] {
-			valid = append(valid, area)
-		} else {
-			removed = append(removed, area)
-		}
-	}
-	return
-}
-
-// buildAllowedSet builds a set of lowercase area names allowed by the given communities.
-func (a *AreaLogic) buildAllowedSet(communities []string) map[string]bool {
-	return BuildPermittedSet(a.cfg.Area.Communities, communities)
-}
-
-// BuildPermittedSet returns a lowercase set of all areas permitted by the given
-// community list. It is a package-level function so callers without an AreaLogic
-// instance (e.g. discordbot reconciliation) can use the same logic without
-// duplicating the community-walk.
-func BuildPermittedSet(communities []config.CommunityConfig, memberOf []string) map[string]bool {
-	permitted := make(map[string]bool)
-	for _, comm := range communities {
-		for _, m := range memberOf {
-			if strings.EqualFold(comm.Name, m) {
-				for _, area := range comm.AllowedAreas {
-					permitted[strings.ToLower(area)] = true
-				}
-			}
-		}
-	}
-	return permitted
 }

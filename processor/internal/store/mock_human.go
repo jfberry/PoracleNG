@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -17,9 +18,9 @@ type MockHumanStore struct {
 	// Calls records method names called (for assertion).
 	Calls []string
 
-	Locations       map[string][]UserLocation
-	LocationRefs    map[string][]ReferencingRule // keyed by id|lowercased-label
-	PrunedAreaCalls map[string]map[string]bool   // humanID → permitted set, for test assertions
+	Locations         map[string][]UserLocation
+	LocationRefs      map[string][]ReferencingRule // keyed by id|lowercased-label
+	StrippedAreaCalls map[string]map[string]bool   // humanID → denied set, for test assertions
 }
 
 // NewMockHumanStore creates a new empty MockHumanStore.
@@ -524,13 +525,47 @@ func (m *MockHumanStore) CountLocationReferences(id, label string) ([]Referencin
 	return append([]ReferencingRule(nil), m.LocationRefs[key]...), nil
 }
 
-func (m *MockHumanStore) PruneOverrideAreas(humanID string, permitted map[string]bool) error {
-	m.record("PruneOverrideAreas")
+func (m *MockHumanStore) StripOverrideAreas(humanID string, denied map[string]bool) error {
+	m.record("StripOverrideAreas")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.PrunedAreaCalls == nil {
-		m.PrunedAreaCalls = map[string]map[string]bool{}
+	if m.StrippedAreaCalls == nil {
+		m.StrippedAreaCalls = map[string]map[string]bool{}
 	}
-	m.PrunedAreaCalls[humanID] = permitted
+	m.StrippedAreaCalls[humanID] = denied
 	return nil
+}
+
+// StripUserAreas mirrors SQLHumanStore.StripUserAreas: humans row first, then
+// profiles by profile_no; an all-stripped list becomes empty non-nil.
+func (m *MockHumanStore) StripUserAreas(humanID string, denied map[string]bool) ([]string, error) {
+	m.record("StripUserAreas")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var removed []string
+	seen := map[string]bool{}
+	prune := func(areas []string) []string {
+		kept := make([]string, 0, len(areas))
+		for _, a := range areas {
+			low := strings.ToLower(a)
+			if !denied[low] {
+				kept = append(kept, a)
+			} else if !seen[low] {
+				seen[low] = true
+				removed = append(removed, low)
+			}
+		}
+		return kept
+	}
+	h, ok := m.humans[humanID]
+	if !ok {
+		return nil, nil // SQL: no humans row means profiles are not touched
+	}
+	h.Area = prune(h.Area)
+	ps := m.profiles[humanID]
+	sort.SliceStable(ps, func(i, j int) bool { return ps[i].ProfileNo < ps[j].ProfileNo })
+	for i := range ps {
+		ps[i].Area = prune(ps[i].Area)
+	}
+	return removed, nil
 }

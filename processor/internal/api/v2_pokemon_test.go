@@ -36,6 +36,16 @@ type pushRecord struct {
 // The returned restore func resets the v2SendConfirmation seam.
 func newV2PokemonTestAPI(t *testing.T) (*gin.Engine, *store.MockTrackingStore[db.MonsterTrackingAPI], *[]pushRecord, func()) {
 	t.Helper()
+	return newV2PokemonTestAPIWithConfig(t, nil, nil)
+}
+
+// newV2PokemonTestAPIWithConfig is newV2PokemonTestAPI with a caller-supplied
+// config (nil = empty) and a hook to adjust the seeded humans.
+func newV2PokemonTestAPIWithConfig(t *testing.T, cfg *config.Config, setup func(*store.MockHumanStore)) (*gin.Engine, *store.MockTrackingStore[db.MonsterTrackingAPI], *[]pushRecord, func()) {
+	t.Helper()
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	humaAPI := NewHumaAPI(r, r.Group("/api"), "test")
@@ -43,6 +53,9 @@ func newV2PokemonTestAPI(t *testing.T) (*gin.Engine, *store.MockTrackingStore[db
 	humans := store.NewMockHumanStore()
 	humans.AddHuman(&store.Human{ID: "u1", Type: "discord:user", Name: "User1", Enabled: true, Language: "en", CurrentProfileNo: 1})
 	humans.AddHuman(&store.Human{ID: "u2", Type: "discord:user", Name: "User2", Enabled: true, Language: "en", CurrentProfileNo: 1})
+	if setup != nil {
+		setup(humans)
+	}
 
 	monsterStore := store.NewMockTrackingStore[db.MonsterTrackingAPI](
 		store.MonsterGetUID, store.MonsterSetUID,
@@ -68,7 +81,8 @@ func newV2PokemonTestAPI(t *testing.T) (*gin.Engine, *store.MockTrackingStore[db
 		humanSquareFence("beta", 20, 20, 1),
 		// A user-drawn fence: served by the client, deliberately kept out of
 		// the bot picker, so not selectable without an explicit assertion.
-		privateFence("drawn", 30, 30, 1),
+		drawnFence("drawn", 30, 30, 1),
+		privateFence("lone", 40, 40, 1),
 	}
 	mgr := state.NewManager()
 	mgr.Set(&state.State{Fences: fences, Geofence: geofence.NewSpatialIndex(fences)})
@@ -77,7 +91,7 @@ func newV2PokemonTestAPI(t *testing.T) (*gin.Engine, *store.MockTrackingStore[db
 		Humans:   humans,
 		StateMgr: mgr,
 		Tracking: &store.TrackingStores{Monsters: monsterStore},
-		Config:   &config.Config{},
+		Config:   cfg,
 		RowText: &rowtext.Generator{
 			GD:                  gd,
 			Translations:        i18n.Load(""),
@@ -1069,5 +1083,41 @@ func TestClampV2Distance(t *testing.T) {
 		if got := clampV2Distance(c.deps, c.in); got != c.want {
 			t.Errorf("%s: clampV2Distance(%d) = %d, want %d", c.name, c.in, got, c.want)
 		}
+	}
+}
+
+// Trap: this path only diverges with area_security ON. With it off, the
+// community filter never runs, which is why the client's three instances
+// "did not reproduce" the userSelectable rejection.
+func TestV2Pokemon_OverrideAreas_ExemptDrawnFenceUnderAreaSecurity(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{{Name: "coast", AllowedAreas: []string{"alpha"}}}
+	r, monsterStore, _, restore := newV2PokemonTestAPIWithConfig(t, cfg, func(h *store.MockHumanStore) {
+		u, _ := h.Get("u1")
+		u.CommunityMembership = []string{"coast"}
+		u.AreaRestriction = []string{"alpha"}
+		h.AddHuman(u)
+	})
+	defer restore()
+
+	post := func(q, areas string) int {
+		return v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true"+q,
+			`[{"pokemon_id":25,"override_areas":`+areas+`}]`).Code
+	}
+	if c := post("", `["drawn"]`); c != http.StatusBadRequest && c != http.StatusUnprocessableEntity {
+		t.Fatalf("untrusted drawn: got %d, want 4xx (not userSelectable)", c)
+	}
+	if c := post("&trusted=true", `["lone"]`); c != http.StatusBadRequest && c != http.StatusUnprocessableEntity {
+		t.Fatalf("trusted unflagged lone: got %d, want 4xx (not in community, not exempt)", c)
+	}
+	if c := post("&trusted=true", `["beta"]`); c != http.StatusBadRequest && c != http.StatusUnprocessableEntity {
+		t.Fatalf("trusted beta: got %d, want 4xx (#228: other community stays out)", c)
+	}
+	if c := post("&trusted=true", `["drawn"]`); c != http.StatusOK {
+		t.Fatalf("trusted exempt drawn: got %d, want 200", c)
+	}
+	if rows := monsterStore.AllRows(); len(rows) != 1 || rows[0].OverrideAreas[0] != "drawn" {
+		t.Fatalf("stored = %+v, want one rule scoped to drawn", rows)
 	}
 }

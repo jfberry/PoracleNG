@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`exemptFromAreaSecurity` geofence property.** A fence that declares it
+  (native or GeoJSON) is outside the community system: area_security never
+  filters it out of a user's permitted areas, and reconciliation never prunes
+  it. It does not imply `userSelectable` (a non-selectable exempt fence still
+  needs `trusted: true` via the API) and does not affect `strict_locations`.
+  With `area_security` on and `strict_locations` off (the default), selection
+  is the only gate, so any user can select an exempt fence and receive its
+  alerts. `GET /api/v2/humans/{id}/areas` reports the flag per fence (#243).
+- **`[reconciliation.discord|telegram] prune_user_areas`** (default `false`).
+  On a community-membership change, removes areas the user may no longer hold
+  from `humans.area` and every profile. Irreversible: an incomplete
+  `allowed_areas` empties that community's members. Only currently loaded
+  fences are ever removed, so a partial geofence load can't strip selections (#243).
 - **v2 tracking `ping`.** Every v2 rule type accepts and returns an optional `ping`
   (mention text). Previously v2 stored `""`, which erased pings set by the bot or v1 on any PUT.
 - **v2 clear location.** `DELETE /api/v2/humans/{id}/location[?profile=]`
@@ -52,6 +65,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **One definition of the areas a human may hold** (#243). v2 set-areas,
+  `override_areas` validation (v1 and v2 tracking writes), v2 GET areas and
+  reconciliation all use `bot.PermittedAreas`; `!area` shares its community
+  rules. Under `area_security`, a community member is now community-filtered
+  even when their `area_restriction` is empty (communities with no
+  `location_fence`) — previously v2 set-areas let such members select any
+  user-selectable fence. v1 `POST /api/humans/{id}/setAreas` is frozen and
+  unchanged. Discord reconciliation's `override_areas` prune now keeps
+  exempt fences, fences granted via `trusted`, and fences whose names
+  contain underscores.
 - **Error bodies on the huma `/api` surface are now RFC 9457
   `application/problem+json`** (`status`, `title`, `detail`, `errors[]`),
   replacing the old ad-hoc `{ "status": "error", "message": … }` /

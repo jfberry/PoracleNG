@@ -131,11 +131,11 @@ var trackingTablesWithOverrideAreas = []string{
 	"lures", "nests", "gym", "forts", "maxbattle",
 }
 
-// PruneOverrideAreas walks every tracking row for the given human and drops
-// areas no longer in permitted from the override_areas JSON column. When the
-// pruned list is empty the column is set to NULL so the rule falls back to the
-// human's own area list.
-func (s *SQLHumanStore) PruneOverrideAreas(humanID string, permitted map[string]bool) error {
+// StripOverrideAreas walks every tracking row for the given human and drops
+// areas present in denied from the override_areas JSON column. Names absent
+// from denied are kept. When the resulting list is empty the column is set to
+// NULL so the rule falls back to the human's own area list.
+func (s *SQLHumanStore) StripOverrideAreas(humanID string, denied map[string]bool) error {
 	type row struct {
 		UID           int64  `db:"uid"`
 		OverrideAreas string `db:"override_areas"`
@@ -158,7 +158,7 @@ func (s *SQLHumanStore) PruneOverrideAreas(humanID string, permitted map[string]
 				continue
 			}
 
-			kept := filterPermittedAreas(areas, permitted)
+			kept := dropDeniedAreas(areas, denied)
 			if len(kept) == len(areas) {
 				continue // nothing changed
 			}
@@ -175,17 +175,17 @@ func (s *SQLHumanStore) PruneOverrideAreas(humanID string, permitted map[string]
 	return nil
 }
 
-// filterPermittedAreas returns a new slice containing only the areas whose
-// lowercase form appears in permitted. The original case of each area name is
-// preserved. Returns nil (not an empty slice) when every area is filtered out,
+// dropDeniedAreas returns a new slice containing only the areas whose
+// lowercase form does NOT appear in denied. The original case of each area name
+// is preserved. Returns nil (not an empty slice) when every area is dropped,
 // so callers can distinguish "nothing left" from "nothing provided".
-func filterPermittedAreas(areas []string, permitted map[string]bool) []string {
+func dropDeniedAreas(areas []string, denied map[string]bool) []string {
 	if len(areas) == 0 {
 		return nil
 	}
 	var kept []string
 	for _, area := range areas {
-		if permitted[strings.ToLower(area)] {
+		if !denied[strings.ToLower(area)] {
 			kept = append(kept, area)
 		}
 	}

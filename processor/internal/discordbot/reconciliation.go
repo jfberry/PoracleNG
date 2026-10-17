@@ -15,7 +15,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -33,7 +35,10 @@ type Reconciliation struct {
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
-	log          *log.Entry
+	// stateMgr gives reconciliation the live fence list, without which it
+	// cannot apply userSelectable or exemptFromAreaSecurity when pruning (#243).
+	stateMgr *state.Manager
+	log      *log.Entry
 
 	// Greeting rate limiting: max 10 per minute to avoid Discord ban.
 	greetingCount      int
@@ -48,6 +53,7 @@ func NewReconciliation(
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
+	stateMgr *state.Manager,
 ) *Reconciliation {
 	return &Reconciliation{
 		session:      session,
@@ -55,8 +61,22 @@ func NewReconciliation(
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
+		stateMgr:     stateMgr,
 		log:          log.WithField("component", "reconciliation-discord"),
 	}
+}
+
+// fences returns the live fence list, or nil when no state is loaded. nil
+// means "unknown", and the prune paths treat it as a reason to skip.
+func (r *Reconciliation) fences() []geofence.Fence {
+	if r.stateMgr == nil {
+		return nil
+	}
+	st := r.stateMgr.Get()
+	if st == nil {
+		return nil
+	}
+	return st.Fences
 }
 
 // LoadAllGuildUsers fetches all non-bot members across all configured guilds.
@@ -431,14 +451,25 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *store.Human, nam
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
 		}
 
-		// When community membership changes, per-rule override_areas may reference
-		// areas no longer permitted. Prune them so rules fall back to the human's
-		// own area list rather than matching nothing.
+		// A membership change may leave areas this human can no longer hold.
+		// Pruned through PermittedAreas so exempt and trusted-granted fences
+		// survive. override_areas always; humans.area only when the operator
+		// has asserted their community config is complete (#243).
 		if communityChanged {
-			permitted := bot.BuildPermittedSet(r.cfg.Area.Communities, communityList)
-			if err := r.humanStore.PruneOverrideAreas(id, permitted); err != nil {
-				r.log.Errorf("prune override areas for %s: %v", id, err)
-				// best effort — don't abort reconciliation
+			fences := r.fences()
+			if len(fences) == 0 {
+				r.log.Warnf("prune areas for %s skipped: no geofences loaded", id)
+			} else {
+				after := &store.Human{ID: id, CommunityMembership: communityList, AreaRestriction: areaRestriction}
+				removed, err := bot.PruneForMembership(r.humanStore, fences, r.cfg, after,
+					slices.Contains(r.cfg.Discord.Admins, id),
+					bot.PruneOptions{Overrides: true, UserAreas: r.cfg.Reconciliation.Discord.PruneUserAreas})
+				if err != nil {
+					r.log.Errorf("prune areas for %s: %v", id, err) // best effort — don't abort reconciliation
+				}
+				if len(removed) > 0 {
+					r.log.Infof("Pruned areas %v from %s after community change", removed, id)
+				}
 			}
 		}
 	}

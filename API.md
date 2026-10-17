@@ -678,6 +678,23 @@ Force-flush the buffered events for `(id, alertType)` immediately. Equivalent to
 
 All geofences with metadata.
 
+### Geofence properties: `userSelectable` and `exemptFromAreaSecurity`
+
+Both are fence properties, read from native geofence files and from GeoJSON `properties`.
+
+| Property | Default | Meaning |
+|----------|---------|---------|
+| `userSelectable` | false | Users may pick the fence themselves. |
+| `exemptFromAreaSecurity` | false | The fence is outside the community system: `area_security` does not filter it for selection or for pruning on community change. |
+
+`exemptFromAreaSecurity` does not imply `userSelectable`: a non-selectable exempt fence still needs `trusted: true` to be set. It does not affect `strict_locations`.
+
+**Known sharp edge.** On an instance with `area_security.enabled = true` and `strict_locations = false` (the default), there is no delivery-time gate, so selection *is* enforcement. A fence marked `exemptFromAreaSecurity` is selectable by any user regardless of community (still subject to `userSelectable`, or `trusted` via the API), and they will receive its alerts. Set `strict_locations = true` if delivery must stay community-gated.
+
+`GET /api/v2/humans/{id}/areas` returns `{areas: [{name, group, description, userSelectable, exemptFromAreaSecurity}]}`; the listing is what a trusted caller may select (community-filtered under area_security, exempt fences included).
+
+Reconciliation option: `[reconciliation.discord] prune_user_areas` / `[reconciliation.telegram] prune_user_areas` (default false). When true, a community change also removes areas the user may no longer select from `humans.area` and every profile (Discord additionally always prunes `override_areas`). Irreversible; exempt fences are never pruned. A prune happens only when a user's community membership changes: turning the flag on does not retroactively tidy existing users, and reactivating a previously disabled user does not prune. If no geofences are loaded the prune is skipped, and a fence missing from a partial load is never stripped.
+
 ### GET /api/geofence/all/hash
 
 MD5 hash of each geofence path (for cache validation).

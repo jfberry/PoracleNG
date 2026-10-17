@@ -16,7 +16,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -34,7 +36,10 @@ type TelegramReconciliation struct {
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
-	log          *log.Entry
+	// stateMgr gives reconciliation the live fence list, without which it
+	// cannot apply userSelectable or exemptFromAreaSecurity when pruning (#243).
+	stateMgr *state.Manager
+	log      *log.Entry
 }
 
 // NewTelegramReconciliation creates a new TelegramReconciliation instance.
@@ -44,6 +49,7 @@ func NewTelegramReconciliation(
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
+	stateMgr *state.Manager,
 ) *TelegramReconciliation {
 	return &TelegramReconciliation{
 		api:          api,
@@ -51,8 +57,22 @@ func NewTelegramReconciliation(
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
+		stateMgr:     stateMgr,
 		log:          log.WithField("component", "reconciliation-telegram"),
 	}
+}
+
+// fences returns the live fence list, or nil when no state is loaded. nil
+// means "unknown", and the prune paths treat it as a reason to skip.
+func (r *TelegramReconciliation) fences() []geofence.Fence {
+	if r.stateMgr == nil {
+		return nil
+	}
+	st := r.stateMgr.Get()
+	if st == nil {
+		return nil
+	}
+	return st.Fences
 }
 
 // getChannelList returns the list of channel/group IDs to check membership against.
@@ -311,7 +331,8 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *store.Hu
 			updates["area_restriction"] = string(areaRestrictionJSON)
 		}
 
-		if !bot.HaveSameContents(communityList, user.CommunityMembership) {
+		communityChanged := !bot.HaveSameContents(communityList, user.CommunityMembership)
+		if communityChanged {
 			communityJSON, _ := json.Marshal(communityList)
 			updates["community_membership"] = string(communityJSON)
 		}
@@ -322,6 +343,26 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *store.Hu
 				return
 			}
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
+		}
+
+		// Opt-in humans.area prune (#243), through PermittedAreas so exempt
+		// fences survive. Telegram has never pruned override_areas; Discord
+		// does. That asymmetry predates #243 and is deliberately not changed here.
+		if communityChanged && r.cfg.Reconciliation.Telegram.PruneUserAreas {
+			fences := r.fences()
+			if len(fences) == 0 {
+				r.log.Warnf("prune areas for %s skipped: no geofences loaded", id)
+			} else {
+				after := &store.Human{ID: id, CommunityMembership: communityList, AreaRestriction: areaRestriction}
+				removed, err := bot.PruneForMembership(r.humanStore, fences, r.cfg, after,
+					bot.IsAdmin(r.cfg, "telegram", id), bot.PruneOptions{UserAreas: true})
+				if err != nil {
+					r.log.Errorf("prune areas for %s: %v", id, err)
+				}
+				if len(removed) > 0 {
+					r.log.Infof("Pruned areas %v from %s after community change", removed, id)
+				}
+			}
 		}
 	}
 }

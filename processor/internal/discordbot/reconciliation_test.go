@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -12,7 +14,7 @@ import (
 // config, with nil session and nil dtsStore.  It is safe to call whenever
 // no Discord API calls will actually be issued (e.g. no guilds configured).
 func newTestReconciliation(hs store.HumanStore, cfg *config.Config) *Reconciliation {
-	return NewReconciliation(nil, hs, cfg, nil, nil)
+	return NewReconciliation(nil, hs, cfg, nil, nil, nil)
 }
 
 // minimalConfig returns a Config where reconciliation is set up but has no
@@ -134,5 +136,27 @@ func TestReconcileSingleUser_KnownUser_StillActive(t *testing.T) {
 		if c == "Create" || c == "Delete" || c == "SetAdminDisable" {
 			t.Errorf("unexpected mutating store call: %s", c)
 		}
+	}
+}
+
+// Reconciliation had no state manager and so could not see userSelectable or
+// exemptFromAreaSecurity (#243). fences() is its only window onto them.
+func TestReconciliation_FencesFromStateManager(t *testing.T) {
+	mgr := state.NewManager()
+	mgr.Set(&state.State{Fences: []geofence.Fence{{Name: "alpha"}}})
+	r := NewReconciliation(nil, store.NewMockHumanStore(), minimalConfig(), nil, nil, mgr)
+	if got := r.fences(); len(got) != 1 || got[0].Name != "alpha" {
+		t.Fatalf("fences() = %v, want [alpha]", got)
+	}
+}
+
+func TestReconciliation_FencesNilSafe(t *testing.T) {
+	r := NewReconciliation(nil, store.NewMockHumanStore(), minimalConfig(), nil, nil, nil)
+	if got := r.fences(); got != nil {
+		t.Fatalf("fences() with nil manager = %v, want nil", got)
+	}
+	r = NewReconciliation(nil, store.NewMockHumanStore(), minimalConfig(), nil, nil, state.NewManager())
+	if got := r.fences(); got != nil {
+		t.Fatalf("fences() with empty manager = %v, want nil", got)
 	}
 }

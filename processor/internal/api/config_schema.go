@@ -497,6 +497,7 @@ var configSchema = []ConfigSection{
 		Fields: []ConfigFieldDef{
 			{Name: "update_user_names", Type: "bool", Default: false, Description: "Follow Discord username changes and update stored names"},
 			{Name: "remove_invalid_users", Type: "bool", Default: true, Description: "De-register users who lose required roles during periodic role check"},
+			{Name: "prune_user_areas", Type: "bool", Default: false, Description: "On a community change, remove areas the user may no longer select from their area list and every profile. Irreversible: a wrong or incomplete allowed_areas empties that community's members, and fixing the config does not restore them. Exempt fences are never removed"},
 			{Name: "register_new_users", Type: "bool", Default: false, Description: "Automatically register users who gain required roles during role check"},
 			{Name: "update_channel_names", Type: "bool", Default: true, Description: "Keep registered channel names in sync with Discord"},
 			{Name: "update_channel_notes", Type: "bool", Default: false, Description: "Update channel notes with guild name and category information"},
@@ -511,6 +512,7 @@ var configSchema = []ConfigSection{
 		Fields: []ConfigFieldDef{
 			{Name: "update_user_names", Type: "bool", Default: false, Description: "Follow Telegram username changes and update stored names"},
 			{Name: "remove_invalid_users", Type: "bool", Default: true, Description: "Automatically remove users who lose access to registration groups"},
+			{Name: "prune_user_areas", Type: "bool", Default: false, Description: "On a community change, remove areas the user may no longer select from their area list and every profile. Irreversible: a wrong or incomplete allowed_areas empties that community's members, and fixing the config does not restore them. Exempt fences are never removed"},
 		},
 	},
 

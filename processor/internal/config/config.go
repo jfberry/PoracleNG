@@ -67,12 +67,24 @@ type ReconciliationDiscordConfig struct {
 	UpdateChannelNames        bool `toml:"update_channel_names"`
 	UpdateChannelNotes        bool `toml:"update_channel_notes"`
 	UnregisterMissingChannels bool `toml:"unregister_missing_channels"`
+
+	// PruneUserAreas removes areas a membership change no longer permits from
+	// humans.area and every profile. Default false: it destroys user-entered
+	// data, and an incomplete allowed_areas would empty a whole community.
+	// Exempt fences are never pruned (#243).
+	PruneUserAreas bool `toml:"prune_user_areas"`
 }
 
 // ReconciliationTelegramConfig holds settings from [reconciliation.telegram].
 type ReconciliationTelegramConfig struct {
 	UpdateUserNames    bool `toml:"update_user_names"`
 	RemoveInvalidUsers bool `toml:"remove_invalid_users"`
+
+	// PruneUserAreas removes areas a membership change no longer permits from
+	// humans.area and every profile. Default false: it destroys user-entered
+	// data, and an incomplete allowed_areas would empty a whole community.
+	// Exempt fences are never pruned (#243).
+	PruneUserAreas bool `toml:"prune_user_areas"`
 }
 
 // RoleSubscriptionEntry represents a [[discord.role_subscriptions]] TOML entry.

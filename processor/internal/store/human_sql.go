@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -670,4 +671,71 @@ func nullIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// StripUserAreas implements HumanStore.
+func (s *SQLHumanStore) StripUserAreas(humanID string, denied map[string]bool) (removed []string, err error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return nil, fmt.Errorf("prune user areas %s: begin: %w", humanID, err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	seen := map[string]bool{}
+	prune := func(raw string) (kept []string, changed bool) {
+		areas := unmarshalStringSlice(raw)
+		kept = make([]string, 0, len(areas))
+		for _, a := range areas {
+			low := strings.ToLower(a)
+			if !denied[low] {
+				kept = append(kept, a)
+				continue
+			}
+			changed = true
+			if !seen[low] {
+				seen[low] = true
+				removed = append(removed, low)
+			}
+		}
+		return kept, changed
+	}
+
+	var humanArea sql.NullString
+	if err = tx.Get(&humanArea, `SELECT area FROM humans WHERE id = ? FOR UPDATE`, humanID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+			_ = tx.Rollback()
+			return nil, nil
+		}
+		return nil, fmt.Errorf("prune user areas %s: select human: %w", humanID, err)
+	}
+	if kept, changed := prune(humanArea.String); changed {
+		if _, err = tx.Exec(`UPDATE humans SET area = ? WHERE id = ?`, marshalStringSlice(kept), humanID); err != nil {
+			return nil, fmt.Errorf("prune user areas %s: update human: %w", humanID, err)
+		}
+	}
+
+	var profiles []struct {
+		ProfileNo int            `db:"profile_no"`
+		Area      sql.NullString `db:"area"`
+	}
+	if err = tx.Select(&profiles, `SELECT profile_no, area FROM profiles WHERE id = ? ORDER BY profile_no FOR UPDATE`, humanID); err != nil {
+		return nil, fmt.Errorf("prune user areas %s: select profiles: %w", humanID, err)
+	}
+	for _, p := range profiles {
+		if kept, changed := prune(p.Area.String); changed {
+			if _, err = tx.Exec(`UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?`,
+				marshalStringSlice(kept), humanID, p.ProfileNo); err != nil {
+				return nil, fmt.Errorf("prune user areas %s/%d: update profile: %w", humanID, p.ProfileNo, err)
+			}
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("prune user areas %s: commit: %w", humanID, err)
+	}
+	return removed, nil
 }

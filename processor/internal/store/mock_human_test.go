@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // Compile-time check that MockHumanStore implements HumanStore.
 var _ HumanStore = (*MockHumanStore)(nil)
@@ -197,5 +200,69 @@ func TestMockHumanStore_CreateDefaultsProfileNo(t *testing.T) {
 		if got.CurrentProfileNo != want {
 			t.Errorf("%s: CurrentProfileNo = %d, want %d", id, got.CurrentProfileNo, want)
 		}
+	}
+}
+
+func TestMockHumanStore_StripUserAreas(t *testing.T) {
+	m := NewMockHumanStore()
+	m.AddHuman(&Human{ID: "u1", CurrentProfileNo: 1, Area: []string{"alpha", "beta", "gent_centrum"}})
+	m.SeedProfile(Profile{ID: "u1", ProfileNo: 1, Area: []string{"alpha", "beta", "gent_centrum"}})
+	m.SeedProfile(Profile{ID: "u1", ProfileNo: 2, Area: []string{"beta", "delta"}})
+
+	removed, err := m.StripUserAreas("u1", map[string]bool{"beta": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(removed, []string{"beta"}) {
+		t.Errorf("removed = %v, want [beta]", removed)
+	}
+	h, _ := m.Get("u1")
+	if !slices.Equal(h.Area, []string{"alpha", "gent_centrum"}) {
+		t.Errorf("humans.area = %v", h.Area)
+	}
+	ps, _ := m.GetProfiles("u1")
+	byNo := map[int][]string{}
+	for _, p := range ps {
+		byNo[p.ProfileNo] = p.Area
+	}
+	if !slices.Equal(byNo[1], []string{"alpha", "gent_centrum"}) || !slices.Equal(byNo[2], []string{"delta"}) {
+		t.Errorf("profiles = %v, want 1:[alpha gent_centrum] 2:[delta]", byNo)
+	}
+	// A name absent from denied survives even though it is not a known fence.
+	m.AddHuman(&Human{ID: "u2", Area: []string{"ghost", "beta"}})
+	if _, err := m.StripUserAreas("u2", map[string]bool{"beta": true}); err != nil {
+		t.Fatal(err)
+	}
+	if h2, _ := m.Get("u2"); !slices.Equal(h2.Area, []string{"ghost"}) {
+		t.Errorf("u2 humans.area = %v, want [ghost]", h2.Area)
+	}
+	// Idempotent: nothing left to remove.
+	if removed, _ := m.StripUserAreas("u1", map[string]bool{"beta": true}); len(removed) != 0 {
+		t.Errorf("second prune removed %v, want nothing", removed)
+	}
+	// Everything pruned leaves an empty non-nil list, like SQL's [].
+	if _, err := m.StripUserAreas("u1", map[string]bool{"alpha": true, "beta": true, "gent_centrum": true, "delta": true}); err != nil {
+		t.Fatal(err)
+	}
+	h, _ = m.Get("u1")
+	if h.Area == nil || len(h.Area) != 0 {
+		t.Errorf("fully pruned humans.area = %#v, want empty non-nil", h.Area)
+	}
+}
+
+func TestMockHumanStore_StripUserAreas_NoHuman(t *testing.T) {
+	m := NewMockHumanStore()
+	m.SeedProfile(Profile{ID: "ghost", ProfileNo: 1, Area: []string{"beta", "alpha"}})
+
+	removed, err := m.StripUserAreas("ghost", map[string]bool{"beta": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != nil {
+		t.Errorf("removed = %v, want nil", removed)
+	}
+	ps, _ := m.GetProfiles("ghost")
+	if len(ps) != 1 || !slices.Equal(ps[0].Area, []string{"beta", "alpha"}) {
+		t.Errorf("profiles = %+v, want unchanged", ps)
 	}
 }

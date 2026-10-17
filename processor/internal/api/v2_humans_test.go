@@ -30,6 +30,15 @@ func privateFence(name string, lat, lon, half float64) geofence.Fence {
 	return f
 }
 
+// drawnFence is the shape PoracleWeb.NET serves for a user-drawn geofence
+// once #243 ships: userSelectable:false to keep it out of the picker, and
+// exemptFromAreaSecurity because no community publishes a user's own fence.
+func drawnFence(name string, lat, lon, half float64) geofence.Fence {
+	f := privateFence(name, lat, lon, half)
+	f.ExemptFromAreaSecurity = true
+	return f
+}
+
 // humanSquareFence builds an axis-aligned square fence centred on (lat,lon) with the
 // given half-side. Used so MatchedAreaNames / PointInPolygon are predictable.
 func humanSquareFence(name string, lat, lon, half float64) geofence.Fence {
@@ -72,7 +81,8 @@ func newV2HumansTestAPI(t *testing.T, cfg *config.Config) (*gin.Engine, *store.M
 		humanSquareFence("gamma", 40, 40, 1),
 		// A user-drawn private fence: served by the client, deliberately kept
 		// out of the bot's !area picker (#215).
-		privateFence("private", 30, 30, 1),
+		drawnFence("private", 30, 30, 1),
+		privateFence("lone", 50, 50, 1),
 	}
 	idx := geofence.NewSpatialIndex(fences) // mutates fences in place (NormalizedName)
 	mgr := state.NewManager()
@@ -205,8 +215,8 @@ func TestV2Humans_AreasGet_AllWhenUnrestricted(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	areas := v2RulesArray(t, v2DecodeBody(t, w), "areas")
-	if len(areas) != 4 {
-		t.Fatalf("expected 4 available areas, got %d: %v", len(areas), areas)
+	if len(areas) != 5 {
+		t.Fatalf("expected 5 available areas, got %d: %v", len(areas), areas)
 	}
 	// The listing reports every fence with its userSelectable flag, so a
 	// client can tell which ones need trusted:true to set (#215).
@@ -1048,4 +1058,147 @@ func TestV2Humans_SetAreas_ProfileAndAllProfilesConflict(t *testing.T) {
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for profile + all_profiles, got %d: %s", w.Code, w.Body.String())
 	}
+}
+
+// A user-drawn fence appears in NO community's allowed_areas — that is what
+// makes it user-drawn. So trusted adds it to the permitted set and
+// community.FilterAreas then strips it straight back out, making trusted a
+// no-op under area_security for precisely the fences it exists to allow.
+//
+// The #228 fixture masked this by listing "private" in the community's
+// allowed_areas, which a real drawn fence never is.
+func TestV2Humans_SetAreas_TrustedLiftsFenceInNoCommunity(t *testing.T) {
+	// RED test for #243, committed skipped in 808bf0e7. The gamma assertion is #228's guard.
+
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	// "drawn" is deliberately absent: no community publishes a user's fence.
+	cfg.Area.Communities = []config.CommunityConfig{
+		{Name: "coast", AllowedAreas: []string{"alpha", "beta"}},
+	}
+	r, humans, _ := newV2HumansTestAPI(t, cfg)
+	h, _ := humans.Get("u1")
+	h.CommunityMembership = []string{"coast"}
+	h.AreaRestriction = []string{"alpha", "beta"}
+	humans.AddHuman(h)
+
+	// The mixed request a client actually sends: an admin area the user may
+	// have, an admin area from another community, and the user's own fence.
+	code, got := setAreas(t, r, `{"areas":["alpha","gamma","private"],"trusted":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	stored := map[string]bool{}
+	for _, a := range got.Areas {
+		stored[a] = true
+	}
+	if !stored["alpha"] {
+		t.Errorf("alpha should be stored: areas=%v rejected=%v", got.Areas, got.Rejected)
+	}
+	// Another community's admin fence must still be refused — that is #228.
+	if stored["gamma"] {
+		t.Errorf("gamma is another community's area and must stay rejected: %v", got.Areas)
+	}
+	// And the user's own fence must be allowed — that is what trusted is for.
+	if !stored["private"] {
+		t.Errorf("trusted did not lift the user-drawn fence under area_security; "+
+			"areas=%v rejected=%v", got.Areas, got.Rejected)
+	}
+}
+
+// The exempt flag lifts the community filter, not userSelectable: without
+// trusted, a drawn fence is still refused under area_security.
+func TestV2Humans_SetAreas_ExemptStillNeedsTrustedWhenNotSelectable(t *testing.T) {
+	r, _ := newCoastOnlyAPI(t)
+	code, got := setAreas(t, r, `{"areas":["private"]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 0 || len(got.Rejected) != 1 {
+		t.Fatalf("areas=%v rejected=%v, want private rejected without trusted", got.Areas, got.Rejected)
+	}
+}
+
+// Without the flag, trusted cannot reach a fence outside the community: the
+// flag, not trusted, is what makes the drawn fence settable (#243).
+func TestV2Humans_SetAreas_TrustedDoesNotLiftUnflaggedFenceInNoCommunity(t *testing.T) {
+	r, _ := newCoastOnlyAPI(t)
+	code, got := setAreas(t, r, `{"areas":["lone"],"trusted":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 0 || len(got.Rejected) != 1 || got.Rejected[0] != "lone" {
+		t.Fatalf("areas=%v rejected=%v, want lone rejected", got.Areas, got.Rejected)
+	}
+}
+
+// Gate decision (see plan): a community member is community-filtered even
+// when area_restriction is nil, which reconciliation writes for communities
+// with no location_fence. Before #243 such a member could set any fence.
+func TestV2Humans_SetAreas_MemberWithoutRestrictionIsCommunityFiltered(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{{Name: "coast", AllowedAreas: []string{"alpha"}}}
+	r, humans, _ := newV2HumansTestAPI(t, cfg)
+	h, _ := humans.Get("u1")
+	h.CommunityMembership = []string{"coast"}
+	h.AreaRestriction = nil
+	humans.AddHuman(h)
+
+	code, got := setAreas(t, r, `{"areas":["alpha","beta"]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 1 || got.Areas[0] != "alpha" {
+		t.Fatalf("areas=%v rejected=%v, want only alpha", got.Areas, got.Rejected)
+	}
+}
+
+// D4: the listing reports exemptFromAreaSecurity, and under area_security
+// includes exempt fences so a client can explain why they behave differently.
+func TestV2Humans_AreasGet_ReportsExempt(t *testing.T) {
+	r, _ := newCoastOnlyAPI(t) // private is drawn+exempt, in no community
+	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/u1/areas", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	exempt := map[string]bool{}
+	for _, m := range v2RulesArray(t, v2DecodeBody(t, w), "areas") {
+		name, _ := m["name"].(string)
+		ex, ok := m["exemptFromAreaSecurity"].(bool)
+		if !ok {
+			t.Fatalf("area %q has no exemptFromAreaSecurity field: %v", name, m)
+		}
+		exempt[name] = ex
+	}
+	if _, listed := exempt["private"]; !listed || !exempt["private"] {
+		t.Errorf("private must be listed and exempt: %v", exempt)
+	}
+	if _, listed := exempt["gamma"]; listed {
+		t.Errorf("gamma is another community's fence and must not be listed: %v", exempt)
+	}
+	if _, listed := exempt["lone"]; listed {
+		t.Errorf("lone is in no community and not exempt; must not be listed: %v", exempt)
+	}
+	if exempt["alpha"] {
+		t.Errorf("alpha is not exempt: %v", exempt)
+	}
+}
+
+// newCoastOnlyAPI: area_security on, u1 in "coast" (alpha, beta), and the
+// drawn "private" fence in NO community, as a real drawn fence is.
+func newCoastOnlyAPI(t *testing.T) (*gin.Engine, *store.MockHumanStore) {
+	t.Helper()
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{
+		{Name: "coast", AllowedAreas: []string{"alpha", "beta"}},
+	}
+	r, humans, _ := newV2HumansTestAPI(t, cfg)
+	h, _ := humans.Get("u1")
+	h.CommunityMembership = []string{"coast"}
+	h.AreaRestriction = []string{"alpha", "beta"}
+	humans.AddHuman(h)
+	return r, humans
 }

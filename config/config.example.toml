@@ -650,6 +650,10 @@ removal_safety_max_percent = 20
 [reconciliation.discord]
 update_user_names = false                # follow discord username changes
 remove_invalid_users = true              # de-register users who lose roles on role-check
+prune_user_areas = false                 # on a community change, delete areas the user may no longer select from
+                                         # humans.area and every profile. IRREVERSIBLE: an incomplete allowed_areas
+                                         # empties that community's members, and fixing the config won't restore them.
+                                         # Fences marked exemptFromAreaSecurity are never pruned.
 register_new_users = false               # auto-register users granted roles on role-check
 update_channel_names = true              # keep channel names in sync
 update_channel_notes = false             # update channel notes with guild name / category
@@ -658,6 +662,10 @@ unregister_missing_channels = false      # remove channels deleted from discord
 [reconciliation.telegram]
 update_user_names = false                # follow telegram username changes
 remove_invalid_users = true              # automatically remove users who lose access
+prune_user_areas = false                 # on a community change, delete areas the user may no longer select from
+                                         # humans.area and every profile. IRREVERSIBLE: an incomplete allowed_areas
+                                         # empties that community's members, and fixing the config won't restore them.
+                                         # Fences marked exemptFromAreaSecurity are never pruned.
 
 # ---- Stats ----
 

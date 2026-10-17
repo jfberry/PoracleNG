@@ -1195,6 +1195,9 @@
           "displayInMatches": {
             "type": "boolean"
           },
+          "exemptFromAreaSecurity": {
+            "type": "boolean"
+          },
           "group": {
             "type": "string"
           },
@@ -1258,7 +1261,8 @@
           "group",
           "description",
           "userSelectable",
-          "displayInMatches"
+          "displayInMatches",
+          "exemptFromAreaSecurity"
         ],
         "type": "object"
       },
@@ -2619,6 +2623,10 @@
           "description": {
             "type": "string"
           },
+          "exemptFromAreaSecurity": {
+            "description": "The fence is outside the community system: area_security does not filter it. Does not imply userSelectable, and does not affect strict_locations delivery.",
+            "type": "boolean"
+          },
           "group": {
             "type": "string"
           },
@@ -2633,7 +2641,8 @@
           "name",
           "group",
           "description",
-          "userSelectable"
+          "userSelectable",
+          "exemptFromAreaSecurity"
         ],
         "type": "object"
       },
@@ -16409,7 +16418,7 @@
     },
     "/v2/humans/{id}/areas": {
       "get": {
-        "description": "Returns the geofence areas available to this human (community-filtered when area_security is enabled). 404 if the human does not exist.",
+        "description": "Returns the geofence areas available to this human. The listing is what a trusted caller may select: every fence for an unrestricted human, community-filtered otherwise, with exempt fences included under area_security. 404 if the human does not exist.",
         "operationId": "v2-get-human-areas",
         "parameters": [
           {

@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -327,69 +328,25 @@ func TestAreaResolveDisplayNames(t *testing.T) {
 	}
 }
 
-// --- ValidateAndPrune ---
-
-func TestAreaValidateAndPrune_NoSecurity(t *testing.T) {
-	al := NewAreaLogic(testFences(), noSecurityConfig())
-	valid, removed := al.ValidateAndPrune([]string{"downtown", "park", "harbor"}, nil)
-
-	// With area security disabled, all areas are valid
-	if len(valid) != 3 {
-		t.Fatalf("expected 3 valid, got %d", len(valid))
+// A selectable fence declared exempt is offered by !area to every member
+// under area_security; a non-selectable exempt fence is not, because the
+// flag lifts the community filter only, never userSelectable (#243).
+func TestGetAvailableAreas_HonoursExempt(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{{Name: "coast", AllowedAreas: []string{"alpha"}}}
+	al := NewAreaLogic([]geofence.Fence{
+		{Name: "alpha", UserSelectable: true},
+		{Name: "beta", UserSelectable: true},
+		{Name: "pubx", UserSelectable: true, ExemptFromAreaSecurity: true},
+		{Name: "drawn", UserSelectable: false, ExemptFromAreaSecurity: true},
+	}, cfg)
+	var got []string
+	for _, a := range al.GetAvailableAreas([]string{"coast"}, false) {
+		got = append(got, a.Name)
 	}
-	if len(removed) != 0 {
-		t.Fatalf("expected 0 removed, got %d", len(removed))
-	}
-}
-
-func TestAreaValidateAndPrune_WithSecurity(t *testing.T) {
-	al := NewAreaLogic(testFences(), securityConfig())
-
-	// TeamCity allows Downtown and Uptown only
-	valid, removed := al.ValidateAndPrune([]string{"downtown", "park", "harbor"}, []string{"teamcity"})
-
-	if len(valid) != 1 {
-		t.Fatalf("expected 1 valid, got %d: %v", len(valid), valid)
-	}
-	if valid[0] != "downtown" {
-		t.Errorf("expected downtown valid, got %s", valid[0])
-	}
-	if len(removed) != 2 {
-		t.Fatalf("expected 2 removed, got %d: %v", len(removed), removed)
-	}
-}
-
-func TestAreaValidateAndPrune_NoCommunities(t *testing.T) {
-	al := NewAreaLogic(testFences(), securityConfig())
-
-	// No communities = no allowed areas = all removed
-	valid, removed := al.ValidateAndPrune([]string{"downtown", "park"}, nil)
-
-	if len(valid) != 0 {
-		t.Fatalf("expected 0 valid, got %d", len(valid))
-	}
-	if len(removed) != 2 {
-		t.Fatalf("expected 2 removed, got %d", len(removed))
-	}
-}
-
-func TestAreaValidateAndPrune_MultipleCommunities(t *testing.T) {
-	al := NewAreaLogic(testFences(), securityConfig())
-
-	// Both communities = Downtown, Uptown, Park, Harbor all allowed
-	valid, removed := al.ValidateAndPrune(
-		[]string{"downtown", "park", "harbor", "unknown"},
-		[]string{"teamcity", "teamnature"},
-	)
-
-	if len(valid) != 3 {
-		t.Fatalf("expected 3 valid, got %d: %v", len(valid), valid)
-	}
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed, got %d: %v", len(removed), removed)
-	}
-	if removed[0] != "unknown" {
-		t.Errorf("expected unknown removed, got %s", removed[0])
+	if !slices.Equal(got, []string{"alpha", "pubx"}) {
+		t.Fatalf("available = %v, want [alpha pubx]", got)
 	}
 }
 
