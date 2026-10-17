@@ -109,13 +109,14 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 	}
 
 	// Shiny possible
-	if e.ShinyProvider != nil {
-		rate := e.ShinyProvider.GetShinyRate(nest.PokemonID)
-		if rate > 0 {
-			m["shinyPossible"] = true
+	if sf := e.shinyFacts(nest.PokemonID, nest.Form, 0, nest.Lat, nest.Lon); sf.answered {
+		m["shinyPossible"] = sf.possible
+		if sf.possible {
 			m["shinyPossibleEmojiKey"] = "shiny"
-		} else {
-			m["shinyPossible"] = false
+		}
+		if sf.oneIn > 0 {
+			m["shinyRate"] = sf.oneIn
+			m["shinyRateBoosted"] = sf.boosted
 		}
 	}
 

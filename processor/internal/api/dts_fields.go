@@ -179,6 +179,11 @@ var monsterFields = []FieldDef{
 	{Name: "pvpUltraBest", Type: "object", Description: "Best entry from pvpUltra", Category: "pvp"},
 	{Name: "pvpLittleBest", Type: "object", Description: "Best entry from pvpLittle", Category: "pvp"},
 	{Name: "pvpAvailable", Type: "bool", Description: "True when any PVP data is available for this pokemon", Category: "pvp"},
+	{Name: "personalShiny", Type: "bool", Description: "Shiny for at least one of the recipient's linked game accounts (per-user; needs [shiny_rates])", Category: "other"},
+	{Name: "personalShinyAccounts", Type: "array", Description: "Labels of the recipient's accounts the pokemon is shiny for; unlabelled accounts appear as …<last 4 chars of the player ID>", Category: "other"},
+	{Name: "personalBackground", Type: "bool", Description: "Has the special (event) background for at least one of the recipient's linked accounts", Category: "other"},
+	{Name: "personalBackgroundAccounts", Type: "array", Description: "Labels of the recipient's accounts the pokemon has the special background for", Category: "other"},
+	{Name: "hasLinkedAccounts", Type: "bool", Description: "The recipient has at least one linked game account", Category: "other"},
 	{Name: "pvpUserRanking", Type: "int", Description: "The matched rule's worst-rank threshold (0 when the rule was not PVP-based)", Category: "pvp"},
 	{Name: "userHasPvpTracks", Type: "bool", Description: "True when at least one matched rule was a real PVP tracking rule", Category: "pvp"},
 	// Other
@@ -191,6 +196,8 @@ var monsterFields = []FieldDef{
 	{Name: "costume", Type: "int", Description: "Costume ID", Category: "other"},
 	{Name: "costumeName", Type: "string", Description: "Translated costume name (empty when no costume). Note: fullName already includes it parenthesised.", Category: "other"},
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
+	{Name: "shinyRate", Type: "int", Description: "Expected shiny rate as 1-in-N from the [shiny_rates] feed at this location (absent without the feed or for unlisted variants)", Category: "other"},
+	{Name: "shinyRateBoosted", Type: "bool", Description: "The feed's shiny rate here is above the 1/512 base (an event)", Category: "other"},
 	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
 	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \").", Category: "other"},
 	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
@@ -290,6 +297,8 @@ var questFields = []FieldDef{
 	{Name: "conditionStringEng", Type: "string", Description: "English copy of conditionString", Category: "quest"},
 	{Name: "conditionList", Type: "array", Description: "Quest conditions as objects with type/name/formatted", Category: "quest"},
 	{Name: "conditionListEng", Type: "array", Description: "English copy of conditionList", Category: "quest"},
+	{Name: "shinyRate", Type: "int", Description: "Expected shiny rate as 1-in-N from the [shiny_rates] feed at this location (absent without the feed or for unlisted variants)", Category: "other"},
+	{Name: "shinyRateBoosted", Type: "bool", Description: "The feed's shiny rate here is above the 1/512 base (an event)", Category: "other"},
 }
 
 var invasionFields = []FieldDef{
@@ -392,6 +401,8 @@ var nestFields = []FieldDef{
 	{Name: "pokemonSpawnAvg", Type: "number", Description: "Avg spawns per hour", Category: "stats"},
 	{Name: "pokemon_ratio", Type: "number", Description: "Pokemon spawn ratio (webhook)", Category: "stats", RawWebhook: true},
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
+	{Name: "shinyRate", Type: "int", Description: "Expected shiny rate as 1-in-N from the [shiny_rates] feed at this location (absent without the feed or for unlisted variants)", Category: "other"},
+	{Name: "shinyRateBoosted", Type: "bool", Description: "The feed's shiny rate here is above the 1/512 base (an event)", Category: "other"},
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
 	{Name: "typeEmoji", Type: "string", Description: "Resolved type emoji, concatenated", Category: "types"},
 	{Name: "emoji", Type: "array", Description: "Resolved type emoji as an array", Category: "types"},
@@ -735,6 +746,7 @@ var monsterSnippets = []Snippet{
 	{Label: "Countdown", Insert: "<t:{{despawnTimestamp}}:R>", Description: "Discord relative countdown", Category: "pokemon", Platform: "discord"},
 	{Label: "Weather boosted", Insert: "{{#if boosted}}{{boostWeatherEmoji}}{{/if}}", Description: "Show boost emoji if boosted", Category: "pokemon"},
 	{Label: "Weather change", Insert: "{{weatherChange}}", Description: "Weather forecast text (empty if no change)", Category: "pokemon"},
+	{Label: "Shiny for you", Insert: "{{#if personalShiny}}✨ Shiny for {{join personalShinyAccounts \", \"}}{{/if}}", Description: "Names the recipient's accounts the pokemon is shiny for", Category: "pokemon"},
 	{Label: "Shiny possible", Insert: "{{#if shinyPossible}}✨{{/if}}", Description: "Sparkle if shiny possible", Category: "pokemon"},
 	{Label: "Moves", Insert: "{{quickMoveName}} / {{chargeMoveName}}", Description: "Fast and charged move names", Category: "pokemon"},
 	{Label: "PVP Great League", Insert: "{{#each pvpGreat}}#{{rank}} {{fullName}} CP{{cp}} L{{levelWithCap}} {{percentage}}%\n{{/each}}", Description: "Great League PVP rankings", Category: "pvp"},

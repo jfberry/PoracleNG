@@ -34,6 +34,7 @@ type TrackingDeps struct {
 	Dispatcher   *delivery.Dispatcher
 	AreaLogic    *bot.AreaLogic             // nil-safe: area validation skipped when nil
 	Summaries    store.SummaryScheduleStore // nil-safe: snapshot summaries omitted when nil
+	Accounts     store.PlayerAccountStore   // linked game accounts (v2 accounts endpoints + snapshot); nil-safe in snapshot
 	Mutes        *mute.Store                // in-memory mute store (v2 mutes endpoints + snapshot mutes; nil-safe in snapshot, required by RegisterV2Mutes)
 	ReloadFunc   func()                     // triggers debounced state reload (from ProcessorService.triggerReload)
 

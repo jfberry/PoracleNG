@@ -194,8 +194,10 @@
       form: alola
       costume: "1"
       size: xl
-  text: "!track 25 iv100 great5 ultra10 little7 d250 clean edit template:pvp form:alola costume:1 size:xl"
-  expected_tokens: ["25", iv100, great5, ultra10, little7, d250, clean, edit, "template:pvp", "form:alola", "costume:1", "size:xl"]
+      personal_shiny: true
+      personal_background: true
+  text: "!track 25 iv100 great5 ultra10 little7 d250 clean edit template:pvp form:alola costume:1 size:xl personalshiny personalbackground"
+  expected_tokens: ["25", iv100, great5, ultra10, little7, d250, clean, edit, "template:pvp", "form:alola", "costume:1", "size:xl", personalshiny, personalbackground]
 
 # -----------------------------------------------------------------------------
 # /raid — boss XOR level
@@ -1028,3 +1030,49 @@
       areas: midtown
   text: "!fort pokestop location:Work area:midtown"
   expected_tokens: [pokestop, "location:Work", "area:midtown"]
+
+# -----------------------------------------------------------------------------
+# /account — linked game accounts for personal shiny / background alerts.
+# Player IDs and names are passed through verbatim (case-sensitive).
+# -----------------------------------------------------------------------------
+- name: account-list
+  description: /account list — list linked accounts
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      list: _bare
+  text: "!account list"
+  expected_tokens: [list]
+
+- name: account-add
+  description: /account add — link an account with a name
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      add.player_id: UserABC9
+      add.name: Main
+  text: "!account add Main UserABC9"
+  expected_tokens: [add, Main, UserABC9]
+
+- name: account-remove
+  description: /account remove — unlink an account
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      remove.account: Main
+  text: "!account remove Main"
+  expected_tokens: [remove, Main]
+
+- name: account-rename
+  description: /account rename — rename an account
+  command: cmd.account
+  slash:
+    name: account
+    options:
+      rename.account: UserABC9
+      rename.name: alt
+  text: "!account rename UserABC9 alt"
+  expected_tokens: [rename, UserABC9, alt]

@@ -66,6 +66,7 @@ type Enricher struct {
 	WeatherProvider    WeatherProvider
 	ForecastProvider   ForecastProvider  // optional; triggers AccuWeather fetch
 	ShinyProvider      ShinyRateProvider // optional; provides shiny rates
+	ShinyFeed          ShinyFeed         // optional; [shiny_rates] feed, preferred over ShinyProvider when it lists the variant
 	EventChecker       *PogoEventChecker
 	GameData           *gamedata.GameData      // game master data for enrichment
 	Translations       *i18n.Bundle            // translations for per-language enrichment

@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -296,5 +297,39 @@ func TestParserEnsurePrefix(t *testing.T) {
 	cmds := p.Parse(p.EnsurePrefix("track pikachu iv90"))
 	if len(cmds) != 1 || cmds[0].CommandKey != "cmd.track" {
 		t.Fatalf("parse after EnsurePrefix = %+v", cmds)
+	}
+}
+
+func TestParseVerbatimArgs(t *testing.T) {
+	p := newTestParser()
+	cmds := p.Parse(`!track User_ABC "Quoted_Value" x | Second_One`)
+	if len(cmds) != 2 {
+		t.Fatalf("got %d commands", len(cmds))
+	}
+	if got := cmds[0].VerbatimArgs; len(got) != 3 || got[0] != "User_ABC" || got[1] != "Quoted_Value" || got[2] != "x" {
+		t.Fatalf("verbatim[0] = %q", got)
+	}
+	if got := cmds[1].VerbatimArgs; len(got) != 1 || got[0] != "Second_One" {
+		t.Fatalf("verbatim[1] = %q", got)
+	}
+	if cmds[0].Args[0] != "user abc" {
+		t.Fatalf("Args unchanged: %q", cmds[0].Args)
+	}
+}
+
+func TestMergeApplyGroupsKeepsVerbatimArgs(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{"cmd.apply": "apply", "cmd.account": "account"}))
+	p := NewParser("!", bundle, []string{"en"}, nil)
+	cmds := MergeApplyGroups(p.Parse("!apply u2 | account add User_ABC Main"))
+	if len(cmds) != 1 || cmds[0].CommandKey != "cmd.apply" {
+		t.Fatalf("merged = %+v", cmds)
+	}
+	want := []string{"u2", "|", "account", "add", "User_ABC", "Main"}
+	if !slices.Equal(cmds[0].VerbatimArgs, want) {
+		t.Fatalf("VerbatimArgs = %q, want %q", cmds[0].VerbatimArgs, want)
+	}
+	if len(cmds[0].RawArgs) != len(cmds[0].Args) {
+		t.Fatalf("RawArgs %q not in lockstep with Args %q", cmds[0].RawArgs, cmds[0].Args)
 	}
 }

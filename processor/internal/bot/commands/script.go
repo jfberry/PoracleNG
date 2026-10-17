@@ -206,6 +206,12 @@ func (c *ScriptCommand) monsterToScript(ctx *bot.CommandContext, prefix string, 
 	if m.Size > 0 || m.MaxSize != 5 {
 		parts = append(parts, fmt.Sprintf("size:%d-%d", m.Size, m.MaxSize))
 	}
+	if db.IsPersonalShiny(m.Personal) {
+		parts = append(parts, "personalshiny")
+	}
+	if db.IsPersonalBackground(m.Personal) {
+		parts = append(parts, "personalbackground")
+	}
 	if m.PVPRankingLeague != 0 {
 		league := ""
 		switch m.PVPRankingLeague {

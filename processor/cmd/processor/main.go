@@ -48,6 +48,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/resources"
@@ -124,6 +125,8 @@ func main() {
 	defer database.Close()
 
 	humanStore := store.NewSQLHumanStore(database)
+	// Created once; shared by the bot deps and (later) the API tracking deps.
+	playerAccounts := store.NewPlayerAccountStore(database)
 	trackingStores := store.NewTrackingStores(database)
 	summaryScheduleStore := store.NewSQLSummaryScheduleStore(database)
 
@@ -422,6 +425,7 @@ func main() {
 		defaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
 	}
 	trackingDeps := &api.TrackingDeps{
+		Accounts: playerAccounts,
 		DB:       database,
 		Humans:   humanStore,
 		Tracking: trackingStores,
@@ -474,6 +478,7 @@ func main() {
 	// Strict v2 mutes surface (huma, sub-resource of human) over the in-memory
 	// mute store — net-new in v2 (the bot/buttons were the only mute writers).
 	api.RegisterV2Mutes(humaAPI, trackingDeps)
+	api.RegisterV2Accounts(humaAPI, trackingDeps)
 
 	tracking := apiGroup.Group("/tracking")
 	tracking.GET("/pokemon/refresh", api.HandleReload(func() error {
@@ -765,6 +770,7 @@ func main() {
 	cmdRegistry.Register(&commands.ProfileCommand{})
 	cmdRegistry.Register(&commands.SummaryCommand{})
 	cmdRegistry.Register(&commands.LocationCommand{})
+	cmdRegistry.Register(&commands.AccountCommand{})
 	cmdRegistry.Register(&commands.AreaCommand{})
 	cmdRegistry.Register(&commands.ScriptCommand{})
 	cmdRegistry.Register(&commands.VersionCommand{})
@@ -930,6 +936,8 @@ func main() {
 	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
 	sharedBotDeps := bot.BotDeps{
 		DB:                 database,
+		PlayerAccounts:     playerAccounts,
+		ShinyRates:         proc.shinyRates,
 		Humans:             humanStore,
 		Tracking:           trackingStores,
 		Cfg:                cfg,
@@ -1349,6 +1357,11 @@ type ProcessorService struct {
 	// on a fixed cadence; both are nil only in tests that skip init.
 	muteStore   *mute.Store
 	muteSweeper *mute.Sweeper
+
+	// shinyRates is the shiny-rate feed (Golbat [shiny_rates] format). Always
+	// non-nil; with no URL configured it never loads, so personal rules never
+	// match and enrichment keeps the observed-stats shiny fields.
+	shinyRates *personalshiny.Rates
 
 	// buttonActions is the dispatch registry for button-triggered state
 	// changes (#109). Always allocated and built-in handlers registered
@@ -1807,6 +1820,13 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		}
 	}
 
+	ps.shinyRates = personalshiny.NewRates(cfg.ShinyRates.URL, cfg.ShinyRates.Token, cfg.ShinyRates.MaxBytes)
+	if cfg.ShinyRates.URL != "" {
+		ps.enricher.ShinyFeed = ps.shinyRates
+		ps.shinyRates.Start(ps.ctx)
+		log.Infof("Shiny rates: refreshing from %s every 5m", cfg.ShinyRates.URL)
+	}
+
 	return ps
 }
 
@@ -1814,6 +1834,7 @@ func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
 	log.Info("Webhook workers stopped")
+	ps.shinyRates.Stop()
 
 	// Close render channel BEFORE dispatcher — render workers feed into dispatcher.
 	// Order: webhook workers → render channel → render workers → dispatcher → delivery

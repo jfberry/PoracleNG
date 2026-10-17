@@ -51,6 +51,14 @@ func GetTimezone(lat, lon float64) string {
 	return tz
 }
 
+// TimezoneName returns the IANA zone containing (lat, lon), or "" when the
+// finder has none. Unlike GetTimezone it has no UTC fallback: personal shiny
+// rate overrides are keyed by zone name exactly as Golbat's
+// tz.SearchTimezone returns it, and "" must not match a "UTC" key.
+func TimezoneName(lat, lon float64) string {
+	return finder.GetTimezoneName(lon, lat)
+}
+
 // TimezoneSource discriminates where ResolveTimezone got its answer.
 // Display callers (e.g. !profile / !summary show responses) use it to
 // pick the right i18n key for the explanation text — the geo package

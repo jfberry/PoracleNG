@@ -181,13 +181,10 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 				m["hasMegaEvolutions"] = len(monster.TempEvolutions) > 0
 
 				// Shiny possible
-				if e.ShinyProvider != nil {
-					rate := e.ShinyProvider.GetShinyRate(raid.PokemonID)
-					if rate > 0 {
-						m["shinyPossible"] = true
+				if sf := e.shinyFacts(raid.PokemonID, raid.Form, raid.Costume, raid.Latitude, raid.Longitude); sf.answered {
+					m["shinyPossible"] = sf.possible
+					if sf.possible {
 						m["shinyPossibleEmojiKey"] = "shiny"
-					} else {
-						m["shinyPossible"] = false
 					}
 				}
 			}

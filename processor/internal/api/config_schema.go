@@ -576,6 +576,26 @@ var configSchema = []ConfigSection{
 		},
 	},
 
+	// ---- shiny_rates ----
+	{
+		Name:  "shiny_rates",
+		Title: "Shiny rates (personal shiny)",
+		Fields: []ConfigFieldDef{
+			{Name: "url", Type: "string", Default: "", Description: "Shiny-rate feed base URL, same format as Golbat [shiny_rates] (GET <url>/v1/rates?compact=1). Enables personal shiny/background tracking and feed-backed shinyPossible/shinyRate. Empty = off.", HotReload: false},
+			{Name: "token", Type: "string", Default: "", Description: "Optional bearer token for the shiny-rate feed", Sensitive: true, HotReload: false},
+			{Name: "max_bytes", Type: "int", Default: 16777216, Description: "Largest shiny-rate feed response accepted, in bytes (default 16 MiB). A larger response fails the refresh and keeps the previous rates.", Advanced: true, HotReload: false},
+		},
+	},
+
+	// ---- player_accounts ----
+	{
+		Name:  "player_accounts",
+		Title: "Player accounts",
+		Fields: []ConfigFieldDef{
+			{Name: "self_service", Type: "bool", Default: false, Description: "Let users link/unlink/label their own game accounts with !account. When false only admins (or the API) can. Player IDs cannot be verified, so anyone allowed to link can link any ID."},
+		},
+	},
+
 	// ---- webhookLogging ----
 	{
 		Name:  "webhookLogging",

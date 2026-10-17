@@ -741,6 +741,7 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateAct
 			ctx.AreaLogic = bot.NewAreaLogic(st.Fences, b.Cfg)
 		}
 
+		ctx.VerbatimArgs = pc.VerbatimArgs
 		replies := handler.Run(ctx, pc.Args)
 		reportCommandFailures(rep, expanded, replies)
 		// For the interactive path (actor has a ChannelID) send the

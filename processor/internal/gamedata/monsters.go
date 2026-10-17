@@ -20,6 +20,7 @@ type Monster struct {
 	Legendary      bool
 	Mythic         bool
 	UltraBeast     bool
+	DefaultFormID  int // masterfile defaultFormId: the species' NORMAL form (0 = none)
 	Evolutions     []Evolution
 	TempEvolutions []TempEvolution
 }
@@ -180,6 +181,7 @@ func LoadMonsters(pokemonPath, formsPath string) (map[MonsterKey]*Monster, error
 			Legendary:      poke.Legendary,
 			Mythic:         poke.Mythic,
 			UltraBeast:     poke.UltraBeast,
+			DefaultFormID:  poke.DefaultFormID,
 			Evolutions:     baseEvolutions,
 			TempEvolutions: baseTempEvos,
 		}
@@ -203,6 +205,7 @@ func LoadMonsters(pokemonPath, formsPath string) (map[MonsterKey]*Monster, error
 					Legendary:      poke.Legendary,
 					Mythic:         poke.Mythic,
 					UltraBeast:     poke.UltraBeast,
+					DefaultFormID:  poke.DefaultFormID,
 					Evolutions:     baseEvolutions,
 					TempEvolutions: baseTempEvos,
 				}

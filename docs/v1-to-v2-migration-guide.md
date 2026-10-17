@@ -40,7 +40,7 @@ source of truth. Design rationale: [`v2-api-design.md`](v2-api-design.md).
 | — | `PUT /api/v2/humans/{id}/tracking/{type}/{uid}` | NEW — full replace (omitted fields reset to defaults; no PATCH); the rule keeps its `uid` |
 | `DELETE /api/tracking/{type}/{id}/byUid/{uid}` | `DELETE /api/v2/humans/{id}/tracking/{type}/{uid}` | Returns `{deleted:[…]}` |
 | `POST /api/tracking/{type}/{id}/delete` (body `[uids]`) | `DELETE /api/v2/humans/{id}/tracking/{type}?uid=1,2,3` | Bulk delete via query |
-| `GET /api/tracking/all/{id}` | `GET /api/v2/humans/{id}/tracking` | Full snapshot: `{human, tracking:{<type>:[…]}, profiles, locations, summaries}` |
+| `GET /api/tracking/all/{id}` | `GET /api/v2/humans/{id}/tracking` | Full snapshot: `{human, tracking:{<type>:[…]}, profiles, locations, summaries, mutes, accounts}` |
 | `GET /api/tracking/allProfiles/{id}` | `GET /api/v2/humans/{id}/tracking?all_profiles=true` | |
 | `GET /api/tracking/pokemon/refresh` | `GET`/`POST /api/reload` | Reload alias; the documented reload endpoint |
 
@@ -72,6 +72,18 @@ that doesn't belong to the addressed human.
 | `POST /api/humans/{id}/roles/add/{roleId}` | `POST /api/v2/humans/{id}/roles/{roleId}` | |
 | `POST /api/humans/{id}/roles/remove/{roleId}` | `DELETE /api/v2/humans/{id}/roles/{roleId}` | |
 | `GET /api/humans/{id}/getAdministrationRoles` | `GET /api/v2/humans/{id}/admin-roles` | |
+
+
+### Linked game accounts (new in v2, no v1 equivalent)
+
+| v2 | Notes |
+|---|---|
+| `GET /api/v2/humans/{id}/accounts` | `{accounts:[{player_id, label, created_at}]}`; `label` is `null` when unset |
+| `POST /api/v2/humans/{id}/accounts` | Body `{player_id, label?}`; `201 {account:{…}}`; `409` duplicate ID/label; `422` invalid or over 50 |
+| `PUT /api/v2/humans/{id}/accounts/{player_id}` | Body `{label}` (empty clears); returns `{status:"ok"}`; `404 account not found` |
+| `DELETE /api/v2/humans/{id}/accounts/{player_id}` | Returns `{status:"ok"}`; `404 account not found` |
+
+`player_id` is 1-256 ASCII letters/digits, case-sensitive. The snapshot's `accounts` array has the same items. The v2 pokemon rule gains `personal_shiny` / `personal_background` (booleans, `null` when false, full-replace on PUT); v1 exposes the same via the `personal` bitmask (1 shiny, 2 background; kept when omitted on a by-uid update).
 
 ## Endpoint mapping — profiles
 
