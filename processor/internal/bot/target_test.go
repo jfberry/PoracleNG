@@ -232,14 +232,14 @@ func TestStripTargetTokens(t *testing.T) {
 func TestBuildTargetFor_AccountAdminUserOverride(t *testing.T) {
 	ctx := newTargetCtx(t, true, true)
 	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
-		ID: "other", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
+		ID: "123456", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
 	})
-	target, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "username_9", "user:other"})
+	target, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "username_9", "user:123456"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if target == nil || target.ID != "other" {
-		t.Fatalf("expected override target other, got %+v", target)
+	if target == nil || target.ID != "123456" {
+		t.Fatalf("expected override target 123456, got %+v", target)
 	}
 	if len(rest) != 2 || rest[1] != "username_9" {
 		t.Fatalf("rest = %v", rest)
@@ -249,10 +249,10 @@ func TestBuildTargetFor_AccountAdminUserOverride(t *testing.T) {
 func TestBuildTargetFor_AccountNonAdminUserOverrideRejected(t *testing.T) {
 	ctx := newTargetCtx(t, true, false)
 	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
-		ID: "other", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
+		ID: "123456", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
 	})
-	_, _, errFor := BuildTargetFor(ctx, "cmd.account", []string{"add", "x", "user:other"})
-	_, _, errPlain := BuildTarget(ctx, []string{"user:other"})
+	_, _, errFor := BuildTargetFor(ctx, "cmd.account", []string{"add", "x", "user:123456"})
+	_, _, errPlain := BuildTarget(ctx, []string{"user:123456"})
 	if errFor == nil || errPlain == nil {
 		t.Fatalf("expected rejection, got %v / %v", errFor, errPlain)
 	}
