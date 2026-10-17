@@ -137,7 +137,6 @@
   "msg.mute.usage_area": "Gültige Befehle sind `{0}mute gebiet <name> [dauer:1h]`",
   "msg.mute.usage_id_scope": "Gültige Befehle sind `{0}mute {0} <id> [dauer:1h]`",
   "msg.mute.bad_duration": "Ungültige Dauer: {0}",
-  "msg.mute.id_not_supported": "`!stumm id:N` / `!stumm <typ> id:N` werden noch nicht unterstützt - unterstützte Typen (arena, pokemon, gebiet, pokestop, kraftquelle, alle) funktionieren aktuell. Die regelbasierte Stummschaltung per UID folgt noch.",
   "msg.mute.bad_uid": "`{0}` ist keine gültige Tracking-Regel UID. Nutze `!beobachtet` um Tracking-Regel UIDs anzuzeigen.",
   "msg.mute.unknown_area": "`{0}` befindet sich nicht in den verfügbaren Gebieten. Nutze `!gebiet` um zu sehen, was stumm geschaltet werden kann.",
   "msg.mute.no_pokemon": "Ich kenne kein Pokémon namens `{0}`.",
