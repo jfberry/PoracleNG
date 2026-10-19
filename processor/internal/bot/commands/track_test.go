@@ -978,3 +978,37 @@ func TestTrack_ShinyIsUnrecognised(t *testing.T) {
 	require.NotEmpty(t, replies)
 	assert.Equal(t, "🙅", replies[0].React, "reply: %s", replies[0].Text)
 }
+
+func TestTrack_PersonalFeaturePermissions(t *testing.T) {
+	for _, feature := range []string{"personalshiny", "personalbackground"} {
+		for _, mode := range []string{"role", "user", "denied", "unconfigured", "empty", "telegram"} {
+			t.Run(feature+"/"+mode, func(t *testing.T) {
+				ctx := trackCtx(t)
+				ctx.Config.Discord.CommandSecurity = map[string][]string{feature: {"supporter"}}
+				switch mode {
+				case "role":
+					ctx.UserRoles = []string{"supporter"}
+				case "user":
+					ctx.Config.Discord.CommandSecurity[feature] = []string{ctx.UserID}
+				case "unconfigured":
+					ctx.Config.Discord.CommandSecurity = nil
+				case "empty":
+					ctx.Config.Discord.CommandSecurity[feature] = nil
+				case "telegram":
+					ctx.Platform = "telegram"
+				}
+				replies := runTrack(t, ctx, "25 "+feature)
+				require.NotEmpty(t, replies)
+				rows, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
+				require.NoError(t, err)
+				if mode == "denied" {
+					assert.Equal(t, "🙅", replies[0].React)
+					assert.Empty(t, rows)
+				} else {
+					assert.Equal(t, "✅", replies[0].React, replies[0].Text)
+					require.Len(t, rows, 1)
+				}
+			})
+		}
+	}
+}

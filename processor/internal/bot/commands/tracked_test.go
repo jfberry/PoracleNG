@@ -65,3 +65,36 @@ func TestTracked_DefaultEditLabel(t *testing.T) {
 	}
 	assert.Contains(t, all.String(), "edit (default)")
 }
+
+func TestTracked_FeatureWarningsUseTargetPermissions(t *testing.T) {
+	ctx := trackCtx(t)
+	fillAllTrackingStores(ctx.Tracking)
+	ctx.Tracking.Lures = store.NewMockTrackingStore[db.LureTrackingAPI](store.LureGetUID, store.LureSetUID)
+	// The caller can have access while viewing a target who does not.
+	ctx.UserID = "admin"
+	ctx.UserRoles = []string{"supporter"}
+	for _, input := range []string{"25", "25 great5", "25 personalshiny", "25 personalbackground"} {
+		require.Equal(t, "✅", runTrack(t, ctx, input)[0].React)
+	}
+	h, err := ctx.Humans.Get(ctx.TargetID)
+	require.NoError(t, err)
+	for _, blocked := range []bool{true, false} {
+		h.BlockedAlerts = nil
+		if blocked {
+			h.BlockedAlerts = []string{"pvp", "personalshiny", "personalbackground"}
+		}
+		ctx.Humans.(*store.MockHumanStore).AddHuman(h)
+		var all strings.Builder
+		for _, reply := range (&TrackedCommand{}).Run(ctx, nil) {
+			all.WriteString(reply.Text)
+		}
+		if blocked {
+			assert.Equal(t, 3, strings.Count(all.String(), "Inactive: missing access to"))
+			for _, feature := range h.BlockedAlerts {
+				assert.Contains(t, all.String(), "Inactive: missing access to "+feature+".")
+			}
+		} else {
+			assert.NotContains(t, all.String(), "Inactive: missing access to")
+		}
+	}
+}

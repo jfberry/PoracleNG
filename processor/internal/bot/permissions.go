@@ -170,7 +170,7 @@ func BlockedAlerts(cfg *config.Config, userID string, userRoles []string) *strin
 
 	// Alert types and feature keys that map to command_security entries.
 	// Matches the alerter's computeBlockedAlerts set.
-	commands := []string{"raid", "monster", "gym", "specificgym", "lure", "nest", "egg", "invasion", "pvp", "maxbattle"}
+	commands := []string{"raid", "monster", "gym", "specificgym", "lure", "nest", "egg", "invasion", "pvp", "personalshiny", "personalbackground", "maxbattle"}
 
 	var blocked []string
 	for _, cmd := range commands {

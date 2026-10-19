@@ -354,13 +354,21 @@ thread_keep_alive_interval_hours = 24
 #     poracle_admin (!poracle-admin)
 #   Feature keys (restrict a feature inside a command):
 #     pvp         - using PVP filters in !track
+#     personalshiny - using personalshiny in !track
+#     personalbackground - using personalbackground in !track
 #     specificgym - tracking a specific gym in !gym
+#   These tracking features also stop delivering from existing rules when
+#   reconciliation detects lost access, and resume when access is restored.
+#   Enable discord.check_role; changes reach alerts on the next state reload.
+#   !tracked marks affected rules with an inactive warning.
 #   Any other name (area, location, profile, tracked, ...) is NOT gateable
 #   here and is silently ignored.
 # [discord.command_security]
 # raid = ["role_id_1", "user_id_2"]
 # poracle_admin = ["role_id_1"]
 # pvp = ["role_id_1"]
+# personalshiny = ["role_id_1"]
+# personalbackground = ["role_id_1"]
 
 # ---- Discord slash commands (optional, additive surface) ----
 #

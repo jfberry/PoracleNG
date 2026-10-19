@@ -122,6 +122,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	var sb strings.Builder
+	blockedFeatures := make(map[string]bool)
 
 	// Header: human status, location, area, profile
 	human, err := lookupHumanForTracked(ctx)
@@ -180,6 +181,9 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		if human.BlockedAlerts != "" && human.BlockedAlerts != "[]" {
 			var blocked []string
 			json.Unmarshal([]byte(human.BlockedAlerts), &blocked)
+			for _, feature := range blocked {
+				blockedFeatures[feature] = true
+			}
 			if len(blocked) > 0 {
 				sb.WriteString(tr.Tf("status.blocked_alerts", strings.Join(blocked, ", ")) + "\n")
 			}
@@ -318,6 +322,19 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 			for i := range monsters {
 				sb.WriteString(fmtID(monsters[i].UID))
 				sb.WriteString(warnRow(ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&monsters[i])), monsters[i].Distance))
+				var denied []string
+				if monsters[i].PVPRankingLeague != 0 && blockedFeatures["pvp"] {
+					denied = append(denied, "pvp")
+				}
+				if db.IsPersonalShiny(monsters[i].Personal) && blockedFeatures["personalshiny"] {
+					denied = append(denied, "personalshiny")
+				}
+				if db.IsPersonalBackground(monsters[i].Personal) && blockedFeatures["personalbackground"] {
+					denied = append(denied, "personalbackground")
+				}
+				if len(denied) > 0 {
+					sb.WriteString(" ⚠️ " + tr.Tf("tracking.warn_feature_blocked", strings.Join(denied, ", ")))
+				}
 				sb.WriteByte('\n')
 			}
 		} else {
