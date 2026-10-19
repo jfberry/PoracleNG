@@ -326,11 +326,8 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 				if monsters[i].PVPRankingLeague != 0 && blockedFeatures["pvp"] {
 					denied = append(denied, "pvp")
 				}
-				if db.IsPersonalShiny(monsters[i].Personal) && blockedFeatures["personalshiny"] {
-					denied = append(denied, "personalshiny")
-				}
-				if db.IsPersonalBackground(monsters[i].Personal) && blockedFeatures["personalbackground"] {
-					denied = append(denied, "personalbackground")
+				if monsters[i].Personal != 0 && blockedFeatures["personal"] {
+					denied = append(denied, "personal")
 				}
 				if len(denied) > 0 {
 					sb.WriteString(" ⚠️ " + tr.Tf("tracking.warn_feature_blocked", strings.Join(denied, ", ")))

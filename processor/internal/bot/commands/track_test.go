@@ -980,20 +980,20 @@ func TestTrack_ShinyIsUnrecognised(t *testing.T) {
 }
 
 func TestTrack_PersonalFeaturePermissions(t *testing.T) {
-	for _, feature := range []string{"personalshiny", "personalbackground"} {
+	for _, feature := range []string{"personalshiny", "personalbackground", "personalshiny personalbackground"} {
 		for _, mode := range []string{"role", "user", "denied", "unconfigured", "empty", "telegram"} {
 			t.Run(feature+"/"+mode, func(t *testing.T) {
 				ctx := trackCtx(t)
-				ctx.Config.Discord.CommandSecurity = map[string][]string{feature: {"supporter"}}
+				ctx.Config.Discord.CommandSecurity = map[string][]string{"personal": {"supporter"}}
 				switch mode {
 				case "role":
 					ctx.UserRoles = []string{"supporter"}
 				case "user":
-					ctx.Config.Discord.CommandSecurity[feature] = []string{ctx.UserID}
+					ctx.Config.Discord.CommandSecurity["personal"] = []string{ctx.UserID}
 				case "unconfigured":
 					ctx.Config.Discord.CommandSecurity = nil
 				case "empty":
-					ctx.Config.Discord.CommandSecurity[feature] = nil
+					ctx.Config.Discord.CommandSecurity["personal"] = nil
 				case "telegram":
 					ctx.Platform = "telegram"
 				}

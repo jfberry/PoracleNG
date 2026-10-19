@@ -88,8 +88,7 @@ func validateHumans(
 
 		// Reconciliation updates these flags when a user loses or regains
 		// feature access. Gate stored rules too, regardless of how created.
-		if db.IsPersonalShiny(monster.Personal) && human.BlockedAlertsSet["personalshiny"] ||
-			db.IsPersonalBackground(monster.Personal) && human.BlockedAlertsSet["personalbackground"] {
+		if monster.Personal != 0 && human.BlockedAlertsSet["personal"] {
 			continue
 		}
 

@@ -14,7 +14,7 @@ import (
 // Exercise reconciliation's permission calculation and delivery's gate
 // together: saved rules survive role loss but cannot deliver until restored.
 func TestValidateHumans_FeatureRoleLifecycle(t *testing.T) {
-	for _, feature := range []string{"pvp", "personalshiny", "personalbackground"} {
+	for _, feature := range []string{"pvp", "personal"} {
 		t.Run(feature, func(t *testing.T) {
 			cfg := &config.Config{}
 			cfg.Discord.CommandSecurity = map[string][]string{feature: {"supporter"}}
@@ -49,10 +49,8 @@ func TestValidateHumans_FeatureRoleLifecycle(t *testing.T) {
 					switch feature {
 					case "pvp":
 						want = []int64{1, 3, 4}
-					case "personalshiny":
-						want = []int64{1, 2, 4}
-					case "personalbackground":
-						want = []int64{1, 2, 3}
+					case "personal":
+						want = []int64{1, 2}
 					}
 				}
 				require.Equal(t, want, ids, "hasRole=%v", hasRole)

@@ -89,10 +89,8 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Personal shiny/background rules match roughly 1 in 512 spawns per
 	// account, so they narrow "everything" like any other filter.
 	personal := db.PackPersonal(parsed.HasKeyword("arg.personalshiny"), parsed.HasKeyword("arg.personalbackground"))
-	for _, feature := range []string{"personalshiny", "personalbackground"} {
-		if parsed.HasKeyword("arg."+feature) && !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, feature, ctx.UserID, ctx.UserRoles) {
-			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
-		}
+	if personal != 0 && !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "personal", ctx.UserID, ctx.UserRoles) {
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 	}
 
 	// Reject bare "!track everything" with no meaningful filters for non-admins.

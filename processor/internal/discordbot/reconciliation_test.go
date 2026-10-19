@@ -169,7 +169,7 @@ func TestReconcileUser_FeatureRoleLossAndRestoration(t *testing.T) {
 				cfg.Discord.UserRole = []string{registrationRole}
 			}
 			cfg.Discord.CommandSecurity = map[string][]string{
-				"pvp": {"supporter"}, "personalshiny": {"supporter"}, "personalbackground": {"supporter"},
+				"pvp": {"supporter"}, "personal": {"supporter"},
 			}
 			hs := store.NewMockHumanStore()
 			hs.AddHuman(&store.Human{ID: "user1", Type: "discord:user", Enabled: true})
@@ -184,7 +184,7 @@ func TestReconcileUser_FeatureRoleLossAndRestoration(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, key := range []string{"pvp", "personalshiny", "personalbackground"} {
+				for _, key := range []string{"pvp", "personal"} {
 					if slices.Contains(got.BlockedAlerts, key) != (len(roles) == 0) {
 						t.Errorf("roles=%v: blocked=%v, feature=%s", roles, got.BlockedAlerts, key)
 					}
