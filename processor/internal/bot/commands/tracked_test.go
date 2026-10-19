@@ -81,7 +81,7 @@ func TestTracked_FeatureWarningsUseTargetPermissions(t *testing.T) {
 	for _, blocked := range []bool{true, false} {
 		h.BlockedAlerts = nil
 		if blocked {
-			h.BlockedAlerts = []string{"pvp", "personalshiny", "personalbackground"}
+			h.BlockedAlerts = []string{"pvp", "personal"}
 		}
 		ctx.Humans.(*store.MockHumanStore).AddHuman(h)
 		var all strings.Builder
