@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS `player_accounts` (
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY `uniq_id_player` (`id`, `player_id`),
   UNIQUE KEY `uniq_id_label`  (`id`, `label`)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ALTER TABLE `monsters`
   ADD COLUMN `personal` tinyint NOT NULL DEFAULT 0;
