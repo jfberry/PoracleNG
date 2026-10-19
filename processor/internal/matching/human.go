@@ -86,6 +86,13 @@ func validateHumans(
 			continue
 		}
 
+		// Reconciliation updates these flags when a user loses or regains
+		// feature access. Gate stored rules too, regardless of how created.
+		if db.IsPersonalShiny(monster.Personal) && human.BlockedAlertsSet["personalshiny"] ||
+			db.IsPersonalBackground(monster.Personal) && human.BlockedAlertsSet["personalbackground"] {
+			continue
+		}
+
 		anchorLat, anchorLon, effectiveAreas := resolveOverride(monster.OverrideLocationLabel, monster.OverrideAreas, human)
 
 		// Lazy haversine: compute once when first needed, cache for reuse.

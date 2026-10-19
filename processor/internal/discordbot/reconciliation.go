@@ -276,6 +276,19 @@ func (r *Reconciliation) ReconcileUser(id string, user *store.Human, discordUser
 	// Compute blocked_alerts from command_security.
 	blocked := bot.BlockedAlerts(r.cfg, id, roleList)
 
+	// Feature permissions are independent of registration membership. Update
+	// existing users even without user_role, or when membership is lost but
+	// removeInvalidUsers is disabled.
+	if user != nil && !sameBlockedAlerts(user.BlockedAlerts, blocked) {
+		if err := r.humanStore.Update(id, map[string]any{"blocked_alerts": nullableSqlArg(blocked)}); err != nil {
+			r.log.Errorf("Update feature permissions for %s: %v", id, err)
+			return
+		}
+		updated := *user
+		updated.BlockedAlerts = parseBlockedAlertsJSON(blocked)
+		user = &updated
+	}
+
 	if !r.cfg.Area.Enabled {
 		r.reconcileNonAreaSecurity(id, user, name, roleList, blocked, syncNames, removeInvalidUsers)
 	} else {

@@ -160,3 +160,39 @@ func TestReconciliation_FencesNilSafe(t *testing.T) {
 		t.Fatalf("fences() with empty manager = %v, want nil", got)
 	}
 }
+
+func TestReconcileUser_FeatureRoleLossAndRestoration(t *testing.T) {
+	for _, registrationRole := range []string{"", "member"} {
+		t.Run("registrationRole="+registrationRole, func(t *testing.T) {
+			cfg := minimalConfig()
+			if registrationRole != "" {
+				cfg.Discord.UserRole = []string{registrationRole}
+			}
+			cfg.Discord.CommandSecurity = map[string][]string{
+				"pvp": {"supporter"}, "personalshiny": {"supporter"}, "personalbackground": {"supporter"},
+			}
+			hs := store.NewMockHumanStore()
+			hs.AddHuman(&store.Human{ID: "user1", Type: "discord:user", Enabled: true})
+			r := newTestReconciliation(hs, cfg)
+			for _, roles := range [][]string{{"member", "supporter"}, nil, {"member", "supporter"}} {
+				user, err := hs.Get("user1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.ReconcileUser(user.ID, user, &DiscordUserInfo{Roles: roles}, false, false)
+				got, err := hs.Get(user.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, key := range []string{"pvp", "personalshiny", "personalbackground"} {
+					if slices.Contains(got.BlockedAlerts, key) != (len(roles) == 0) {
+						t.Errorf("roles=%v: blocked=%v, feature=%s", roles, got.BlockedAlerts, key)
+					}
+				}
+				if !got.Enabled || got.AdminDisable {
+					t.Fatal("feature role loss must not disable ordinary tracking")
+				}
+			}
+		})
+	}
+}
