@@ -552,9 +552,9 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			// Channel context — use the message's current guild.
 			// Gateway state cache first, REST fallback.
 			if member, err := s.State.Member(guildID, m.Author.ID); err == nil && member != nil {
-				userRoles = member.Roles
+				userRoles = discordroles.MemberRoleIDs(guildID, member.Roles)
 			} else if member, err := s.GuildMember(guildID, m.Author.ID); err == nil && member != nil {
-				userRoles = member.Roles
+				userRoles = discordroles.MemberRoleIDs(guildID, member.Roles)
 			}
 		} else if len(b.Cfg.Discord.Guilds) > 0 {
 			// DM context — Discord doesn't tell us the user's guild

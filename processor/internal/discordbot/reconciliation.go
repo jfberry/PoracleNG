@@ -14,6 +14,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/store"
@@ -101,8 +102,7 @@ func (r *Reconciliation) LoadAllGuildUsers() (map[string]*DiscordUserInfo, error
 			}
 			memberCount++
 
-			roleList := make([]string, len(member.Roles))
-			copy(roleList, member.Roles)
+			roleList := discordroles.MemberRoleIDs(guildID, member.Roles)
 
 			existing, ok := userList[member.User.ID]
 			if !ok {
@@ -213,7 +213,7 @@ func (r *Reconciliation) ReconcileSingleUser(id string, removeInvalidUsers bool)
 				}
 				name = stripEmojis(n)
 			}
-			roleList = append(roleList, member.Roles...)
+			roleList = append(roleList, discordroles.MemberRoleIDs(guildID, member.Roles)...)
 		}
 	}
 

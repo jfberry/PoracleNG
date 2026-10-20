@@ -165,7 +165,20 @@ func SetUserRole(s *discordgo.Session, roleSubMap map[string]config.RoleSubscrip
 	return changes, nil
 }
 
-// GetUserRoleIDs returns all role IDs a user has across the given guilds.
+// MemberRoleIDs returns a guild member's role IDs including @everyone.
+// Discord omits @everyone from member.Roles, but its role ID is the guild
+// ID and every member holds it. PoracleJS read discord.js's
+// member.roles.cache, which includes it, so configs that key user_role,
+// command_security or delegated admin on the guild ID mean "any member".
+// The result is a fresh slice; roles is not modified.
+func MemberRoleIDs(guildID string, roles []string) []string {
+	out := make([]string, len(roles), len(roles)+1)
+	copy(out, roles)
+	return append(out, guildID)
+}
+
+// GetUserRoleIDs returns all role IDs a user has across the given guilds,
+// including each guild's @everyone role (see MemberRoleIDs).
 // Matches the alerter's DiscordUtil.getUserRoles() behavior.
 func GetUserRoleIDs(s *discordgo.Session, guildIDs []string, userID string) ([]string, error) {
 	var roleIDs []string
@@ -177,7 +190,7 @@ func GetUserRoleIDs(s *discordgo.Session, guildIDs []string, userID string) ([]s
 			log.Debugf("discordroles: fetch member %s in guild %s for roles: %v", userID, guildID, err)
 			continue
 		}
-		roleIDs = append(roleIDs, member.Roles...)
+		roleIDs = append(roleIDs, MemberRoleIDs(guildID, member.Roles)...)
 	}
 
 	if roleIDs == nil {
