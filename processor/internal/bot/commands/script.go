@@ -60,7 +60,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		log.Errorf("script: select invasions: %v", err)
 	}
 	for _, inv := range invasions {
-		sb.WriteString(c.invasionToScript(prefix, &inv))
+		sb.WriteString(c.invasionToScript(ctx, prefix, &inv))
 		sb.WriteByte('\n')
 	}
 
@@ -70,7 +70,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		log.Errorf("script: select lures: %v", err)
 	}
 	for _, l := range lures {
-		sb.WriteString(c.lureToScript(prefix, &l))
+		sb.WriteString(c.lureToScript(ctx, prefix, &l))
 		sb.WriteByte('\n')
 	}
 
@@ -90,7 +90,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		log.Errorf("script: select gyms: %v", err)
 	}
 	for _, g := range gyms {
-		sb.WriteString(c.gymToScript(prefix, &g))
+		sb.WriteString(c.gymToScript(ctx, prefix, &g))
 		sb.WriteByte('\n')
 	}
 
@@ -234,7 +234,10 @@ func (c *ScriptCommand) monsterToScript(ctx *bot.CommandContext, prefix string, 
 	if m.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", m.Distance))
 	}
-	parts = append(parts, c.commonSuffix(ctx, m.Template, m.Clean)...)
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: m.Template, Clean: m.Clean, Ping: m.Ping,
+		Location: m.OverrideLocationLabel, Areas: m.OverrideAreas,
+	}, cleanBit|editBit)...)
 
 	return strings.Join(parts, " ")
 }
@@ -263,7 +266,10 @@ func (c *ScriptCommand) raidToScript(ctx *bot.CommandContext, prefix string, r *
 		parts = append(parts, fmt.Sprintf("d:%d", r.Distance))
 	}
 	parts = append(parts, c.rsvpArg(r.RSVPChanges)...)
-	parts = append(parts, c.commonSuffix(ctx, r.Template, r.Clean)...)
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: r.Template, Clean: r.Clean, Ping: r.Ping,
+		Location: r.OverrideLocationLabel, Areas: r.OverrideAreas,
+	}, cleanBit|editBit)...)
 
 	return strings.Join(parts, " ")
 }
@@ -280,11 +286,14 @@ func (c *ScriptCommand) eggToScript(ctx *bot.CommandContext, prefix string, e *d
 		parts = append(parts, fmt.Sprintf("d:%d", e.Distance))
 	}
 	parts = append(parts, c.rsvpArg(e.RSVPChanges)...)
-	parts = append(parts, c.commonSuffix(ctx, e.Template, e.Clean)...)
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: e.Template, Clean: e.Clean, Ping: e.Ping,
+		Location: e.OverrideLocationLabel, Areas: e.OverrideAreas,
+	}, cleanBit|editBit)...)
 	return strings.Join(parts, " ")
 }
 
-func (c *ScriptCommand) invasionToScript(prefix string, inv *db.InvasionTrackingAPI) string {
+func (c *ScriptCommand) invasionToScript(ctx *bot.CommandContext, prefix string, inv *db.InvasionTrackingAPI) string {
 	var parts []string
 	parts = append(parts, prefix+"invasion")
 	if inv.GruntType != "" {
@@ -301,10 +310,14 @@ func (c *ScriptCommand) invasionToScript(prefix string, inv *db.InvasionTracking
 	if inv.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", inv.Distance))
 	}
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: inv.Template, Clean: inv.Clean, Ping: inv.Ping,
+		Location: inv.OverrideLocationLabel, Areas: inv.OverrideAreas,
+	}, cleanBit)...)
 	return strings.Join(parts, " ")
 }
 
-func (c *ScriptCommand) lureToScript(prefix string, l *db.LureTrackingAPI) string {
+func (c *ScriptCommand) lureToScript(ctx *bot.CommandContext, prefix string, l *db.LureTrackingAPI) string {
 	var parts []string
 	parts = append(parts, prefix+"lure")
 	lureNames := map[int]string{0: "everything", 502: "glacial", 503: "mossy", 504: "magnetic", 505: "rainy", 506: "sparkly"}
@@ -316,6 +329,10 @@ func (c *ScriptCommand) lureToScript(prefix string, l *db.LureTrackingAPI) strin
 	if l.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", l.Distance))
 	}
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: l.Template, Clean: l.Clean, Ping: l.Ping,
+		Location: l.OverrideLocationLabel, Areas: l.OverrideAreas,
+	}, cleanBit|editBit)...)
 	return strings.Join(parts, " ")
 }
 
@@ -333,10 +350,14 @@ func (c *ScriptCommand) nestToScript(ctx *bot.CommandContext, prefix string, n *
 	if n.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", n.Distance))
 	}
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: n.Template, Clean: n.Clean, Ping: n.Ping,
+		Location: n.OverrideLocationLabel, Areas: n.OverrideAreas,
+	}, cleanBit)...)
 	return strings.Join(parts, " ")
 }
 
-func (c *ScriptCommand) gymToScript(prefix string, g *db.GymTrackingAPI) string {
+func (c *ScriptCommand) gymToScript(ctx *bot.CommandContext, prefix string, g *db.GymTrackingAPI) string {
 	var parts []string
 	parts = append(parts, prefix+"gym")
 	teamNames := map[int]string{0: "harmony", 1: "mystic", 2: "valor", 3: "instinct"}
@@ -354,6 +375,10 @@ func (c *ScriptCommand) gymToScript(prefix string, g *db.GymTrackingAPI) string 
 	if g.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", g.Distance))
 	}
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: g.Template, Clean: g.Clean, Ping: g.Ping,
+		Location: g.OverrideLocationLabel, Areas: g.OverrideAreas,
+	}, cleanBit)...)
 	return strings.Join(parts, " ")
 }
 
@@ -380,11 +405,16 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 		} else {
 			parts = append(parts, "candy")
 		}
-	case 7: // pokemon
+	case 7: // pokemon — reward 0 is the "all pokemon" wildcard
 		if q.Reward > 0 {
 			parts = append(parts, c.pokemonName(ctx, q.Reward))
+			if q.Form != 0 {
+				if formName := c.formName(ctx, q.Form); formName != "" {
+					parts = append(parts, "form:"+formName)
+				}
+			}
 		} else {
-			parts = append(parts, "everything")
+			parts = append(parts, "all_pokemon")
 		}
 	case 12: // energy
 		if q.Reward > 0 {
@@ -392,13 +422,33 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 		} else {
 			parts = append(parts, "energy")
 		}
+	case 2: // item — reward 0 is the "all items" wildcard
+		if q.Reward == 0 {
+			parts = append(parts, "all_items")
+		} else if name := c.itemName(ctx, q.Reward); name != "" {
+			parts = append(parts, name)
+		} else {
+			parts = append(parts, fmt.Sprintf("reward_type:%d", q.RewardType))
+		}
 	default:
 		parts = append(parts, fmt.Sprintf("reward_type:%d", q.RewardType))
 	}
 
+	// Only item, candy and energy rewards keep a minimum in Amount
+	// (stardust and pokecoins keep theirs in Reward, emitted above).
+	if q.Amount > 0 && (q.RewardType == 2 || q.RewardType == 4 || q.RewardType == 12) {
+		parts = append(parts, fmt.Sprintf("amount:%d", q.Amount))
+	}
+	if bool(q.Shiny) {
+		parts = append(parts, "shiny")
+	}
 	if q.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", q.Distance))
 	}
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: q.Template, Clean: q.Clean, Ping: q.Ping,
+		Location: q.OverrideLocationLabel, Areas: q.OverrideAreas,
+	}, cleanBit|summaryBit)...)
 	return strings.Join(parts, " ")
 }
 
@@ -431,13 +481,11 @@ func (c *ScriptCommand) maxbattleToScript(ctx *bot.CommandContext, prefix string
 	if mb.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", mb.Distance))
 	}
-	if mb.Template != ctx.DefaultTemplate() {
-		parts = append(parts, "template:"+mb.Template)
-	}
 	// !maxbattle accepts clean but not edit (maxbattle alerts carry no edit key).
-	if mb.Clean&1 != 0 {
-		parts = append(parts, "clean")
-	}
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: mb.Template, Clean: mb.Clean, Ping: mb.Ping,
+		Location: mb.OverrideLocationLabel, Areas: mb.OverrideAreas,
+	}, cleanBit)...)
 	return strings.Join(parts, " ")
 }
 
@@ -480,9 +528,11 @@ func (c *ScriptCommand) fortToScript(ctx *bot.CommandContext, prefix string, f *
 	if f.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", f.Distance))
 	}
-	if f.Template != ctx.DefaultTemplate() {
-		parts = append(parts, "template:"+f.Template)
-	}
+	// !fort takes no clean/edit keyword (fort rules have no clean column).
+	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
+		Template: f.Template, Ping: f.Ping,
+		Location: f.OverrideLocationLabel, Areas: f.OverrideAreas,
+	}, 0)...)
 	return strings.Join(parts, " ")
 }
 
@@ -510,6 +560,21 @@ func (c *ScriptCommand) formName(ctx *bot.CommandContext, formID int) string {
 		return ""
 	}
 	return strings.ToLower(name)
+}
+
+// itemName returns the English item name with spaces as underscores, which
+// the parser turns back into the single phrase !quest matches item names
+// against.
+func (c *ScriptCommand) itemName(ctx *bot.CommandContext, itemID int) string {
+	if ctx.GameData == nil {
+		return ""
+	}
+	tr := ctx.Translations.For("en")
+	name := tr.T(gamedata.ItemTranslationKey(itemID))
+	if name == gamedata.ItemTranslationKey(itemID) {
+		return ""
+	}
+	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
 }
 
 func (c *ScriptCommand) moveName(ctx *bot.CommandContext, moveID int) string {
@@ -543,17 +608,62 @@ func (c *ScriptCommand) rsvpArg(rsvpChanges int) []string {
 	}
 }
 
-func (c *ScriptCommand) commonSuffix(ctx *bot.CommandContext, template string, clean int) []string {
+// Clean bits a tracking command accepts as keywords (see db/clean.go).
+const (
+	cleanBit   = 1 // clean
+	editBit    = 2 // edit
+	summaryBit = 4 // summary (quest only)
+)
+
+// ruleSettings are the per-rule settings every tracking command accepts
+// alongside its own filters.
+type ruleSettings struct {
+	Template string
+	Clean    int
+	Ping     string
+	Location string   // override_location_label
+	Areas    []string // override_areas
+}
+
+// commonSuffix emits the shared settings of a rule. cleanBits is the set of
+// clean bits the command accepts as keywords; a bit outside it is left out
+// rather than emitted as a keyword the command would reject.
+func (c *ScriptCommand) commonSuffix(ctx *bot.CommandContext, s ruleSettings, cleanBits int) []string {
 	var parts []string
-	defaultTemplate := ctx.DefaultTemplate()
-	if template != defaultTemplate {
-		parts = append(parts, "template:"+template)
+	if s.Template != ctx.DefaultTemplate() {
+		parts = append(parts, scriptToken("template:"+s.Template))
 	}
-	if clean&1 != 0 {
+	clean := s.Clean & cleanBits
+	if clean&cleanBit != 0 {
 		parts = append(parts, "clean")
 	}
-	if clean&2 != 0 {
+	if clean&editBit != 0 {
 		parts = append(parts, "edit")
 	}
+	if clean&summaryBit != 0 {
+		parts = append(parts, "summary")
+	}
+	if s.Location != "" {
+		parts = append(parts, scriptToken("location:"+s.Location))
+	}
+	for _, a := range s.Areas {
+		parts = append(parts, scriptToken("area:"+a))
+	}
+	// The stored ping is the space-joined mention tokens extractPings took
+	// from the original command, so it re-parses as the same pings.
+	if s.Ping != "" {
+		parts = append(parts, s.Ping)
+	}
 	return parts
+}
+
+// scriptToken quotes a token that contains whitespace or an underscore. The
+// parser keeps a quoted token whole and leaves its underscores alone, where
+// it would otherwise split on the space or turn the underscore into one
+// (which a saved-location label lookup would not match).
+func scriptToken(tok string) string {
+	if strings.ContainsAny(tok, " \t_") {
+		return `"` + tok + `"`
+	}
+	return tok
 }

@@ -39,28 +39,32 @@ func runScriptLines(t *testing.T, ctx *bot.CommandContext) []string {
 	return strings.Split(replies[0].Text, "\n")
 }
 
-// replay runs each emitted script line through the matching command.
+// scriptCommands maps the command keys a script line can parse to.
+var scriptCommands = map[string]bot.Command{
+	"cmd.track":     &TrackCommand{},
+	"cmd.raid":      &RaidCommand{},
+	"cmd.egg":       &EggCommand{},
+	"cmd.invasion":  &InvasionCommand{},
+	"cmd.lure":      &LureCommand{},
+	"cmd.nest":      &NestCommand{},
+	"cmd.gym":       &GymCommand{},
+	"cmd.quest":     &QuestCommand{},
+	"cmd.maxbattle": &MaxbattleCommand{},
+	"cmd.fort":      &FortCommand{},
+}
+
+// replay runs each line through the real command parser (so quoting and
+// the underscore→space rewrite apply exactly as for a user) and then the
+// matching command, requiring every line to succeed.
 func replay(t *testing.T, ctx *bot.CommandContext, lines []string) {
 	t.Helper()
-	prefix := bot.CommandPrefix(ctx)
+	parser := bot.NewParser(bot.CommandPrefix(ctx), ctx.Translations, []string{"en"}, nil)
 	for _, line := range lines {
-		fields := strings.Fields(strings.TrimPrefix(line, prefix))
-		require.NotEmpty(t, fields)
-		var cmd bot.Command
-		switch fields[0] {
-		case "maxbattle":
-			cmd = &MaxbattleCommand{}
-		case "fort":
-			cmd = &FortCommand{}
-		default:
-			t.Fatalf("unexpected script line %q", line)
-		}
-		// Mirror the parser: underscores become spaces in arguments.
-		args := make([]string, 0, len(fields)-1)
-		for _, a := range fields[1:] {
-			args = append(args, strings.ReplaceAll(a, "_", " "))
-		}
-		r := cmd.Run(ctx, args)
+		cmds := parser.Parse(line)
+		require.Len(t, cmds, 1, "line %q", line)
+		cmd, ok := scriptCommands[cmds[0].CommandKey]
+		require.True(t, ok, "unexpected script line %q", line)
+		r := cmd.Run(ctx, cmds[0].Args)
 		require.NotEmpty(t, r)
 		require.Contains(t, []string{"✅", "👌"}, r[0].React, "line %q: %s", line, r[0].Text)
 	}
