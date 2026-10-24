@@ -693,7 +693,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		if cmd.CommandKey == "cmd.poracle" {
 			remainingArgs = cmd.Args
 		} else {
-			target, args, err := bot.BuildTarget(ctx, cmd.Args)
+			target, args, err := bot.BuildTargetFor(ctx, cmd.CommandKey, cmd.Args)
 			if err != nil {
 				s.MessageReactionAdd(channelID, m.ID, "🙅")
 				reply(bot.LocalizeTargetError(tr, err))
@@ -716,6 +716,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			}
 		}
 
+		ctx.VerbatimArgs = cmd.VerbatimArgs
 		replies := bot.RunLocked(handler, ctx, remainingArgs)
 		replies = bot.ApplyMaintenanceSuffix(replies, b.Dispatcher, tr.T("cmd.maintenance.active_suffix"))
 		b.sendReplies(s, m, replies)

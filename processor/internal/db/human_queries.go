@@ -35,5 +35,5 @@ func DeleteHumanAndTracking(dbx *sqlx.DB, id string) error {
 var humanOwnedTables = []string{
 	"monsters", "raid", "egg", "quest", "invasion", "weather",
 	"lures", "gym", "nests", "maxbattle", "forts",
-	"user_locations",
+	"user_locations", "player_accounts",
 }

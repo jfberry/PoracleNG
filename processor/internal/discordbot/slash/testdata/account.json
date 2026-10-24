@@ -1,0 +1,99 @@
+{
+  "name": "account",
+  "description": "Manage your linked game accounts",
+  "options": [
+    {
+      "type": 1,
+      "name": "list",
+      "description": "List your linked game accounts",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "add",
+      "description": "Link a game account (player ID)",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "player_id",
+          "description": "Your in-game player ID (exactly as shown)",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        },
+        {
+          "type": 3,
+          "name": "name",
+          "description": "Optional short name, e.g. main or alt",
+          "channel_types": null,
+          "required": false,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "remove",
+      "description": "Unlink a game account",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "account",
+          "description": "Name or player ID",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "rename",
+      "description": "Rename an account (or clear its name)",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "account",
+          "description": "Name or player ID",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        },
+        {
+          "type": 3,
+          "name": "name",
+          "description": "New name (leave empty to clear)",
+          "channel_types": null,
+          "required": false,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    }
+  ]
+}

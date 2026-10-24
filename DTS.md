@@ -396,6 +396,14 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 
 ### Other
 
+Personal fields (`personalShiny`, `personalShinyAccounts`, `personalBackground`, `personalBackgroundAccounts`, `hasLinkedAccounts`) are set for every matched user with linked accounts, regardless of which rule matched. `hasLinkedAccounts` is always set for such users; the four `personal*` fields are absent when the spawn could not be evaluated (the `[shiny_rates]` feed is not configured or not yet loaded, or the spawn is ineligible). A Ditto Golbat has identified (`pokemon_id` 132 with a disguise) uses Golbat's fixed 1/64 Ditto roll and never has a background; until Golbat identifies it, it is judged as its disguise and may be reported shiny wrongly. Only sightings whose `seen_type` is `wild` or `encounter` are evaluated (as Golbat does), so personal rules never match, and these fields are never set, for scanners that don't send `seen_type`. They are empty in `!poracle-test` and editor previews. For a user the pokemon is personally shiny for, `imgUrl`, `imgUrlAlt` and `stickerUrl` are also replaced (per user) by the shiny sprite, so that user's alert shows the shiny icon while everyone else keeps the normal one. Those users also get their own static map tile (`staticMap`) drawn with the shiny sprite: one extra tile per spawn, generated only when the spawn is personally shiny for at least one recipient whose template uses `staticMap`. Users receiving a `monsterChanged` reply for an encounter they no longer match keep the shared tile. Example:
+
+```handlebars
+{{#if personalShiny}}✨ Shiny for {{join personalShinyAccounts ", "}}{{/if}}
+```
+
+When `[shiny_rates]` is configured, `shinyPossible` is feed-backed (the feed's rate for the species/form/costume, with per-timezone event overrides applied at the spawn's location); `shinyStats` keeps its observed meaning (rolling-window stats). Form 0 lookups use the species' default (NORMAL) form from the masterfile, since many species have no form 0 in the game and the feed keys them by their own form id.
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `encountered` | bool | Whether pokemon was encountered (has IV data) |
@@ -410,6 +418,13 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `ultraBeast` | bool | Is an ultra beast |
 | `shinyPossible` | bool | Can this pokemon be shiny |
 | `shinyStats` | int | Shiny rate (1 in N) |
+| `shinyRate` | int | Expected shiny rate (1 in N) from the `[shiny_rates]` feed. Also on `quest` and `nest`. Absent without the feed or for variants the feed doesn't list |
+| `shinyRateBoosted` | bool | The feed's shiny rate here is above the 1/512 base (an event). Same availability as `shinyRate`. Always false for Ditto (its 1/64 is its normal rate) |
+| `personalShiny` | bool | Per-user (pokemon only). True when the pokemon is shiny for one of the user's linked accounts, whichever of their rules matched |
+| `personalShinyAccounts` | array | Names of the accounts it is shiny for; unnamed accounts appear as `…` plus the last 4 characters of the player ID (full IDs are never emitted) |
+| `personalBackground` | bool | Per-user. True when the special background applies to a linked account |
+| `personalBackgroundAccounts` | array | Same format as `personalShinyAccounts`, for the background |
+| `hasLinkedAccounts` | bool | Per-user. The user has at least one linked account |
 | `shinyPossibleEmoji` | string | Shiny sparkle emoji (empty if not shiny possible) |
 | `rarityGroup` | int | Rarity group (1-6) |
 | `rarityName` | string | Translated rarity name |
