@@ -520,3 +520,28 @@ func TestHumaConfigPoracleWeb_DisabledHooksIncludesShowcase(t *testing.T) {
 		t.Errorf("disabledHooks = %v, want to contain \"showcase\"", hooks)
 	}
 }
+
+// disable_tappable gates ProcessTappable, the !tappable command and both
+// !tracked gates, so it must reach disabledHooks under the type name.
+func TestHumaConfigPoracleWeb_DisabledHooksIncludesTappable(t *testing.T) {
+	r, api := newConfigTestAPI(t)
+	cfg := &config.Config{}
+	cfg.General.DisableTappable = true
+	RegisterConfigPoracleWeb(api, cfg)
+
+	w := getJSON(t, r, "/api/config/poracleWeb")
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	hooks, _ := got["disabledHooks"].([]any)
+	found := false
+	for _, h := range hooks {
+		if h == "tappable" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("disabledHooks = %v, want to contain \"tappable\"", hooks)
+	}
+}

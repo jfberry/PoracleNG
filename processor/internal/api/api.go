@@ -96,6 +96,13 @@ type Capabilities struct {
 	// "name" field with optional "language". Editors use it to decide whether
 	// to fetch maps for live preview.
 	CustomMaps bool `json:"customMaps"`
+
+	// Tappable reports whether this binary has the tappable tracking type:
+	// the v2 /api/v2/humans/{id}/tracking/tappable endpoints, the tappable
+	// DTS type and test data, and the tappable entry in disabledHooks.
+	// Clients (PoracleWeb, ReactMap, the DTS editor) use it to decide whether
+	// to offer tappable tracking without probing the v2 routes.
+	Tappable bool `json:"tappable"`
 }
 
 // HandleHealth returns a Gin handler that responds with a small health
@@ -127,5 +134,6 @@ func BuildCapabilities() Capabilities {
 		DerivedDtsTypes:      true,
 		Costume:              true,
 		CustomMaps:           true,
+		Tappable:             true,
 	}
 }

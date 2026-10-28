@@ -303,6 +303,7 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		// "showcase" rather than "pokestop_event": matches how "fort" was
 		// named for its tracking type in #195. See #210.
 		{"showcase", cfg.General.DisableShowcase},
+		{"tappable", cfg.General.DisableTappable},
 	}
 	disabledHooks := make([]string, 0)
 	for _, h := range hookTypes {
