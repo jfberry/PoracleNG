@@ -45,8 +45,19 @@ func (ps *ProcessorService) ProcessTappable(raw json.RawMessage) error {
 		l := log.WithField("ref", tw.EncounterID)
 
 		// disappear_time 0 means unknown; a known time already past is stale.
-		if tw.DisappearTime > 0 && tw.DisappearTime <= time.Now().Unix() {
+		now := time.Now().Unix()
+		if tw.DisappearTime > 0 && tw.DisappearTime <= now {
 			l.Debug("Tappable already expired, ignoring")
+			return
+		}
+		// alert_minimum_time applies only to a verified expiry, and is checked
+		// here so no matching or enrichment is spent on a dropped alert. An
+		// unverified one is Golbat's guess (a fort tappable is tap+120s, which
+		// the default 120s minimum would always drop), so the render skips the
+		// check for it too (SkipMinAlertTime).
+		if minSec := int64(ps.cfg.General.AlertMinimumTime); tw.DisappearTimeVerified &&
+			tw.DisappearTime > 0 && minSec > 0 && tw.DisappearTime-now < minSec {
+			l.Debugf("Tappable expires in %ds, below alert_minimum_time %ds, ignoring", tw.DisappearTime-now, minSec)
 			return
 		}
 
@@ -115,6 +126,7 @@ func (ps *ProcessorService) ProcessTappable(raw json.RawMessage) error {
 			MatchedAreas:      matchedAreas,
 			TileGate:          ps.newTileGate(tilePending),
 			LogReference:      tw.EncounterID,
+			SkipMinAlertTime:  !tw.DisappearTimeVerified,
 		}
 	}()
 	return nil

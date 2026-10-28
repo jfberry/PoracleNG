@@ -46,7 +46,7 @@ Sinistea 854) or 1× item 1301 (Rare Candy). ~24/s — high volume, so matcher c
 | 5 | Form/costume | No. |
 | 6 | Numeric ranges | Min amount only (quest `amount` / stardust+pokecoin min in `reward`). |
 | 7 | List filters | No. |
-| 8 | Expiry | Yes — `disappear_time`. Drop the event if it's already in the past. `0` = unknown (no TTH fields; clean uses the default TTH path other unknown-expiry types use). |
+| 8 | Expiry | Yes — `disappear_time`. Drop the event if it's already in the past. `0` = unknown: no `disappear_time` / `disappearTime` / `time`, but `tth` defaults to 20 minutes (Golbat's unknown-expiry fallback; like gym's fixed `tth`) so a clean rule still delivers — a zero TTH makes the delivery queue suppress clean jobs. `alert_minimum_time` applies only to a verified expiry, checked in the handler; unverified expiries (fort tappables: tap + 120s) render with `RenderJob.SkipMinAlertTime`. |
 | 9 | Edit | **No.** Add to `v2EditUnsupported`, `rejectEdit` in Translate. Not in `default_edit`. |
 | 10 | Clean | **Yes** (bit 1). |
 | 11 | Multi-rule metadata | No — dedup by user as quest does. |

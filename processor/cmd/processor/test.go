@@ -401,7 +401,12 @@ func (ps *ProcessorService) processTestTappable(raw json.RawMessage, target webh
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	ps.renderCh <- ps.renderJobFromEnrich(r, target, "tappable", raw, false, false)
+	job := ps.renderJobFromEnrich(r, target, "tappable", raw, false, false)
+	// Same as ProcessTappable: an unverified expiry is Golbat's guess, so
+	// alert_minimum_time doesn't apply to it.
+	verified, _ := r.base["disappear_time_verified"].(bool)
+	job.SkipMinAlertTime = !verified
+	ps.renderCh <- job
 	return nil
 }
 

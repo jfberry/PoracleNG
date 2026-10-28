@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -918,5 +919,30 @@ func TestRenderQuestSummary_QuotedPokestopNameProducesValidJSON(t *testing.T) {
 	embed, _ := msg["embed"].(map[string]any)
 	if desc, _ := embed["description"].(string); !strings.Contains(desc, "[The ''Cliff'']") {
 		t.Errorf("description = %q, want escaped pokestop name", desc)
+	}
+}
+
+// RenderAlertUngated renders an alert whose TTH is under alert_minimum_time
+// (an unverified tappable's tap+120s guess) that RenderAlert drops.
+func TestRenderAlertUngated_SkipsMinAlertTime(t *testing.T) {
+	configDir := t.TempDir()
+	writeTestDTS(t, configDir, []DTSEntry{{
+		Type: "tappable", ID: "1", Platform: "discord", Default: true,
+		Template: map[string]any{"content": "box"},
+	}})
+	r, err := NewRenderer(RendererConfig{
+		ConfigDir: configDir, FallbackDir: t.TempDir(), DefaultLocale: "en", MinAlertTime: 120,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	enrichment := map[string]any{"latitude": 0.0, "longitude": 0.0, "tth": geo.TTH{Minutes: 1, Seconds: 50}}
+	users := []webhook.MatchedUser{{ID: "u1", Type: "discord:user", Template: "1"}}
+
+	if jobs := r.RenderAlert("tappable", enrichment, nil, nil, users, nil, "", ""); len(jobs) != 0 {
+		t.Fatalf("RenderAlert: %d jobs, want 0 (110s < alert_minimum_time)", len(jobs))
+	}
+	if jobs := r.RenderAlertUngated("tappable", enrichment, nil, nil, users, nil, "", ""); len(jobs) != 1 {
+		t.Fatalf("RenderAlertUngated: %d jobs, want 1", len(jobs))
 	}
 }

@@ -1195,7 +1195,7 @@ A tappable sits either on a spawnpoint (`spawnpointId` set, coordinate-only map 
 | `disappearTime` | string | Disappear time, formatted (absent when unknown) |
 | `disappear_time` | int | Unix disappear timestamp; 0 / absent when unknown (for Discord `<t:N:R>`) |
 | `disappearTimeVerified` | bool | The disappear time is confirmed; `confirmedTime` is the same |
-| `tthd` / `tthh` / `tthm` / `tths` | int | Time remaining — only set when the disappear time is known |
+| `tthd` / `tthh` / `tthm` / `tths` | int | Time remaining; 20 minutes when the disappear time is unknown |
 | `gameWeatherName` | string | Current weather in the S2 cell |
 | `gameWeatherEmoji` | string | Current weather emoji |
 
@@ -1213,7 +1213,7 @@ A tappable sits either on a spawnpoint (`spawnpointId` set, coordinate-only map 
 | `pokemonId` | int | Pokemon id (candy / XL candy / mega energy) |
 | `itemId` | int | Item id |
 
-A rule matches when **any** reward matches it, so a box with candy and an item fires for a candy rule even when the item is listed first. Rewards with no trackable type (experience, stickers, …) are still listed and rendered. When `disappear_time` is 0 the expiry is unknown: there are no TTH fields and clean-deletion uses the default TTH.
+A rule matches when **any** reward matches it, so a box with candy and an item fires for a candy rule even when the item is listed first. Rewards with no trackable type (experience, stickers, …) are still listed and rendered. When `disappear_time` is 0 the expiry is unknown: `disappear_time` / `disappearTime` / `time` are absent, and the TTH defaults to 20 minutes (Golbat's own unknown-expiry fallback), which is also what clean-deletion uses. A pokestop tappable's expiry is Golbat's estimate (tap + 120s, `disappear_time_verified` false), so `alert_minimum_time` is not applied to unverified expiries.
 
 Example:
 

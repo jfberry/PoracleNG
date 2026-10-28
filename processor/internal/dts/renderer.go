@@ -321,6 +321,23 @@ func (r *Renderer) RenderAlert(
 	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, nil, matchedUsers, matchedAreas, logReference, editKeyBase)
 }
 
+// RenderAlertUngated is RenderAlert without the alert_minimum_time check, for
+// alerts whose TTH is an estimate rather than a real expiry (an unverified
+// tappable's tap+120s), where the caller has already applied any minimum it
+// wants.
+func (r *Renderer) RenderAlertUngated(
+	templateType string,
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
+	matchedUsers []webhook.MatchedUser,
+	matchedAreas []webhook.MatchedArea,
+	logReference string,
+	editKeyBase string,
+) []webhook.DeliveryJob {
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, nil, matchedUsers, matchedAreas, logReference, editKeyBase)
+}
+
 // isBelowMinAlertTime checks whether the TTH in enrichment is below the configured minimum.
 func (r *Renderer) isBelowMinAlertTime(enrichment map[string]any) bool {
 	_, tthSeconds := extractTTH(enrichment)

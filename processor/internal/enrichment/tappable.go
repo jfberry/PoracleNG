@@ -18,6 +18,11 @@ import (
 // translation keys (TAPPABLE_TYPE_BOX → box).
 const tappableTypePrefix = "TAPPABLE_TYPE_"
 
+// tappableUnknownExpiryMinutes is the tth given to a tappable whose
+// disappear_time is 0 (unknown) — Golbat's own fallback when it has no
+// expiry (decoder/tappable_decode.go: now + 20*60).
+const tappableUnknownExpiryMinutes = 20
+
 // Tappable builds the base enrichment for a tappable webhook. rewards is the
 // slice the handler parsed once (matching.ParseTappableRewards).
 func (e *Enricher) Tappable(tw *webhook.TappableWebhook, rewards []matching.TappableRewardData, tileMode int) (map[string]any, *staticmap.TilePending) {
@@ -54,14 +59,18 @@ func (e *Enricher) Tappable(tw *webhook.TappableWebhook, rewards []matching.Tapp
 	}
 	m["nextHourTimestamp"] = tracker.GetNextHourTimestamp()
 
-	// Expiry. disappear_time 0 means unknown: no TTH fields, so clean-deletion
-	// takes the default path other unknown-expiry types use.
+	// Expiry. disappear_time 0 means unknown: the time fields stay absent,
+	// but tth gets Golbat's own unknown-expiry fallback (20 minutes, like
+	// gym's fixed tth) so clean-deletion has a TTL — a zero TTH makes the
+	// delivery queue drop clean jobs.
 	m["disappear_time_verified"] = tw.DisappearTimeVerified
 	m["confirmedTime"] = tw.DisappearTimeVerified
 	if tw.DisappearTime > 0 {
 		m["disappear_time"] = tw.DisappearTime
 		m["disappearTime"] = geo.FormatTime(tw.DisappearTime, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(tw.DisappearTime)
+	} else {
+		m["tth"] = geo.TTH{Minutes: tappableUnknownExpiryMinutes}
 	}
 
 	// Rewards (first reward as flat fields, all of them as a list).

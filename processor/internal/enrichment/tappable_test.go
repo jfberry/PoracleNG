@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -82,10 +83,15 @@ func TestTappableBase_UnknownExpiryAndPokestop(t *testing.T) {
 	tw.PokestopName = &name
 	m, _ := e.Tappable(tw, matching.ParseTappableRewards(tw), TileModeSkip)
 
-	for _, k := range []string{"tth", "disappearTime", "disappear_time"} {
+	for _, k := range []string{"disappearTime", "disappear_time", "time"} {
 		if _, ok := m[k]; ok {
 			t.Errorf("%s set, want absent (unknown expiry)", k)
 		}
+	}
+	// Unknown expiry still gets a default tth (Golbat's 20 minute fallback)
+	// so a clean rule's message has a TTL instead of being dropped.
+	if tth, ok := m["tth"].(geo.TTH); !ok || tth != (geo.TTH{Minutes: 20}) {
+		t.Errorf("tth = %#v, want geo.TTH{Minutes: 20}", m["tth"])
 	}
 	if m["spawnpoint_id"] != "" {
 		t.Errorf(`spawnpoint_id = %v, want "" (shadows the raw "None")`, m["spawnpoint_id"])

@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -86,5 +88,87 @@ func TestProcessTappable_DisableFlag(t *testing.T) {
 	ps.wg.Wait()
 	if ps.duplicates.CheckTappable("off", sig, 0) {
 		t.Error("disable_tappable must drop the webhook before dedup")
+	}
+}
+
+// tappableMatchingFixture is tappableFixture with alert_minimum_time at its
+// default (120s), a render channel, and one human tracking all candy, so a
+// tappable that survives the handler's checks is enqueued for render.
+func tappableMatchingFixture(t *testing.T) *ProcessorService {
+	t.Helper()
+	ps := tappableFixture(t)
+	ps.cfg.General.AlertMinimumTime = 120
+	ps.cfg.Discord.Enabled = true
+	ps.renderCh = make(chan RenderJob, 4)
+	fences := []geofence.Fence{{
+		Name: "TestArea", DisplayInMatches: true,
+		Path: [][2]float64{{48.0, 16.0}, {49.0, 16.0}, {49.0, 17.0}, {48.0, 17.0}},
+	}}
+	ps.stateMgr.Set(&state.State{
+		Humans: map[string]*db.Human{"u1": {
+			ID: "u1", Type: "discord:user", Enabled: true, Area: []string{"testarea"},
+			Latitude: 48.1, Longitude: 16.4, CurrentProfileNo: 1,
+		}},
+		Tappables: []*db.TappableTracking{{UID: 1, ID: "u1", ProfileNo: 1, RewardType: matching.TappableRewardCandy}},
+		Geofence:  geofence.NewSpatialIndex(fences),
+		Fences:    fences,
+	})
+	return ps
+}
+
+func tappableRawExpiry(t *testing.T, encounterID string, disappear int64, verified bool, pokestop string) json.RawMessage {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(tappableRaw(t, encounterID, disappear), &m); err != nil {
+		t.Fatal(err)
+	}
+	m["disappear_time_verified"] = verified
+	m["pokestop_id"] = pokestop
+	raw, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+// A fort tappable's expiry is Golbat's tap+120s guess (unverified), so with
+// the default alert_minimum_time of 120 it must still be rendered — and the
+// render must skip the minimum-time check. A verified expiry under the
+// minimum is dropped in the handler, before matching.
+func TestProcessTappable_AlertMinimumTime(t *testing.T) {
+	now := time.Now().Unix()
+	for _, tc := range []struct {
+		name     string
+		left     int64
+		verified bool
+		pokestop string
+		wantJob  bool
+		wantSkip bool
+	}{
+		{"stop unverified 110s", 110, false, "stop1", true, true},
+		{"spawn verified 60s", 60, true, "None", false, false},
+		{"spawn verified 600s", 600, true, "None", true, false},
+		{"unknown expiry", -now, true, "None", true, false}, // disappear_time 0
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := tappableMatchingFixture(t)
+			if err := ps.ProcessTappable(tappableRawExpiry(t, tc.name, now+tc.left, tc.verified, tc.pokestop)); err != nil {
+				t.Fatal(err)
+			}
+			ps.wg.Wait()
+			select {
+			case job := <-ps.renderCh:
+				if !tc.wantJob {
+					t.Fatal("job enqueued, want the handler to drop it")
+				}
+				if job.SkipMinAlertTime != tc.wantSkip {
+					t.Errorf("SkipMinAlertTime = %v, want %v", job.SkipMinAlertTime, tc.wantSkip)
+				}
+			default:
+				if tc.wantJob {
+					t.Fatal("no job enqueued")
+				}
+			}
+		})
 	}
 }
