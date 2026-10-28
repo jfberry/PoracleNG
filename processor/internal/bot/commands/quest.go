@@ -13,7 +13,7 @@ import (
 
 // matchItemName tries to match unrecognized args against item names from game data
 // using item_{id} translation keys. Returns the item ID or 0 if no match.
-func (c *QuestCommand) matchItemName(ctx *bot.CommandContext, parsed *bot.ParsedArgs) int {
+func matchItemName(ctx *bot.CommandContext, parsed *bot.ParsedArgs) int {
 	if ctx.GameData == nil || len(parsed.Unrecognized) == 0 {
 		return 0
 	}
@@ -275,7 +275,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			}
 		}
 
-		if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
+		if itemID := matchItemName(ctx, parsed); itemID > 0 {
 			// Item quest tracking (reward_type = 2)
 			// Consume matched item tokens from Unrecognized
 			parsed.Unrecognized = nil
@@ -477,7 +477,7 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 		}
 	}
 
-	if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
+	if itemID := matchItemName(ctx, parsed); itemID > 0 {
 		// Item reward (e.g. !quest remove pinap). Consume matched tokens
 		// so the unrecognized-arg checker doesn't also flag them.
 		parsed.Unrecognized = nil

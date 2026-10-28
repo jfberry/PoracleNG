@@ -14,7 +14,7 @@ import (
 // Item returns autocomplete choices for /quest's item option. The Label is
 // the translated item name (e.g. "Golden Razz Berry") in the user's
 // language, falling back to English; the Value is the same translated
-// name so the underlying QuestCommand.matchItemName resolver — which
+// name so the underlying matchItemName resolver — which
 // compares against translated names — finds it cleanly.
 //
 // When focused is empty, returns the first 25 entries sorted by label so

@@ -1183,6 +1183,7 @@ var dtsTypeDisplayName = map[string]string{
 	"gym":           "Gyms",
 	"fort-update":   "Fort Updates",
 	"maxbattle":     "Max Battles",
+	"tappable":      "Tappables",
 	"weatherchange": "Weather",
 	"greeting":      "Greetings",
 }

@@ -185,7 +185,7 @@ func parseDurationFlex(raw string) (time.Duration, error) {
 func isTrackingTypeToken(s string) bool {
 	switch s {
 	case "pokemon", "raid", "egg", "quest", "invasion", "incident",
-		"lure", "nest", "gym", "fort", "maxbattle":
+		"lure", "nest", "gym", "fort", "maxbattle", "tappable":
 		return true
 	}
 	return false

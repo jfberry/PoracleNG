@@ -18,7 +18,7 @@
         },
         {
           "name": "Stardust / pokecoins",
-          "value": "`{{prefix}}tappable stardust:500` — 500+ stardust\n`{{prefix}}tappable pokecoin:10`"
+          "value": "`{{prefix}}tappable stardust:500` — 500+ stardust\n`{{prefix}}tappable pokecoins:10`"
         },
         {
           "name": "Distance and area",

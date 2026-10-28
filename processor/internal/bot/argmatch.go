@@ -312,7 +312,7 @@ var knownPrefixKeys = []string{
 	"arg.prefix.d", "arg.prefix.t", "arg.prefix.gen", "arg.prefix.cap", "arg.prefix.mega",
 	"arg.prefix.form", "arg.prefix.costume", "arg.prefix.template", "arg.prefix.move", "arg.prefix.language",
 	"arg.prefix.gym",
-	"arg.prefix.stardust", "arg.prefix.pokecoin", "arg.prefix.energy", "arg.prefix.candy",
+	"arg.prefix.stardust", "arg.prefix.pokecoin", "arg.prefix.energy", "arg.prefix.candy", "arg.prefix.xl_candy",
 	"arg.prefix.minspawn",
 	"arg.prefix.great", "arg.prefix.greathigh", "arg.prefix.greatcp",
 	"arg.prefix.ultra", "arg.prefix.ultrahigh", "arg.prefix.ultracp",
@@ -328,7 +328,7 @@ var knownKeywordKeys = []string{
 	"arg.rsvp", "arg.no_rsvp", "arg.rsvp_only",
 	"arg.gmax", "arg.mega",
 	"arg.pokestop", "arg.gym", "arg.station", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.name", "arg.description", "arg.include_empty",
-	"arg.stardust", "arg.pokecoin", "arg.energy", "arg.candy",
+	"arg.stardust", "arg.pokecoin", "arg.energy", "arg.candy", "arg.xl_candy",
 	"arg.slot_changes", "arg.battle_changes",
 }
 

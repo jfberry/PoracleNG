@@ -763,6 +763,7 @@ func main() {
 	cmdRegistry.Register(&commands.NestCommand{})
 	cmdRegistry.Register(&commands.FortCommand{})
 	cmdRegistry.Register(&commands.MaxbattleCommand{})
+	cmdRegistry.Register(&commands.TappableCommand{})
 	cmdRegistry.Register(&commands.QuestCommand{})
 	cmdRegistry.Register(&commands.LureCommand{})
 	cmdRegistry.Register(&commands.LanguageCommand{})
