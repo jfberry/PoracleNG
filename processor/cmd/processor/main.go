@@ -1300,6 +1300,7 @@ type ProcessorService struct {
 	nestMatcher      *matching.NestMatcher
 	fortMatcher      *matching.FortMatcher
 	maxbattleMatcher *matching.MaxbattleMatcher
+	tappableMatcher  *matching.TappableMatcher
 	pvpCfg           *pvp.Config
 	activePokemon    *tracker.ActivePokemonTracker
 	recentActivity   *tracker.RecentActivity
@@ -1749,6 +1750,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		nestMatcher:      &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		fortMatcher:      &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		maxbattleMatcher: &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		tappableMatcher:  &matching.TappableMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		pvpCfg:           pvpCfg,
 		activePokemon:    activePokemon,
 		recentActivity:   tracker.NewRecentActivity(),
