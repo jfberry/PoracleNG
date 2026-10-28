@@ -446,3 +446,21 @@ func TestTappable_BotAndV2StoreIdenticalRows(t *testing.T) {
 }
 
 func itoa64(v int64) string { return strconv.FormatInt(v, 10) }
+
+// A kind:<name> that resolves to no pokemon must not widen to "any pokemon":
+// on add that would track every candy, on remove it would delete every candy rule.
+func TestTappable_UnresolvedPokemonIsUnrecognized(t *testing.T) {
+	ctx := tappableCtx(t)
+	for _, in := range []string{"candy:pikchu", "xlcandy:pikchu", "energy:pikchu", "candy:pikchu rare_candy"} {
+		r := runTappable(t, ctx, in)
+		require.Equal(t, "🙅", r[0].React, in)
+		assert.Contains(t, r[0].Text, "pikchu", in)
+	}
+	assert.Empty(t, tappableRows(t, ctx))
+
+	runTappable(t, ctx, "candy zubat pikachu")
+	require.Len(t, tappableRows(t, ctx), 2)
+	r := runTappable(t, ctx, "remove candy:zubbat")
+	require.Equal(t, "🙅", r[0].React, r[0].Text)
+	assert.Len(t, tappableRows(t, ctx), 2, "nothing removed")
+}

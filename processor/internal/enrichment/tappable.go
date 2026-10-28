@@ -25,10 +25,15 @@ func (e *Enricher) Tappable(tw *webhook.TappableWebhook, rewards []matching.Tapp
 	lat, lon := tw.Latitude, tw.Longitude
 
 	// Identity
+	// Absent ids are set to "" rather than left out: the raw webhook layer
+	// sits below base in the LayeredView and would otherwise surface
+	// Golbat's "None" placeholder through {{pokestop_id}} / {{pokestopId}}.
 	m["encounter_id"] = tw.EncounterID
-	if tw.SpawnpointID != "" && tw.SpawnpointID != webhook.TappableNone {
+	m["spawnpoint_id"] = ""
+	if tw.SpawnpointID != webhook.TappableNone {
 		m["spawnpoint_id"] = tw.SpawnpointID
 	}
+	m["pokestop_id"] = ""
 	if tw.HasPokestop() {
 		m["pokestop_id"] = tw.PokestopID
 		if tw.PokestopName != nil {

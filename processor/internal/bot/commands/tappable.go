@@ -108,10 +108,19 @@ func tappableRewards(ctx *bot.CommandContext, parsed *bot.ParsedArgs, amount int
 	// keyword uses the pokemon named elsewhere in the command, or any
 	// pokemon when none is. Pokemon taken this way are not also candy.
 	pokemonConsumed := false
+	// kind:<name> that resolves to no pokemon is reported as unrecognized
+	// rather than widened to "any pokemon" (which, on remove, would delete
+	// every rule of that kind). Added after item matching, which resets
+	// parsed.Unrecognized.
+	var unresolved []string
 	for _, kind := range tappablePokemonKinds {
 		var mons []bot.ResolvedPokemon
 		if val, ok := parsed.Strings[kind.key]; ok {
 			mons = ctx.Resolver.Resolve(val, ctx.Language)
+			if len(mons) == 0 {
+				unresolved = append(unresolved, kind.key+":"+val)
+				continue
+			}
 		} else if parsed.HasKeyword("arg." + kind.key) {
 			mons = parsed.Pokemon
 			pokemonConsumed = pokemonConsumed || len(mons) > 0
@@ -136,6 +145,7 @@ func tappableRewards(ctx *bot.CommandContext, parsed *bot.ParsedArgs, amount int
 		out = append(out, tappableReward{matching.TappableRewardItem, itemID})
 		amountUsed = true
 	}
+	parsed.Unrecognized = append(parsed.Unrecognized, unresolved...)
 
 	return out, amountUsed
 }

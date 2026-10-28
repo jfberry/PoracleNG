@@ -48,8 +48,8 @@ func TestTappableBase_CandyReward(t *testing.T) {
 			t.Errorf("%s = %v, want %v", k, m[k], v)
 		}
 	}
-	if _, ok := m["pokestop_id"]; ok {
-		t.Error(`pokestop_id "None" must not be exposed`)
+	if m["pokestop_id"] != "" {
+		t.Errorf(`pokestop_id = %v, want "" (shadows the raw "None")`, m["pokestop_id"])
 	}
 	if _, ok := m["tth"]; !ok {
 		t.Error("tth missing for a known disappear time")
@@ -82,10 +82,13 @@ func TestTappableBase_UnknownExpiryAndPokestop(t *testing.T) {
 	tw.PokestopName = &name
 	m, _ := e.Tappable(tw, matching.ParseTappableRewards(tw), TileModeSkip)
 
-	for _, k := range []string{"tth", "disappearTime", "disappear_time", "spawnpoint_id"} {
+	for _, k := range []string{"tth", "disappearTime", "disappear_time"} {
 		if _, ok := m[k]; ok {
-			t.Errorf("%s set, want absent (unknown expiry / no spawnpoint)", k)
+			t.Errorf("%s set, want absent (unknown expiry)", k)
 		}
+	}
+	if m["spawnpoint_id"] != "" {
+		t.Errorf(`spawnpoint_id = %v, want "" (shadows the raw "None")`, m["spawnpoint_id"])
 	}
 	if m["pokestop_id"] != "stop1" || m["pokestop_name"] != "Fountain" {
 		t.Errorf("pokestop = %v / %v", m["pokestop_id"], m["pokestop_name"])

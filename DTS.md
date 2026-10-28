@@ -1176,9 +1176,9 @@ A tappable sits either on a spawnpoint (`spawnpointId` set, coordinate-only map 
 | `tappableTypeNameEng` | string | English copy of `tappableTypeName` |
 | `tappableType` | string | Golbat tappable type (e.g. `TAPPABLE_TYPE_BOX`); raw `tappable_type` |
 | `encounterId` | string | Tappable encounter ID (raw `encounter_id`) |
-| `spawnpointId` | string | Spawnpoint ID (absent for pokestop tappables) |
+| `spawnpointId` | string | Spawnpoint ID (empty for pokestop tappables) |
 | `pokestopName` | string | Pokestop name (pokestop tappables only; "Unknown" when Golbat has no name). `name` is an alias |
-| `pokestopId` | string | Pokestop ID (pokestop tappables only) |
+| `pokestopId` | string | Pokestop ID (empty for spawnpoint tappables) |
 | `rewardString` | string | Translated rewards, comma-joined (e.g. "6 Zubat Candy", "Rare Candy", "250 Stardust"); per language |
 | `rewardStringEng` | string | English copy of `rewardString` |
 | `rewardName` | string | Translated name of the first reward's item or pokemon (the reward kind for stardust / pokecoins); per language |
