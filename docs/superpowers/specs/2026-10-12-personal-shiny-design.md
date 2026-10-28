@@ -196,8 +196,9 @@ func (r *Rates) Variant(pokemonID, form, costume int, lat, lon float64) (v Varia
   changes only the threshold; the background draw
   follows only if a background rate is on offer. So the background is the
   second draw for shiny-capable variants and the first otherwise.
-- **Eligibility** (Golbat's `personalLookup`): only `wild` and `encounter`
-  seen types; a known Ditto is eligible; otherwise never undisguised 132,
+- **Eligibility** (Golbat's `personalLookup`): only `wild`, `encounter`,
+  `tappable_encounter` and `tappable_lure_encounter` seen types (tappables
+  since Golbat #423 @ 758f808); a known Ditto is eligible; otherwise never undisguised 132,
   never disguised, never costume 255. Poracle's webhook has no `is_ditto`
   field; Golbat sets `pokemon_id` 132 and the disguise in
   `display_pokemon_id` together with `is_ditto` (and clears them together),
@@ -207,7 +208,8 @@ func (r *Rates) Variant(pokemonID, form, costume int, lat, lon float64) (v Varia
   below 1/64; it never has a background and ignores the feed (rates,
   `fallback`, `unsupportedPokemon`). Limitations (upstream): covered only
   once Golbat knows it is a Ditto — until then it is judged as its disguise
-  and may be reported shiny wrongly; no Ditto background has been observed.
+  and may be reported shiny wrongly; never reports a Ditto background
+  (one has been seen on a costumed Ditto, but which draw decides it is unknown).
 - **Unknown variant:** the feed's `fallback` shiny rate (1/512 if it
   publishes none), no background, unless their species is listed in the feed's `unsupportedPokemon` (never shiny: known + unsupported, no shiny draw, so the background draw is the first).
 - **Timezone overrides** are resolved per spawn location.

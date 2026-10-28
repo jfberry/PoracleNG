@@ -164,6 +164,13 @@ func TestEvaluateEligibility(t *testing.T) {
 			t.Errorf("%s: evaluated, want nil", name)
 		}
 	}
+	for _, seenType := range []string{"tappable_encounter", "tappable_lure_encounter"} {
+		p := wildPikachu()
+		p.SeenType = seenType
+		if r.Evaluate(p) == nil {
+			t.Errorf("%s: want eligible", seenType)
+		}
+	}
 	p := wildPikachu()
 	p.SeenType = "encounter"
 	p.DisplayPokemonID = 25 // display equal to species is not a disguise
@@ -474,7 +481,7 @@ func TestPersonalDittoShiny(t *testing.T) {
 		}
 		ditto.EncounterID = strconv.FormatUint(encounter, 10)
 		res := r.Evaluate(ditto).For(accounts(testPlayers...))
-		// No Ditto background has been observed: never reported.
+		// Which draw decides a Ditto background is unknown: never reported.
 		if got := playerIDs(res.Shiny); !slices.Equal(got, want) || res.Background != nil {
 			t.Fatalf("encounter %d: shiny %v background %v, want shiny %v", encounter, got, res.Background, want)
 		}

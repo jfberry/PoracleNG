@@ -75,7 +75,7 @@ func (e *Evaluation) player(id string) playerResult {
 	var res playerResult
 	if e.ditto {
 		// A known Ditto is shiny on the third draw at 1/64 and never has a
-		// background: no Ditto background has been observed.
+		// background: which draw decides a Ditto background is unknown.
 		res.shiny = newShinyPlayer(id).dittoRoll(e.encounter) < dittoShinyCutoff
 		e.remember(id, res)
 		return res

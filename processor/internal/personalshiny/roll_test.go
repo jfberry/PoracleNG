@@ -2,6 +2,8 @@ package personalshiny
 
 import (
 	"testing"
+
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func TestPersonalShinyScanRolls(t *testing.T) {
@@ -40,5 +42,27 @@ func TestShinyZonePerSpawn(t *testing.T) {
 	s := &shinyScan{rates: &shinyRates{zoned: true}, zone: r.zone}
 	if z := s.zoneAt(map[string]uint32{"America/Phoenix": 1}, 35.812, -110.195); z != "America/Phoenix" {
 		t.Fatalf("zone = %q", z)
+	}
+}
+
+func TestPersonalRollSeenTypes(t *testing.T) {
+	rolled := map[string]bool{
+		"wild":                    true,
+		"encounter":               true,
+		"tappable_encounter":      true,
+		"tappable_lure_encounter": true,
+	}
+	// Poracle: Golbat walks every SeenTypeCode; these are its seenTypeNames
+	// plus the unset ("") and unknown values a webhook can carry.
+	for _, seenType := range []string{"", "bogus", "wild", "encounter", "nearby_stop",
+		"nearby_cell", "lure_wild", "lure_encounter", "tappable_encounter", "tappable_lure_encounter"} {
+		p := &webhook.PokemonWebhook{PokemonID: 94, Costume: 3, SeenType: seenType}
+		want := uint8(0)
+		if rolled[seenType] {
+			want = 4
+		}
+		if got := personalLookup(p); got != want {
+			t.Errorf("personalLookup with seen type %q = %d, want %d", seenType, got, want)
+		}
 	}
 }

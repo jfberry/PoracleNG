@@ -4,7 +4,7 @@ This package copies Golbat's personal shiny implementation so Poracle's
 alerts agree with a Golbat-backed map for the same spawn, rates and player.
 
 - **Upstream:** UnownHash/Golbat#423 — "Add personal shiny/background filtering and annotation to the pokemon v3 scan"
-- **Pinned commit:** `bec2c23327a205730c8d27cfbfcffb3ca5f82fd1` (PR head "Predict personal shinies for known wild Dittos"; re-pin to the merge commit once #423 merges)
+- **Pinned commit:** `758f8087917eef42b1f59634d37f719bbe1503f0` (PR head "Roll personal shinies for tappable encounters"; re-pin to the merge commit once #423 merges)
 
 ## File mapping
 
@@ -12,9 +12,9 @@ alerts agree with a Golbat-backed map for the same spawn, rates and player.
 |---|---|
 | `javarandom/javarandom.go`, `javarandom/javarandom_test.go` | `derive/javarandom/` — verbatim |
 | `rates.go` | `decoder/api_pokemon_shiny.go`: `shinyScale`, `defaultShinyCutoff`, `defaultShinyRatesMaxBytes`, `errShinyRatesTooLarge`, `shinyPrediction`/`cutoff`, `shinyVariant`, `shinyRate`, `shinyCutoffs`, `shinyRates` (incl. `unsupported`, `fallback`, `zoned`), `StartShinyRates`, `refreshShinyRates` (incl. `max_bytes` and the feed `fallback`), `newShinyRates`, `effectiveOverrides` |
-| `roll.go` | `decoder/api_pokemon_shiny.go`: `dittoPokemonId`, `dittoShinyCutoff`, `maxPersonalPlayers`, `maxPersonalPlayerIDBytes`, `personalLookup`, `isKnownDitto`, `shinyPlayer` (`rolls`, `dittoRoll`, `generator`), `shinyScan` (`rate`, `zoneAt`, `shinyCutoff`, `backgroundCutoff`), `shinyCutoffs.capable`, `backgroundRoll` |
+| `roll.go` | `decoder/api_pokemon_shiny.go`: `dittoPokemonId`, `dittoShinyCutoff`, `maxPersonalPlayers`, `maxPersonalPlayerIDBytes`, `personalRollSeenType`, `personalLookup`, `isKnownDitto`, `shinyPlayer` (`rolls`, `dittoRoll`, `generator`), `shinyScan` (`rate`, `zoneAt`, `shinyCutoff`, `backgroundCutoff`), `shinyCutoffs.capable`, `backgroundRoll` |
 | `adapter.go` | Poracle only; `Evaluate` + `Evaluation.player` are the two halves of `shinyScan.annotate` (incl. its known-Ditto branch) |
-| `roll_test.go`, `adapter_test.go`, `rates_test.go` | `decoder/api_pokemon_shiny_test.go` vectors: `TestPersonalShinyScan` (rolls + annotation), `TestPersonalDrawOrder`, `TestShinyZonePerSpawn`, `TestPersonalDittoShiny` (with `thirdDraw`), `TestShinyCapabilityIgnoresTimezone`, `TestShinyRatesRejectMissingList`, `TestShinyRatesUnsupportedSpecies`, `TestShinyRatesNormalize`, `TestShinyRatesFallback`, `TestShinyRatesMaxBytes`. Driven through `Rates.Evaluate` where Golbat drives `annotate`/`match`; `shinyMaximum` assertions are dropped |
+| `roll_test.go`, `adapter_test.go`, `rates_test.go` | `decoder/api_pokemon_shiny_test.go` vectors: `TestPersonalShinyScan` (rolls + annotation), `TestPersonalDrawOrder`, `TestShinyZonePerSpawn`, `TestPersonalDittoShiny` (with `thirdDraw`), `TestPersonalRollSeenTypes` (over seen_type strings), `TestShinyCapabilityIgnoresTimezone`, `TestShinyRatesRejectMissingList`, `TestShinyRatesUnsupportedSpecies`, `TestShinyRatesNormalize`, `TestShinyRatesFallback`, `TestShinyRatesMaxBytes`. Driven through `Rates.Evaluate` where Golbat drives `annotate`/`match`; `shinyMaximum` assertions are dropped |
 
 Not copied: the scan request plumbing (`ScanPokemonWithShiny`, `hasPersonal`,
 `preparePersonalScan` and its `add` closure, `annotate`'s result wrapper,
@@ -28,7 +28,7 @@ maps (kept for diffing), but nothing in Poracle reads them.
 
 1. Package globals (`shinyRatesSnapshot`, `config.Config.ShinyRates`) are fields on `Rates`; `StartShinyRates` is `(*Rates).Start` with a matching `Stop`; refresh outcomes are recorded for `Status`.
 2. Timezone lookup uses `geo.TimezoneName` (tzf **default** finder, no UTC fallback) instead of `tz.SearchTimezone` (tzf **full** finder). Within ~111 m of a zone border the two can disagree, so results can differ only where the feed has per-timezone overrides active there. Accepted.
-3. `personalLookup` / `isKnownDitto` read the webhook, not Golbat's Pokemon record. The webhook has no `is_ditto`; Golbat's `setDittoAttributes` sets `IsDitto`, `pokemon_id` 132 and `display_pokemon_id` (the disguise) together and `resetDittoAttributes` clears them together, so a known Ditto is `pokemon_id == 132 && display_pokemon_id != 0`. An undisguised 132 (display 0) stays ineligible, as upstream; Golbat's separate `IsDitto` exclusion is covered by the 132 check. Out-of-range costumes are rejected like costume 255.
+3. `personalRollSeenType` switches on the webhook's `seen_type` string instead of `SeenTypeCode`; empty and unknown strings are rejected like `SeenTypeCodeUnset`/`Unknown`. `personalLookup` / `isKnownDitto` read the webhook, not Golbat's Pokemon record. The webhook has no `is_ditto`; Golbat's `setDittoAttributes` sets `IsDitto`, `pokemon_id` 132 and `display_pokemon_id` (the disguise) together and `resetDittoAttributes` clears them together, so a known Ditto is `pokemon_id == 132 && display_pokemon_id != 0`. An undisguised 132 (display 0) stays ineligible, as upstream; Golbat's separate `IsDitto` exclusion is covered by the 132 check. Out-of-range costumes are rejected like costume 255.
 4. `maxPersonalPlayers` / `maxPersonalPlayerIDBytes` are exported as `MaxPlayers` / `MaxPlayerIDBytes` and enforced per human by the account store.
 5. `[shiny_rates] max_bytes` reaches `refreshShinyRates` as `NewRates`' `maxBytes`, not via `config.Config`; the config loader also defaults it to 16 MiB.
 6. The "not loaded yet" warning says "personal shiny alerts" instead of "personal scans".
@@ -40,7 +40,7 @@ maps (kept for diffing), but nothing in Poracle reads them.
 
 ```bash
 cd /path/to/Golbat && git fetch origin
-git diff bec2c23327a205730c8d27cfbfcffb3ca5f82fd1..origin/main -- \
+git diff 758f8087917eef42b1f59634d37f719bbe1503f0..origin/main -- \
   decoder/api_pokemon_shiny.go decoder/api_pokemon_shiny_test.go \
   derive/javarandom docs/personal-shinies.md
 ```
