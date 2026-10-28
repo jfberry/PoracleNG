@@ -517,7 +517,7 @@ func (r *Resolver) tileWorker() {
 }
 
 // GetStaticMapURL returns a static map URL for the given alert type.
-// maptype is the alert type: "monster", "raid", "pokestop", "quest", "gym", "nest", "weather", "maxbattle", "fort-update".
+// maptype is the alert type: "monster", "raid", "pokestop", "quest", "gym", "nest", "weather", "maxbattle", "fort-update", "tappable".
 // data contains the full enrichment fields.
 // keys lists fields for non-pregenerate mode; pregenKeys lists fields for pregenerate mode.
 // The resolver filters data to only include the relevant fields before sending to the tileserver.

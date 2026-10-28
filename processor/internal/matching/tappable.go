@@ -28,6 +28,10 @@ type TappableRewardData struct {
 	PokemonID int // candy / XL candy / mega energy
 	ItemID    int // item
 	Amount    int // the reward count (stardust / pokecoin amount included)
+	// Key is Golbat's LootItemProto oneof name ("item", "pokemon_candy",
+	// "experience", ...). Kept so enrichment can describe rewards Poracle
+	// can't track (Type 0).
+	Key string
 }
 
 // TappableData holds processed tappable data for matching. Rewards are parsed

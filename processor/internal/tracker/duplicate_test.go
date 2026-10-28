@@ -286,3 +286,29 @@ func encounterIDForTest(i int) string {
 func fmtInt(v int) string {
 	return strconv.Itoa(v)
 }
+
+func TestDuplicateCacheTappable(t *testing.T) {
+	dc := NewDuplicateCache()
+	defer dc.Close()
+
+	disappear := time.Now().Unix() + 600
+	if dc.CheckTappable("123", "pokemon_candy/0/41/6", disappear) {
+		t.Error("first sighting must not be a duplicate")
+	}
+	if !dc.CheckTappable("123", "pokemon_candy/0/41/6", disappear) {
+		t.Error("resend of the same reward must be a duplicate")
+	}
+	if dc.CheckTappable("123", "item/1301/0/1", disappear) {
+		t.Error("changed reward must not be a duplicate")
+	}
+	if dc.CheckTappable("456", "pokemon_candy/0/41/6", disappear) {
+		t.Error("different encounter must not be a duplicate")
+	}
+	// Unknown expiry (0) still dedups.
+	if dc.CheckTappable("789", "item/1301/0/1", 0) {
+		t.Error("first sighting with unknown expiry must not be a duplicate")
+	}
+	if !dc.CheckTappable("789", "item/1301/0/1", 0) {
+		t.Error("resend with unknown expiry must be a duplicate")
+	}
+}

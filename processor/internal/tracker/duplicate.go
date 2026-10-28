@@ -192,6 +192,31 @@ func (dc *DuplicateCache) CheckMaxbattle(stationID string, battleEnd int64, poke
 	return dc.seen.CheckAndAdd(&k, time.Duration(remaining)*time.Second)
 }
 
+// CheckTappable returns true if this tappable reward was already seen
+// (duplicate). Golbat sends a tappable once per new or changed reward, so the
+// key is the encounter id plus a signature of rewards[0] (type, item,
+// pokemon, count): a changed reward gets through, a resend doesn't.
+// Key: {encounter_id}T{reward_signature}. TTL runs to the disappear time, or
+// tappableUnknownExpiryTTL when disappear_time is 0 (unknown).
+func (dc *DuplicateCache) CheckTappable(encounterID, rewardSignature string, disappearTime int64) bool {
+	k := dc.seen.newKey()
+	k.Str(encounterID).Str("T").Str(rewardSignature)
+
+	ttl := tappableUnknownExpiryTTL
+	if disappearTime > 0 {
+		remaining := disappearTime - time.Now().Unix() + 60
+		if remaining <= 0 {
+			remaining = 60
+		}
+		ttl = time.Duration(remaining) * time.Second
+	}
+	return dc.seen.CheckAndAdd(&k, ttl)
+}
+
+// tappableUnknownExpiryTTL is the dedup window for a tappable whose
+// disappear_time is unknown (0).
+const tappableUnknownExpiryTTL = 15 * time.Minute
+
 // CheckNest returns true if this nest was already seen (duplicate).
 // Key: {nest_id}_{pokemon_id}_{reset_time}
 func (dc *DuplicateCache) CheckNest(nestID int64, pokemonID int, resetTime int64) bool {

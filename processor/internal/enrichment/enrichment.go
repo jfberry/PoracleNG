@@ -358,6 +358,10 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = append(common, typeFields...)
 		// Pregen adds activePokemons (large array, not suitable for URL)
 		pregenKeys = append(append([]string{}, keys...), "activePokemons")
+	case "tappable":
+		// lat/lon + the reward icon (imgUrl) from common
+		keys = common
+		pregenKeys = keys
 	case "maxbattle":
 		typeFields := []string{"battle_level", "battle_pokemon_id"}
 		keys = append(common, typeFields...)
