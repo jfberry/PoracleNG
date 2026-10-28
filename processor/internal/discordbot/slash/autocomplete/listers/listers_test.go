@@ -471,3 +471,26 @@ func TestListAvailableAreasIncludesSelected(t *testing.T) {
 		t.Fatalf("got %d choices, want 3: %v", len(out), out)
 	}
 }
+
+func TestListTracking_Tappable(t *testing.T) {
+	deps, humans, _, _ := testDeps(t)
+	humans.AddHuman(&store.Human{ID: "discord:user:42", CurrentProfileNo: 0})
+
+	if _, err := deps.Tracking.Tappables.Insert(&db.TappableTrackingAPI{
+		ID: "discord:user:42", RewardType: 3, Reward: 500,
+	}); err != nil {
+		t.Fatalf("seed tappable: %v", err)
+	}
+	rows, _ := deps.Tracking.Tappables.SelectByIDProfile("discord:user:42", 0)
+
+	out, err := ListTracking(context.Background(), deps, "discord:user:42", autocomplete.UserStateHint{Subtype: "tappable"})
+	if err != nil {
+		t.Fatalf("ListTracking: %v", err)
+	}
+	if len(out) != 2 || out[0].Value != RemoveAllSentinel {
+		t.Fatalf("got %+v, want remove-all sentinel + one rule", out)
+	}
+	if suffix := "[id:" + itoa(rows[0].UID) + "]"; !strings.HasSuffix(out[1].Label, suffix) {
+		t.Errorf("label %q missing suffix %q", out[1].Label, suffix)
+	}
+}

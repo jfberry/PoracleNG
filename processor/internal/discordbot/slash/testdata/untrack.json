@@ -211,6 +211,27 @@
       ],
       "autocomplete": false,
       "choices": null
+    },
+    {
+      "type": 1,
+      "name": "tappable",
+      "description": "Remove a tappable tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing tappable tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
     }
   ]
 }

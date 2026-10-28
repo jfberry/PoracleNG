@@ -65,6 +65,8 @@ func testBundle(t *testing.T, opts ...bundleOpt) *i18n.Bundle {
 			"slash.desc.nest":      "Track a nesting pokemon",
 			"slash.cmd.maxbattle":  "maxbattle",
 			"slash.desc.maxbattle": "Track a max (Dynamax) battle",
+			"slash.cmd.tappable":   "tappable",
+			"slash.desc.tappable":  "Track a tappable reward (candy, items, stardust…)",
 			"slash.cmd.gym":        "gym",
 			"slash.desc.gym":       "Track gym team / slot / battle changes",
 			"slash.cmd.fort":       "fort",
@@ -154,10 +156,10 @@ func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 	// All tracking-mutation commands.
 	defs = AllDefinitions(bundle, []string{
 		"track", "raid", "egg",
-		"quest", "invasion", "lure", "nest", "maxbattle", "gym", "fort",
+		"quest", "invasion", "lure", "nest", "maxbattle", "gym", "fort", "tappable",
 	})
-	if len(defs) != 10 {
-		t.Fatalf("expected 10 defs for full tracking-mutation set, got %d", len(defs))
+	if len(defs) != 11 {
+		t.Fatalf("expected 11 defs for full tracking-mutation set, got %d", len(defs))
 	}
 
 	// /untrack and the user-state commands.
@@ -431,6 +433,25 @@ func TestSnapshotMaxbattle(t *testing.T) {
 	}
 }
 
+func TestSnapshotTappable(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.tappable", "tappable")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.tappable")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/tappable.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
 func TestSnapshotGym(t *testing.T) {
 	bundle := testBundle(t)
 	def := buildCommandDef(bundle, "cmd.gym", "gym")
@@ -683,7 +704,7 @@ func TestEnglishOnlyBundleEmitsNoLocalizations(t *testing.T) {
 func TestEditOptionOnlyOnEditCapableCommands(t *testing.T) {
 	bundle := testBundle(t)
 	want := map[string]bool{"track": true, "raid": true, "egg": true, "lure": true}
-	for _, canon := range []string{"track", "raid", "egg", "lure", "quest", "invasion", "incident", "nest", "maxbattle", "gym", "fort"} {
+	for _, canon := range []string{"track", "raid", "egg", "lure", "quest", "invasion", "incident", "nest", "maxbattle", "gym", "fort", "tappable"} {
 		def := buildCommandDef(bundle, "cmd."+canon, canon)
 		if def == nil {
 			t.Fatalf("nil def for %s", canon)

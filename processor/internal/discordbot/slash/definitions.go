@@ -185,6 +185,8 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 		return buildDefinition(bundle, key, canon, eggOptions(bundle))
 	case "cmd.quest":
 		return buildDefinition(bundle, key, canon, questOptions(bundle))
+	case "cmd.tappable":
+		return buildDefinition(bundle, key, canon, tappableOptions(bundle))
 	case "cmd.invasion":
 		return buildDefinition(bundle, key, canon, invasionOptions(bundle))
 	case "cmd.incident":
@@ -219,7 +221,7 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 // IS the tracking subtype — both the slash dispatcher (subCommandName)
 // and the autocomplete lister read it directly to scope the choice list.
 func untrackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
-	subs := []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"}
+	subs := []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle", "tappable"}
 	out := make([]*discordgo.ApplicationCommandOption, 0, len(subs))
 	for _, sub := range subs {
 		out = append(out, untrackSub(bundle, sub))
@@ -640,6 +642,47 @@ func questOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	return append(opts, trackerLocationAreaOpts(bundle)...)
 }
 
+// tappableOptions builds the slash option list for /tappable. Unlike /quest,
+// the reward kind is one required choice and the pokemon / item / amount
+// options qualify it; the mapper rejects a qualifier that doesn't apply to
+// the chosen kind. Omitting pokemon (candy / xl candy / mega energy) or
+// item tracks any reward of that kind. There is no edit or summary option:
+// tappables support neither.
+func tappableOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
+	rewardName, rewardNameLoc := optName(bundle, "tappable.reward", "reward")
+	rewardDesc, rewardDescLoc := optDesc(bundle, "tappable.reward", "Reward kind")
+	choice := func(value, canon string) *discordgo.ApplicationCommandOptionChoice {
+		name, loc := choiceName(bundle, "tappable.reward."+value, canon)
+		return &discordgo.ApplicationCommandOptionChoice{Name: name, NameLocalizations: loc, Value: value}
+	}
+	opts := []*discordgo.ApplicationCommandOption{
+		{
+			Type:                     discordgo.ApplicationCommandOptionString,
+			Name:                     rewardName,
+			NameLocalizations:        rewardNameLoc,
+			Description:              rewardDesc,
+			DescriptionLocalizations: rewardDescLoc,
+			Required:                 true,
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				choice("candy", "Candy"),
+				choice("xl_candy", "XL candy"),
+				choice("mega_energy", "Mega energy"),
+				choice("item", "Item"),
+				choice("stardust", "Stardust"),
+				choice("pokecoins", "Pokecoins"),
+				choice("everything", "Everything"),
+			},
+		},
+		stringOpt(bundle, "tappable.pokemon", "pokemon", "Candy / XL candy / mega energy pokemon (default any)", false, true),
+		stringOpt(bundle, "tappable.item", "item", "Item reward (default any item)", false, true),
+		intOpt(bundle, "tappable.amount", "amount", "Minimum reward amount", false),
+		distanceOpt(bundle, "tappable"),
+		cleanOpt(bundle, "tappable", "Auto-delete the alert when the tappable disappears"),
+		templateOpt(bundle, "tappable"),
+	}
+	return append(opts, trackerLocationAreaOpts(bundle)...)
+}
+
 // invasionOptions builds the slash option list for /invasion. grunt_type is
 // required and autocomplete-served by autocomplete.Grunt (typed grunts +
 // bosses + pokestop events). gender is an optional fixed-choice filter
@@ -931,7 +974,7 @@ func allCommandKeys() []string {
 		"cmd.version",
 		"cmd.tracked", "cmd.help", "cmd.info", "cmd.language",
 		"cmd.start", "cmd.stop",
-		"cmd.track", "cmd.raid", "cmd.egg", "cmd.quest", "cmd.invasion",
+		"cmd.track", "cmd.raid", "cmd.egg", "cmd.quest", "cmd.tappable", "cmd.invasion",
 		"cmd.incident",
 		"cmd.lure", "cmd.nest", "cmd.maxbattle", "cmd.gym", "cmd.fort",
 		"cmd.untrack",

@@ -158,6 +158,18 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 		}
 		return prependRemoveAll(tr, out), nil
 
+	case "tappable":
+		rows, err := deps.Tracking.Tappables.SelectByIDProfile(userID, profileNo)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]autocomplete.Choice, 0, len(rows))
+		for i := range rows {
+			desc := deps.RowText.TappableRowText(tr, toTappableTracking(&rows[i]))
+			out = append(out, buildChoice(desc, rows[i].UID))
+		}
+		return prependRemoveAll(tr, out), nil
+
 	default:
 		return nil, nil
 	}
@@ -388,5 +400,21 @@ func toMaxbattleTracking(api *db.MaxbattleTrackingAPI) *db.MaxbattleTracking {
 		Gmax:      api.Gmax,
 		Evolution: api.Evolution,
 		StationID: api.StationID,
+	}
+}
+
+func toTappableTracking(api *db.TappableTrackingAPI) *db.TappableTracking {
+	return &db.TappableTracking{
+		ID:                    api.ID,
+		ProfileNo:             api.ProfileNo,
+		Ping:                  api.Ping,
+		Clean:                 api.Clean,
+		Distance:              api.Distance,
+		Template:              api.Template,
+		RewardType:            api.RewardType,
+		Reward:                api.Reward,
+		Amount:                api.Amount,
+		OverrideLocationLabel: api.OverrideLocationLabel,
+		OverrideAreas:         api.OverrideAreas,
 	}
 }

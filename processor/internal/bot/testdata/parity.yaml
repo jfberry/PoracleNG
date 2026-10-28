@@ -484,6 +484,110 @@
   expected_tokens: [charizard, level6, gmax, d1000, clean, "template:short"]
 
 # -----------------------------------------------------------------------------
+# /tappable — one required reward kind, qualified by pokemon / item / amount
+# -----------------------------------------------------------------------------
+- name: tappable-candy-any
+  description: /tappable candy with no pokemon tracks candy of any pokemon
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: candy
+  text: "!tappable candy"
+  expected_tokens: [candy]
+
+- name: tappable-candy-pokemon
+  description: /tappable candy for one pokemon
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: candy
+      pokemon: zubat
+  text: "!tappable candy:zubat"
+  expected_tokens: ["candy:zubat"]
+
+- name: tappable-xl-candy
+  description: /tappable XL candy for one pokemon
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: xl_candy
+      pokemon: pikachu
+  text: "!tappable xlcandy:pikachu"
+  expected_tokens: ["xlcandy:pikachu"]
+
+- name: tappable-mega-energy-amount
+  description: /tappable mega energy with a minimum amount
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: mega_energy
+      pokemon: charizard
+      amount: 20
+  text: "!tappable energy:charizard amount:20"
+  expected_tokens: ["energy:charizard", "amount:20"]
+
+- name: tappable-item-named
+  description: /tappable item reward (bare name — matchItemName resolves it)
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: item
+      item: "rare candy"
+  text: "!tappable rare candy"
+  expected_tokens: ["rare candy"]
+
+- name: tappable-item-any
+  description: /tappable item with no item named tracks any item
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: item
+  text: "!tappable all_items"
+  expected_tokens: ["all items"]
+
+- name: tappable-stardust-min
+  description: /tappable stardust amount lands in the stardust:N token (minimum kept in reward)
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: stardust
+      amount: 500
+  text: "!tappable stardust:500"
+  expected_tokens: ["stardust:500"]
+
+- name: tappable-pokecoins
+  description: /tappable pokecoins with no minimum
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: pokecoins
+  text: "!tappable pokecoins"
+  expected_tokens: [pokecoins]
+
+- name: tappable-everything-all-extras
+  description: /tappable everything + distance + clean + template + location + areas (covers tail options)
+  command: cmd.tappable
+  slash:
+    name: tappable
+    options:
+      reward: everything
+      distance: 500
+      clean: true
+      template: box
+      location: Home
+      areas: "berlin,munich"
+  text: "!tappable everything d500 clean template:box location:Home area:berlin,munich"
+  expected_tokens: [everything, d500, clean, "template:box", "location:Home", "area:berlin,munich"]
+
+# -----------------------------------------------------------------------------
 # /gym — no required options; everything optional
 # -----------------------------------------------------------------------------
 - name: gym-team-instinct
@@ -654,6 +758,15 @@
       maxbattle.tracking: "51"
   text: "!maxbattle remove id:51"
   expected_tokens: ["remove", "id:51"]
+
+- name: untrack-tappable
+  command: cmd.tappable
+  slash:
+    name: untrack
+    options:
+      tappable.tracking: "52"
+  text: "!tappable remove id:52"
+  expected_tokens: ["remove", "id:52"]
 
 # -----------------------------------------------------------------------------
 # /area — sub-commands add/remove (with area option), show (bare)
