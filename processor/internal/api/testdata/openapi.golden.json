@@ -2820,7 +2820,8 @@
               "nest",
               "gym",
               "fort",
-              "maxbattle"
+              "maxbattle",
+              "tappable"
             ],
             "type": "string"
           },
@@ -9377,6 +9378,432 @@
         ],
         "type": "object"
       },
+      "V2CreateOutputV2TappableRuleBody": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clean": {
+                  "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                  "type": "string"
+                },
+                "distance": {
+                  "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "edit": {
+                  "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "override_areas": {
+                  "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "override_location_label": {
+                  "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reward": {
+                  "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reward_type": {
+                  "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "template": {
+                  "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "uid": {
+                  "description": "Tracking rule uid",
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reward_type",
+                "uid"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "dry_run": {
+            "description": "True when the request was a dry run: nothing was written",
+            "type": "boolean"
+          },
+          "unchanged": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clean": {
+                  "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                  "type": "string"
+                },
+                "distance": {
+                  "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "edit": {
+                  "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "override_areas": {
+                  "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "override_location_label": {
+                  "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reward": {
+                  "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reward_type": {
+                  "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "template": {
+                  "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "uid": {
+                  "description": "Tracking rule uid",
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reward_type",
+                "uid"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updated": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clean": {
+                  "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                  "type": "string"
+                },
+                "distance": {
+                  "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "edit": {
+                  "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "override_areas": {
+                  "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "override_location_label": {
+                  "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "previous": {
+                  "additionalProperties": false,
+                  "description": "The stored rule this one replaced",
+                  "properties": {
+                    "amount": {
+                      "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                      "format": "int64",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "clean": {
+                      "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "description": {
+                      "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                      "type": "string"
+                    },
+                    "distance": {
+                      "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                      "format": "int64",
+                      "maximum": 40000000,
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "edit": {
+                      "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "override_areas": {
+                      "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    },
+                    "override_location_label": {
+                      "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ping": {
+                      "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                      "maxLength": 255,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reward": {
+                      "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                      "format": "int64",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "reward_type": {
+                      "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                      "format": "int64",
+                      "type": "integer"
+                    },
+                    "template": {
+                      "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "uid": {
+                      "description": "Tracking rule uid",
+                      "format": "int64",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "reward_type",
+                    "uid"
+                  ],
+                  "type": "object"
+                },
+                "reward": {
+                  "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reward_type": {
+                  "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "template": {
+                  "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "uid": {
+                  "description": "Tracking rule uid",
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reward_type",
+                "uid"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "created",
+          "updated",
+          "unchanged"
+        ],
+        "type": "object"
+      },
       "V2DefaultLocation": {
         "additionalProperties": false,
         "properties": {
@@ -11125,6 +11552,123 @@
                 }
               },
               "required": [
+                "uid"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "dry_run": {
+            "description": "True when the request was a dry run: nothing was written",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "V2DeleteOutputV2TappableRuleBody": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clean": {
+                  "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                  "type": "string"
+                },
+                "distance": {
+                  "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "edit": {
+                  "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "override_areas": {
+                  "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "override_location_label": {
+                  "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reward": {
+                  "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reward_type": {
+                  "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "template": {
+                  "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "uid": {
+                  "description": "Tracking rule uid",
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reward_type",
                 "uid"
               ],
               "type": "object"
@@ -13574,6 +14118,119 @@
         ],
         "type": "object"
       },
+      "V2ListOutputV2TappableRuleBody": {
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clean": {
+                  "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                  "type": "string"
+                },
+                "distance": {
+                  "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "edit": {
+                  "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "override_areas": {
+                  "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "override_location_label": {
+                  "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reward": {
+                  "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reward_type": {
+                  "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "template": {
+                  "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "uid": {
+                  "description": "Tracking rule uid",
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reward_type",
+                "uid"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "type": "object"
+      },
       "V2LocationBody": {
         "additionalProperties": false,
         "properties": {
@@ -13910,7 +14567,8 @@
               "nest",
               "gym",
               "fort",
-              "maxbattle"
+              "maxbattle",
+              "tappable"
             ],
             "type": [
               "string",
@@ -19129,6 +19787,340 @@
         ],
         "type": "object"
       },
+      "V2PatchOutputV2TappableRuleBody": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "description": "True when the request was a dry run: nothing was written",
+            "type": "boolean"
+          },
+          "refused": {
+            "description": "Rules left alone, with the reason",
+            "items": {
+              "$ref": "#/components/schemas/V2PatchRefusal"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "unchanged": {
+            "description": "Rules that already had the requested settings",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clean": {
+                  "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                  "type": "string"
+                },
+                "distance": {
+                  "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "edit": {
+                  "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "override_areas": {
+                  "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "override_location_label": {
+                  "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reward": {
+                  "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reward_type": {
+                  "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "template": {
+                  "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "uid": {
+                  "description": "Tracking rule uid",
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reward_type",
+                "uid"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updated": {
+            "description": "Rules changed, with the stored rule each replaced as previous",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clean": {
+                  "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                  "type": "string"
+                },
+                "distance": {
+                  "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "maximum": 40000000,
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "edit": {
+                  "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "override_areas": {
+                  "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "override_location_label": {
+                  "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ping": {
+                  "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                  "maxLength": 255,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "previous": {
+                  "additionalProperties": false,
+                  "description": "The stored rule this one replaced",
+                  "properties": {
+                    "amount": {
+                      "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+                      "format": "int64",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "clean": {
+                      "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "description": {
+                      "description": "Human-readable rule description (present only with ?include_descriptions=true)",
+                      "type": "string"
+                    },
+                    "distance": {
+                      "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+                      "format": "int64",
+                      "maximum": 40000000,
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "edit": {
+                      "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "override_areas": {
+                      "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    },
+                    "override_location_label": {
+                      "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ping": {
+                      "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+                      "maxLength": 255,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reward": {
+                      "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                      "format": "int64",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "reward_type": {
+                      "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                      "format": "int64",
+                      "type": "integer"
+                    },
+                    "template": {
+                      "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "uid": {
+                      "description": "Tracking rule uid",
+                      "format": "int64",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "reward_type",
+                    "uid"
+                  ],
+                  "type": "object"
+                },
+                "reward": {
+                  "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reward_type": {
+                  "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "template": {
+                  "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "uid": {
+                  "description": "Tracking rule uid",
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reward_type",
+                "uid"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "updated",
+          "unchanged",
+          "refused"
+        ],
+        "type": "object"
+      },
       "V2PatchRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -19950,7 +20942,7 @@
                 "null"
               ]
             },
-            "description": "Rules whose only override area was this name, keyed by tracking type (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle). Their override is cleared, so they now match across all of the human's areas instead of one. Empty when no rule was affected.",
+            "description": "Rules whose only override area was this name, keyed by tracking type (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle, tappable). Their override is cleared, so they now match across all of the human's areas instead of one. Empty when no rule was affected.",
             "type": "object"
           },
           "dry_run": {
@@ -20198,6 +21190,94 @@
         },
         "required": [
           "profile_no"
+        ],
+        "type": "object"
+      },
+      "V2TappableRule": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "description": "Minimum reward count for reward_type 2/4/9/12. Not accepted for 3/8, whose minimum is reward. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "clean": {
+            "description": "Auto-delete the alert when the tappable disappears (clean bitmask bit 1). Omit to disable (default false). Returned as null when false.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "distance": {
+            "description": "Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it. Returned as null when at its wildcard.",
+            "format": "int64",
+            "maximum": 40000000,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "edit": {
+            "description": "Not supported for tappable tracking — omit, or send null/false (true is rejected with 422). Always returned as null.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "override_areas": {
+            "description": "Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "override_location_label": {
+            "description": "Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ping": {
+            "description": "Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty.",
+            "maxLength": 255,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reward": {
+            "description": "Reward selector; meaning depends on reward_type: item id (2), minimum stardust amount (3), minimum pokecoin amount (8), pokemon id (4/9/12). Omit (or send 0) to match ANY reward of that category (stored as 0 = any). Returned as null when at its wildcard.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reward_type": {
+            "description": "Reward category (quest reward ids; no wildcard); one of 2 (item) | 3 (stardust) | 4 (candy) | 8 (pokecoins) | 9 (xl_candy) | 12 (mega_energy) (required).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "template": {
+            "description": "DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "reward_type"
         ],
         "type": "object"
       },
@@ -24430,7 +25510,8 @@
                 "nest",
                 "gym",
                 "fort",
-                "maxbattle"
+                "maxbattle",
+                "tappable"
               ],
               "type": "string"
             }
@@ -33152,6 +34233,731 @@
           }
         ],
         "summary": "Full-replace one raid tracking rule",
+        "tags": [
+          "v2-tracking"
+        ]
+      }
+    },
+    "/v2/humans/{id}/tracking/tappable": {
+      "delete": {
+        "description": "Deletes the comma-separated ?uid=1,2,3 rules (scoped to this human). Returns {deleted:[...]}.",
+        "operationId": "v2-bulk-delete-tappable",
+        "parameters": [
+          {
+            "description": "Human id (the owning user); ownership scope",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user); ownership scope",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Profile number; defaults to the human's active profile",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number; defaults to the human's active profile",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated rule uids to delete (e.g. 1,2,3). Send this or a body uids list, not both.",
+            "explode": false,
+            "in": "query",
+            "name": "uid",
+            "schema": {
+              "description": "Comma-separated rule uids to delete (e.g. 1,2,3). Send this or a body uids list, not both.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Add a human-readable description to each deleted rule",
+            "explode": false,
+            "in": "query",
+            "name": "include_descriptions",
+            "schema": {
+              "description": "Add a human-readable description to each deleted rule",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Apply without sending the confirmation push",
+            "explode": false,
+            "in": "query",
+            "name": "silent",
+            "schema": {
+              "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Validate and report what would be deleted without deleting: same ownership checks and response, with dry_run:true. Nothing is stored, reloaded or pushed.",
+            "explode": false,
+            "in": "query",
+            "name": "dry_run",
+            "schema": {
+              "description": "Validate and report what would be deleted without deleting: same ownership checks and response, with dry_run:true. Nothing is stored, reloaded or pushed.",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2BulkDeleteBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2DeleteOutputV2TappableRuleBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Bulk-delete tappable tracking rules",
+        "tags": [
+          "v2-tracking"
+        ]
+      },
+      "get": {
+        "description": "Returns {rules:[...]} for the human's selected profile. With ?include_descriptions=true each rule gains a human-readable description.",
+        "operationId": "v2-list-tappable",
+        "parameters": [
+          {
+            "description": "Human id (the owning user); ownership scope for every rule",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user); ownership scope for every rule",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Profile number; defaults to the human's active profile",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number; defaults to the human's active profile",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Add a human-readable description to each rule in the response",
+            "explode": false,
+            "in": "query",
+            "name": "include_descriptions",
+            "schema": {
+              "description": "Add a human-readable description to each rule in the response",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Apply without sending the confirmation push (mutations only)",
+            "explode": false,
+            "in": "query",
+            "name": "silent",
+            "schema": {
+              "description": "Apply without sending the confirmation push (mutations only)",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ListOutputV2TappableRuleBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "List tappable tracking rules",
+        "tags": [
+          "v2-tracking"
+        ]
+      },
+      "patch": {
+        "description": "Sets distance/clean/edit/summary/template/ping on each listed rule, keeping its uid and every other field. Each rule takes the PUT path (translate, validate, squash check) and gets its own outcome: {updated (with previous), unchanged, refused (invalid|conflict|not_found)}; there is no all-or-nothing. Rules are processed in uids order, a repeated uid once; when two listed rules would collide, the first wins. A setting this type does not support, or an empty set, is a 422 for the whole request.",
+        "operationId": "v2-patch-tappable",
+        "parameters": [
+          {
+            "description": "Human id (the owning user); ownership scope for every rule",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user); ownership scope for every rule",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Profile number; defaults to the human's active profile",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number; defaults to the human's active profile",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Add a human-readable description to each rule in the response",
+            "explode": false,
+            "in": "query",
+            "name": "include_descriptions",
+            "schema": {
+              "description": "Add a human-readable description to each rule in the response",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Apply without sending the confirmation push",
+            "explode": false,
+            "in": "query",
+            "name": "silent",
+            "schema": {
+              "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Validate and classify without writing: the same per-rule outcomes, with dry_run:true. Nothing is stored, reloaded or pushed.",
+            "explode": false,
+            "in": "query",
+            "name": "dry_run",
+            "schema": {
+              "description": "Validate and classify without writing: the same per-rule outcomes, with dry_run:true. Nothing is stored, reloaded or pushed.",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2PatchBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2PatchOutputV2TappableRuleBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Bulk-set delivery settings on tappable tracking rules",
+        "tags": [
+          "v2-tracking"
+        ]
+      },
+      "post": {
+        "description": "Body is an array of strict rule objects. Returns {created,updated,unchanged} (POST keeps the diff/upsert behaviour). With ?include_descriptions=true each rule gains a description. ?silent=true suppresses the confirmation push.",
+        "operationId": "v2-create-tappable",
+        "parameters": [
+          {
+            "description": "Human id (the owning user); ownership scope for every rule",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user); ownership scope for every rule",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Profile number; defaults to the human's active profile",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number; defaults to the human's active profile",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Add a human-readable description to each rule in the response",
+            "explode": false,
+            "in": "query",
+            "name": "include_descriptions",
+            "schema": {
+              "description": "Add a human-readable description to each rule in the response",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Apply without sending the confirmation push",
+            "explode": false,
+            "in": "query",
+            "name": "silent",
+            "schema": {
+              "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Validate and classify without writing: returns what would be created/updated/unchanged (created rules have uid 0, updated rules carry previous), with dry_run:true. Nothing is stored, reloaded or pushed. The preview is advisory; a later commit reports what it actually did.",
+            "explode": false,
+            "in": "query",
+            "name": "dry_run",
+            "schema": {
+              "description": "Validate and classify without writing: returns what would be created/updated/unchanged (created rules have uid 0, updated rules carry previous), with dry_run:true. Nothing is stored, reloaded or pushed. The preview is advisory; a later commit reports what it actually did.",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/V2TappableRule"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2CreateOutputV2TappableRuleBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Create tappable tracking rule(s)",
+        "tags": [
+          "v2-tracking"
+        ]
+      }
+    },
+    "/v2/humans/{id}/tracking/tappable/{uid}": {
+      "delete": {
+        "description": "Scoped by (human, uid). Returns {deleted:[...]}. 404 if the uid is not owned by this human.",
+        "operationId": "v2-delete-tappable",
+        "parameters": [
+          {
+            "description": "Human id (the owning user); ownership scope",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user); ownership scope",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Tracking rule uid (scoped to this human)",
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "description": "Tracking rule uid (scoped to this human)",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Profile number; defaults to the human's active profile",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number; defaults to the human's active profile",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Add a human-readable description to the rule in the response",
+            "explode": false,
+            "in": "query",
+            "name": "include_descriptions",
+            "schema": {
+              "description": "Add a human-readable description to the rule in the response",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Apply without sending the confirmation push",
+            "explode": false,
+            "in": "query",
+            "name": "silent",
+            "schema": {
+              "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Validate and report what would be deleted without deleting: same ownership checks and response, with dry_run:true. Nothing is stored, reloaded or pushed.",
+            "explode": false,
+            "in": "query",
+            "name": "dry_run",
+            "schema": {
+              "description": "Validate and report what would be deleted without deleting: same ownership checks and response, with dry_run:true. Nothing is stored, reloaded or pushed.",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2DeleteOutputV2TappableRuleBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Delete one tappable tracking rule",
+        "tags": [
+          "v2-tracking"
+        ]
+      },
+      "get": {
+        "description": "Scoped by (human, uid). 404 if the uid is not owned by this human.",
+        "operationId": "v2-get-tappable",
+        "parameters": [
+          {
+            "description": "Human id (the owning user); ownership scope",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user); ownership scope",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Tracking rule uid (scoped to this human)",
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "description": "Tracking rule uid (scoped to this human)",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Profile number; defaults to the human's active profile",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number; defaults to the human's active profile",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Add a human-readable description to the rule in the response",
+            "explode": false,
+            "in": "query",
+            "name": "include_descriptions",
+            "schema": {
+              "description": "Add a human-readable description to the rule in the response",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Apply without sending the confirmation push (mutations only)",
+            "explode": false,
+            "in": "query",
+            "name": "silent",
+            "schema": {
+              "description": "Apply without sending the confirmation push (mutations only)",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ListOutputV2TappableRuleBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Fetch one tappable tracking rule",
+        "tags": [
+          "v2-tracking"
+        ]
+      },
+      "put": {
+        "description": "Full replace: the body fully specifies the rule; omitted filters reset to documented defaults. The rule keeps its uid (returned in {updated}). A body that matches the stored rule (e.g. GET -> PUT) is returned in {unchanged} and nothing is written, reloaded or pushed. Scoped by (human, uid); 404 if the uid is not owned by this human.",
+        "operationId": "v2-put-tappable",
+        "parameters": [
+          {
+            "description": "Human id (the owning user); ownership scope",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user); ownership scope",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Tracking rule uid (scoped to this human)",
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "description": "Tracking rule uid (scoped to this human)",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Profile number; defaults to the human's active profile",
+            "explode": false,
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "default": -1,
+              "description": "Profile number; defaults to the human's active profile",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Add a human-readable description to the rule in the response",
+            "explode": false,
+            "in": "query",
+            "name": "include_descriptions",
+            "schema": {
+              "description": "Add a human-readable description to the rule in the response",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Apply without sending the confirmation push",
+            "explode": false,
+            "in": "query",
+            "name": "silent",
+            "schema": {
+              "description": "Apply without sending the confirmation push",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+            "explode": false,
+            "in": "query",
+            "name": "trusted",
+            "schema": {
+              "description": "Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply.",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Validate without writing: same 404/409/422 checks and response as a real PUT, with dry_run:true. Nothing is stored, reloaded or pushed.",
+            "explode": false,
+            "in": "query",
+            "name": "dry_run",
+            "schema": {
+              "description": "Validate without writing: same 404/409/422 checks and response as a real PUT, with dry_run:true. Nothing is stored, reloaded or pushed.",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2TappableRule"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2CreateOutputV2TappableRuleBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Full-replace one tappable tracking rule",
         "tags": [
           "v2-tracking"
         ]

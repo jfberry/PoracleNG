@@ -55,6 +55,10 @@ const (
 	wcQuestReward = 0
 	wcQuestAmount = 0
 
+	// Tappable (quest-style reward columns).
+	wcTappableReward = 0
+	wcTappableAmount = 0
+
 	// Nest.
 	wcNestMinSpawnAvg = 0
 

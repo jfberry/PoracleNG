@@ -44,6 +44,7 @@ func v2RoundTripCases() []v2RoundTripCase {
 		{"gym", wrapV2API(newV2GymTestAPI), `{"team":"any"}`, v2GymRule{}},
 		{"fort", wrapV2API(newV2FortTestAPI), `{}`, v2FortRule{}},
 		{"maxbattle", wrapV2API(newV2MaxbattleTestAPI), `{}`, v2MaxbattleRule{}},
+		{"tappable", wrapV2API(newV2TappableTestAPI), `{"reward_type":4}`, v2TappableRule{}},
 	}
 }
 
@@ -66,7 +67,7 @@ func nullableJSONNames(t *testing.T, req any) []string {
 	return names
 }
 
-// TestV2_EveryNullableFieldRoundTripsNull proves, for all 11 tracking types,
+// TestV2_EveryNullableFieldRoundTripsNull proves, for all 12 tracking types,
 // that a rule written with only its required fields reads back with every
 // nullable field as null, and that the read body is a fixed point of both PUT
 // and POST (unchanged, rule byte-identical). A field failing here has a stored

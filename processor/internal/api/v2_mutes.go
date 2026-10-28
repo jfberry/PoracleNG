@@ -37,7 +37,7 @@ const (
 type v2MuteItem struct {
 	Scope         string  `json:"scope" enum:"gym,pokemon,area,pokestop,station,tracking,everything" doc:"What the mute suppresses: a specific gym/pokestop/station (by id), a pokemon species (by dex id), a geofence area (by name), one tracking rule (by uid), or everything."`
 	Value         *string `json:"value" doc:"Scope-specific identifier (gym/pokestop/station id, dex id or rule uid as a numeric string, canonical area name). Null for scope=everything."`
-	TrackingType  *string `json:"tracking_type" enum:"pokemon,raid,egg,quest,invasion,incident,lure,nest,gym,fort,maxbattle" doc:"For scope=tracking: the rule table the uid belongs to (rule uids are per table; incident rules live in the invasion table and report as invasion). Null for every other scope."`
+	TrackingType  *string `json:"tracking_type" enum:"pokemon,raid,egg,quest,invasion,incident,lure,nest,gym,fort,maxbattle,tappable" doc:"For scope=tracking: the rule table the uid belongs to (rule uids are per table; incident rules live in the invasion table and report as invasion). Null for every other scope."`
 	ExpiresAt     int64   `json:"expires_at" doc:"Unix seconds when the mute lapses."`
 	RemainingSecs int64   `json:"remaining_secs" doc:"Seconds until expiry at response time (UI convenience, derived from expires_at)."`
 }
@@ -55,7 +55,7 @@ type v2CreateMuteInput struct {
 	Body struct {
 		Scope        string  `json:"scope" enum:"gym,pokemon,area,pokestop,station,tracking,everything" doc:"Mute scope. value is required for every scope except 'everything', where it must be absent."`
 		Value        string  `json:"value,omitempty" required:"false" doc:"Scope identifier: gym/pokestop/station id, pokemon dex id or tracking-rule uid (numeric string), or area name (matched case-insensitively against loaded geofences)."`
-		TrackingType *string `json:"tracking_type,omitempty" required:"false" enum:"pokemon,raid,egg,quest,invasion,incident,lure,nest,gym,fort,maxbattle" doc:"Required for scope=tracking (rule uids are per table), forbidden for other scopes. The uid must be one of the human's rules in that table (any profile). incident is stored as invasion."`
+		TrackingType *string `json:"tracking_type,omitempty" required:"false" enum:"pokemon,raid,egg,quest,invasion,incident,lure,nest,gym,fort,maxbattle,tappable" doc:"Required for scope=tracking (rule uids are per table), forbidden for other scopes. The uid must be one of the human's rules in that table (any profile). incident is stored as invasion."`
 		DurationMin  int     `json:"duration_min,omitempty" required:"false" minimum:"1" maximum:"10080" doc:"Mute length in minutes. Defaults to 60; maximum one week (10080)."`
 	}
 }
@@ -74,7 +74,7 @@ type v2DeleteMutesInput struct {
 	ID           string `path:"id" doc:"Human id (the owning user)"`
 	Scope        string `query:"scope" enum:"gym,pokemon,area,pokestop,station,tracking,everything" required:"false" doc:"Scope of the mute to remove. Omit (together with value) to remove all mutes."`
 	Value        string `query:"value" required:"false" doc:"Value of the mute to remove, as returned by the list endpoint. Required with scope, except scope=everything which takes none."`
-	TrackingType string `query:"tracking_type" enum:"pokemon,raid,egg,quest,invasion,incident,lure,nest,gym,fort,maxbattle" required:"false" doc:"Required with scope=tracking (identifies which table's rule uid), forbidden otherwise."`
+	TrackingType string `query:"tracking_type" enum:"pokemon,raid,egg,quest,invasion,incident,lure,nest,gym,fort,maxbattle,tappable" required:"false" doc:"Required with scope=tracking (identifies which table's rule uid), forbidden otherwise."`
 }
 
 // v2DeletedMutesOutput mirrors v2 tracking's delete shape: {deleted:[…]}.

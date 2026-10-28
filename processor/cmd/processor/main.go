@@ -450,6 +450,7 @@ func main() {
 	api.RegisterV2TrackingNest(humaAPI, trackingDeps)
 	api.RegisterV2TrackingLure(humaAPI, trackingDeps)
 	api.RegisterV2TrackingMaxbattle(humaAPI, trackingDeps)
+	api.RegisterV2TrackingTappable(humaAPI, trackingDeps)
 	api.RegisterV2TrackingGym(humaAPI, trackingDeps)
 	api.RegisterV2TrackingFort(humaAPI, trackingDeps)
 	api.RegisterV2TrackingRaid(humaAPI, trackingDeps)

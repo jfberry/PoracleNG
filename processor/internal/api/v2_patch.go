@@ -79,6 +79,7 @@ type v2PatchOutput[Req any] struct {
 // step with the Translate functions.
 var v2EditUnsupported = map[string]bool{
 	"gym": true, "invasion": true, "maxbattle": true, "nest": true, "quest": true,
+	"tappable": true,
 }
 
 // v2SummaryTypes lists the types with a summary digest. Every rule struct has

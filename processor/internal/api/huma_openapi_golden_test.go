@@ -127,6 +127,7 @@ func registerAllHumaOpsForTest(humaAPI huma.API) {
 	RegisterV2TrackingNest(humaAPI, trackingDeps)
 	RegisterV2TrackingLure(humaAPI, trackingDeps)
 	RegisterV2TrackingMaxbattle(humaAPI, trackingDeps)
+	RegisterV2TrackingTappable(humaAPI, trackingDeps)
 	RegisterV2TrackingGym(humaAPI, trackingDeps)
 	RegisterV2TrackingFort(humaAPI, trackingDeps)
 	RegisterV2TrackingRaid(humaAPI, trackingDeps)
