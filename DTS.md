@@ -175,6 +175,40 @@ Use this for conditional buttons that only make sense on certain alerts — PVP 
 
 `GET /api/dts/actions` returns each action's `name`, accepted `scopes`, whether `required_scope` is true, and the `params` keys the handler knows about. The PoracleWeb editor uses this to drive its button-authoring UI. See [`docs/CONFIG-EDITOR-INSTRUCTIONS.md`](docs/CONFIG-EDITOR-INSTRUCTIONS.md) for the editor-side spec.
 
+## Telegram Message Fields
+
+A Telegram template renders to a JSON object that the processor sends as a sequence of Telegram messages:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | string | Text message body (max 4096 characters, truncated) |
+| `parse_mode` | string | `Markdown` (default), `MarkdownV2` or `HTML` — applies to `content` and the photo caption |
+| `webpage_preview` | bool | Show link previews in the text message |
+| `sticker` | string | Sticker URL |
+| `photo` | string or object | Photo URL, or `{"url": "...", "caption": "..."}` to send the photo with a caption |
+| `location` | bool | Send a map pin at the alert's coordinates |
+| `venue` | object | `{"title": "...", "address": "..."}` — send a venue at the alert's coordinates |
+| `send_order` | array | Order of steps; default `["sticker", "photo", "text", "location", "venue"]`. Steps not listed are not sent |
+
+### Photo captions
+
+Give `photo` as an object to attach a caption, which uses the template's `parse_mode`. Telegram limits captions to 1024 characters; longer captions are truncated. A caption is independent of `content` — leave `text` out of `send_order` (or `content` empty) for a single photo-with-caption message:
+
+```json
+{
+  "photo": {
+    "url": "{{{staticMap}}}",
+    "caption": "<b>{{fullName}}</b> {{iv}}% — until {{time}}"
+  },
+  "parse_mode": "HTML",
+  "send_order": ["sticker", "photo"]
+}
+```
+
+**Notifications**: only one message per alert notifies. A captioned photo notifies unless a text message is also sent (that text is then the notifying message). Stickers, uncaptioned photos and locations are always silent.
+
+**Edits**: when an alert is edited (edit mode), a captioned photo's caption is updated in place alongside any text message. The photo itself is not replaced.
+
 ## Poracle Fields vs Raw Webhook Fields
 
 Templates have access to both **Poracle enriched fields** and **raw webhook fields** from Golbat. The enriched fields are recommended because they are:
@@ -1211,27 +1245,7 @@ Each `activePokemons` entry:
 Raw webhook fields (`change_type`, `edit_types`) are also available.
 
 **Not yet implemented:** `tth`, `disappearTime`, `resetDate`, `resetTime` timing fields are not set for fort updates.
----
 
-### Telegram photo captions
-
-Telegram templates can set `"caption": true` to send the template's `content` as the photo caption. If `caption` is omitted or `false`, no caption is sent with the photo. The caption uses the template's `parse_mode`. `disable_notification` controls whether the photo notification is silent; it defaults to `true` when omitted, preserving the existing behavior.
-
-```json
-{
-  "type": "monster",
-  "platform": "telegram",
-  "id": "1",
-  "template": {
-    "photo": "{{{staticMap}}}",
-    "content": "{{fullName}}",
-    "caption": true,
-    "parse_mode": "HTML",
-    "disable_notification": false,
-    "send_order": ["photo"]
-  }
-}
-```
 ---
 
 ## Handlebars Helpers

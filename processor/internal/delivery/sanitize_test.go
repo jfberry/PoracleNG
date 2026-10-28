@@ -220,7 +220,7 @@ func TestSanitizeTelegramMessage_FullPath(t *testing.T) {
 	msg := &telegramMessage{
 		Content: "Hello [click]() see null below",
 		Sticker: "  ",
-		Photo:   "null",
+		Photo:   telegramPhoto{URL: "null", Caption: "Caught [here]() null"},
 	}
 	sanitizeTelegramMessage(msg)
 	if strings.Contains(msg.Content, "null") {
@@ -232,7 +232,10 @@ func TestSanitizeTelegramMessage_FullPath(t *testing.T) {
 	if msg.Sticker != "" {
 		t.Errorf("Sticker should be empty, got %q", msg.Sticker)
 	}
-	if msg.Photo != "" {
-		t.Errorf("Photo should be empty, got %q", msg.Photo)
+	if msg.Photo.URL != "" {
+		t.Errorf("Photo should be empty, got %q", msg.Photo.URL)
+	}
+	if strings.TrimSpace(msg.Photo.Caption) != "Caught" {
+		t.Errorf("Caption should be sanitized, got %q", msg.Photo.Caption)
 	}
 }
