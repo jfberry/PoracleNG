@@ -108,6 +108,7 @@ func Load(manager *Manager, database *sqlx.DB, scheduleStore store.SummarySchedu
 		Nests:            data.Nests,
 		Forts:            data.Forts,
 		Maxbattles:       data.Maxbattles,
+		Tappables:        data.Tappables,
 		Geofence:         spatial,
 		Fences:           fences,
 		SummarySchedules: schedules,
@@ -117,10 +118,10 @@ func Load(manager *Manager, database *sqlx.DB, scheduleStore store.SummarySchedu
 	recordStateMetrics(s)
 	metrics.StateLastReloadSuccess.SetToCurrentTime()
 
-	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences, %d summary schedules",
+	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d tappables, %d fences, %d summary schedules",
 		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),
 		len(data.Invasions), len(data.Quests), len(data.Lures),
-		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(fences), countSummaryScheduleEntries(schedules))
+		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(data.Tappables), len(fences), countSummaryScheduleEntries(schedules))
 	log.Infof("State buckets: %s", summarizeMonsterBuckets(data.Monsters))
 
 	return nil
@@ -183,6 +184,7 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, scheduleStore store.
 		Nests:            data.Nests,
 		Forts:            data.Forts,
 		Maxbattles:       data.Maxbattles,
+		Tappables:        data.Tappables,
 		Geofence:         spatial,
 		Fences:           fences,
 		SummarySchedules: schedules,
@@ -192,10 +194,10 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, scheduleStore store.
 	recordStateMetrics(s)
 	metrics.StateLastReloadSuccess.SetToCurrentTime()
 
-	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences, %d summary schedules",
+	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d tappables, %d fences, %d summary schedules",
 		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),
 		len(data.Invasions), len(data.Quests), len(data.Lures),
-		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(fences), countSummaryScheduleEntries(schedules))
+		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(data.Tappables), len(fences), countSummaryScheduleEntries(schedules))
 	log.Infof("State buckets: %s", summarizeMonsterBuckets(data.Monsters))
 
 	return nil
@@ -222,5 +224,6 @@ func recordStateMetrics(s *State) {
 	metrics.StateTrackingRules.WithLabelValues(metrics.TypeNest).Set(float64(len(s.Nests)))
 	metrics.StateTrackingRules.WithLabelValues("fort").Set(float64(len(s.Forts)))
 	metrics.StateTrackingRules.WithLabelValues(metrics.TypeMaxbattle).Set(float64(len(s.Maxbattles)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeTappable).Set(float64(len(s.Tappables)))
 	metrics.StateGeofences.Set(float64(len(s.Fences)))
 }

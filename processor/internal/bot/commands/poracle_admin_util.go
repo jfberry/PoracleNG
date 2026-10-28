@@ -57,5 +57,6 @@ func countTrackingRules(s *state.State) int {
 	total += len(s.Nests)
 	total += len(s.Forts)
 	total += len(s.Maxbattles)
+	total += len(s.Tappables)
 	return total
 }

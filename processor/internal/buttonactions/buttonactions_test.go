@@ -246,6 +246,7 @@ func recordingTrackingStores(hits *[]string) *store.TrackingStores {
 		Gyms:       recordingStore[db.GymTrackingAPI]{name: "gyms", hits: hits},
 		Forts:      recordingStore[db.FortTrackingAPI]{name: "forts", hits: hits},
 		Maxbattles: recordingStore[db.MaxbattleTrackingAPI]{name: "maxbattles", hits: hits},
+		Tappables:  recordingStore[db.TappableTrackingAPI]{name: "tappables", hits: hits},
 	}
 }
 

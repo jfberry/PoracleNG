@@ -66,7 +66,7 @@ func TestFreshMigration(t *testing.T) {
 	// Verify expected tables exist
 	expectedTables := []string{
 		"humans", "profiles", "monsters", "raid", "egg", "quest",
-		"invasion", "lures", "nests", "gym", "forts", "maxbattle",
+		"invasion", "lures", "nests", "gym", "forts", "maxbattle", "tappable",
 		"schema_migrations",
 	}
 

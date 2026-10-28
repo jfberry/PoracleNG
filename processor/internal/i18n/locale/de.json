@@ -344,6 +344,7 @@
   "cmd.poracle_admin.status.tracking_type.gym": "Arena",
   "cmd.poracle_admin.status.tracking_type.fort": "Stop/Arena",
   "cmd.poracle_admin.status.tracking_type.maxbattle": "Max-Kampf",
+  "cmd.poracle_admin.status.tracking_type.tappable": "Antippbar",
   "cmd.poracle_admin.slash.help.intro": "**!poracle-admin slash** — Lebenszyklus der Slash-Befehl-Registrierung.\nUnterbefehle:",
   "cmd.poracle_admin.slash.discord_only": "❌ Slash-Befehle sind Discord-exklusiv und können nicht über Telegram verwaltet werden.",
   "cmd.poracle_admin.slash.not_configured": "❌ Slash-Befehle sind nicht konfiguriert (Discord deaktiviert oder [discord.slash_commands] enabled=false).",

@@ -1345,6 +1345,7 @@
   "cmd.poracle_admin.status.tracking_type.gym": "gym",
   "cmd.poracle_admin.status.tracking_type.fort": "fort",
   "cmd.poracle_admin.status.tracking_type.maxbattle": "maxbattle",
+  "cmd.poracle_admin.status.tracking_type.tappable": "tappable",
 
   "cmd.poracle_admin.slash.help.intro": "**!poracle-admin slash** — slash-command registration lifecycle.\nSubcommands:",
   "cmd.poracle_admin.slash.discord_only": "❌ Slash commands are Discord-only and cannot be managed from Telegram.",

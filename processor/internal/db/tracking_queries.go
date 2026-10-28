@@ -787,6 +787,64 @@ func InsertMaxbattle(db *sqlx.DB, mb *MaxbattleTrackingAPI) (int64, error) {
 	return uid, nil
 }
 
+// TappableTrackingAPI represents a tappable tracking row for API operations.
+// Like quest, reward_type and reward are match keys (a rule for a different
+// reward is never related), ping/clean/distance/template are updatable and
+// amount is a regular field.
+type TappableTrackingAPI struct {
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"                   diff:"update"`
+	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
+	Template              string   `db:"template"                json:"template"               diff:"update"`
+	RewardType            int      `db:"reward_type"             json:"reward_type"            diff:"match"`
+	Reward                int      `db:"reward"                  json:"reward"                 diff:"match"`
+	Amount                int      `db:"amount"                  json:"amount"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:"" areakey:"true"`
+}
+
+// SelectTappablesByIDProfile returns all tappable trackings for a given human and profile.
+func SelectTappablesByIDProfile(db *sqlx.DB, id string, profileNo int) ([]TappableTrackingAPI, error) {
+	var tappables []TappableTrackingAPI
+	err := db.Select(&tappables,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '') AS template, reward_type, reward, amount,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
+		 FROM tappable WHERE id = ? AND profile_no = ?`, id, profileNo)
+	if err != nil {
+		return nil, fmt.Errorf("select tappables for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range tappables {
+		tappables[i].OverrideAreas = parseOverrideAreas(tappables[i].OverrideAreasRaw)
+	}
+	return tappables, nil
+}
+
+// InsertTappable inserts a single tappable tracking row and returns the new uid.
+func InsertTappable(db *sqlx.DB, t *TappableTrackingAPI) (int64, error) {
+	result, err := db.Exec(
+		`INSERT INTO tappable (id, profile_no, ping, clean, distance, template,
+		        reward_type, reward, amount,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.ProfileNo, t.Ping, t.Clean, t.Distance, t.Template,
+		t.RewardType, t.Reward, t.Amount,
+		nullIfEmpty(t.OverrideLocationLabel), marshalOverrideAreas(t.OverrideAreas))
+	if err != nil {
+		return 0, fmt.Errorf("insert tappable: %w", err)
+	}
+	uid, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("get last insert id: %w", err)
+	}
+	return uid, nil
+}
+
 // ---------------------------------------------------------------------------
 // Select*ByID — query by user ID only (all profiles, no profile_no filter)
 // ---------------------------------------------------------------------------

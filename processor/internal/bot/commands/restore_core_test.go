@@ -173,7 +173,7 @@ func TestRestore_RollsBackOnInsertFailure(t *testing.T) {
 }
 
 func TestBackupTablesCoverEveryTrackingTable(t *testing.T) {
-	for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "gym", "nests", "maxbattle", "forts"} {
+	for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "gym", "nests", "maxbattle", "forts", "tappable"} {
 		if !slices.Contains(backupTables, tbl) {
 			t.Errorf("backupTables missing %s", tbl)
 		}

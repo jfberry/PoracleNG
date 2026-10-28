@@ -83,8 +83,8 @@ func openTestDB(t *testing.T) *sqlx.DB {
 		UNIQUE KEY profile_unique (id, profile_no)
 	) ENGINE=InnoDB`)
 
-	// Minimal tracking tables needed by CountLocationReferences and StripOverrideAreas (all 10 types).
-	for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle"} {
+	// Minimal tracking tables needed by CountLocationReferences and StripOverrideAreas (all 11 tables).
+	for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle", "tappable"} {
 		exec(`CREATE TABLE IF NOT EXISTS ` + tbl + ` (
 			uid                     INT PRIMARY KEY AUTO_INCREMENT,
 			id                      VARCHAR(50) NOT NULL,
@@ -101,7 +101,7 @@ func openTestDB(t *testing.T) *sqlx.DB {
 
 	t.Cleanup(func() {
 		_, _ = db.Exec(`DELETE FROM user_locations WHERE id = 'u1'`)
-		for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle"} {
+		for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle", "tappable"} {
 			_, _ = db.Exec(`DELETE FROM ` + tbl + ` WHERE id = 'u1'`)
 		}
 		_, _ = db.Exec(`DELETE FROM profiles WHERE id = 'u1'`)

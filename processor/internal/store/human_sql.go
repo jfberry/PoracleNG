@@ -584,7 +584,7 @@ func (s *SQLHumanStore) UpdateProfileName(id string, profileNo int, name string)
 // user_locations is intentionally excluded — it has no profile_no column.
 var trackingTables = []string{
 	"monsters", "raid", "egg", "quest", "invasion", "weather",
-	"lures", "gym", "nests", "maxbattle", "forts",
+	"lures", "gym", "nests", "maxbattle", "forts", "tappable",
 }
 
 // humanOwnedTables lists all tables holding rows keyed by human id that
@@ -593,7 +593,7 @@ var trackingTables = []string{
 // helpers like user_locations.
 var humanOwnedTables = []string{
 	"monsters", "raid", "egg", "quest", "invasion", "weather",
-	"lures", "gym", "nests", "maxbattle", "forts",
+	"lures", "gym", "nests", "maxbattle", "forts", "tappable",
 	"user_locations",
 }
 

@@ -50,10 +50,22 @@ func maxbattleScenario() scenarioType[db.MaxbattleTrackingAPI] {
 	}
 }
 
+func tappableScenario() scenarioType[db.TappableTrackingAPI] {
+	return scenarioType[db.TappableTrackingAPI]{
+		name: "tappable",
+		knob: func(k, d int) db.TappableTrackingAPI {
+			return db.TappableTrackingAPI{ID: "u", RewardType: 4, Reward: 41, Amount: 3, Clean: k, Distance: d}
+		},
+		get: TappableGetUID, set: TappableSetUID,
+		val: func(r *db.TappableTrackingAPI) int { return r.Clean },
+	}
+}
+
 func TestSquashScenarios(t *testing.T) {
 	t.Run("monster", func(t *testing.T) { runScenarios(t, monsterScenario()) })
 	t.Run("raid", func(t *testing.T) { runScenarios(t, raidScenario()) })
 	t.Run("maxbattle", func(t *testing.T) { runScenarios(t, maxbattleScenario()) })
+	t.Run("tappable", func(t *testing.T) { runScenarios(t, tappableScenario()) })
 }
 
 func runScenarios[T any](t *testing.T, s scenarioType[T]) {
@@ -225,5 +237,30 @@ func TestSquashMaxbattleDistanceUpdates(t *testing.T) {
 	}
 	if res.Updates[0].UID != 1 || res.Updates[0].Distance != 500 {
 		t.Fatalf("update = %+v", res.Updates[0])
+	}
+}
+
+// Tappable mirrors quest: reward_type and reward are match keys (a different
+// reward is a separate rule), amount is a regular field (a different minimum
+// is a separate rule), and distance is updatable.
+func TestSquashTappableKeys(t *testing.T) {
+	existing := []db.TappableTrackingAPI{{UID: 1, ID: "u", RewardType: 4, Reward: 41, Amount: 3, Distance: 1000}}
+	classify := func(c db.TappableTrackingAPI) DiffResult[db.TappableTrackingAPI] {
+		return DiffAndClassify(existing, []db.TappableTrackingAPI{c}, TappableGetUID, TappableSetUID)
+	}
+
+	res := classify(db.TappableTrackingAPI{ID: "u", RewardType: 4, Reward: 41, Amount: 3, Distance: 500})
+	if len(res.Updates) != 1 || len(res.Inserts) != 0 || res.Updates[0].UID != 1 || res.Updates[0].Distance != 500 {
+		t.Fatalf("distance change: got %+v", res)
+	}
+	for name, c := range map[string]db.TappableTrackingAPI{
+		"different reward":      {ID: "u", RewardType: 4, Reward: 25, Amount: 3, Distance: 1000},
+		"different reward type": {ID: "u", RewardType: 9, Reward: 41, Amount: 3, Distance: 1000},
+		"different amount":      {ID: "u", RewardType: 4, Reward: 41, Amount: 5, Distance: 1000},
+	} {
+		res := classify(c)
+		if len(res.Inserts) != 1 || len(res.Updates) != 0 || len(res.AlreadyPresent) != 0 {
+			t.Errorf("%s: got %+v", name, res)
+		}
 	}
 }

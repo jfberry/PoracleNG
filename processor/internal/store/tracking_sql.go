@@ -128,7 +128,16 @@ func NewMaxbattleStore(database *sqlx.DB) TrackingStore[db.MaxbattleTrackingAPI]
 	}
 }
 
-// TrackingStores holds all 10 tracking store instances.
+func NewTappableStore(database *sqlx.DB) TrackingStore[db.TappableTrackingAPI] {
+	return &sqlTrackingStore[db.TappableTrackingAPI]{
+		database: database,
+		table:    "tappable",
+		selectFn: db.SelectTappablesByIDProfile,
+		insertFn: db.InsertTappable,
+	}
+}
+
+// TrackingStores holds all 11 tracking store instances.
 type TrackingStores struct {
 	Monsters   TrackingStore[db.MonsterTrackingAPI]
 	Raids      TrackingStore[db.RaidTrackingAPI]
@@ -140,9 +149,10 @@ type TrackingStores struct {
 	Gyms       TrackingStore[db.GymTrackingAPI]
 	Forts      TrackingStore[db.FortTrackingAPI]
 	Maxbattles TrackingStore[db.MaxbattleTrackingAPI]
+	Tappables  TrackingStore[db.TappableTrackingAPI]
 }
 
-// NewTrackingStores creates all 10 SQL-backed tracking stores.
+// NewTrackingStores creates all 11 SQL-backed tracking stores.
 func NewTrackingStores(database *sqlx.DB) *TrackingStores {
 	return &TrackingStores{
 		Monsters:   NewMonsterStore(database),
@@ -155,6 +165,7 @@ func NewTrackingStores(database *sqlx.DB) *TrackingStores {
 		Gyms:       NewGymStore(database),
 		Forts:      NewFortStore(database),
 		Maxbattles: NewMaxbattleStore(database),
+		Tappables:  NewTappableStore(database),
 	}
 }
 
@@ -181,6 +192,8 @@ func FortGetUID(f *db.FortTrackingAPI) int64                { return f.UID }
 func FortSetUID(f *db.FortTrackingAPI, uid int64)           { f.UID = uid }
 func MaxbattleGetUID(m *db.MaxbattleTrackingAPI) int64      { return m.UID }
 func MaxbattleSetUID(m *db.MaxbattleTrackingAPI, uid int64) { m.UID = uid }
+func TappableGetUID(t *db.TappableTrackingAPI) int64        { return t.UID }
+func TappableSetUID(t *db.TappableTrackingAPI, uid int64)   { t.UID = uid }
 
 // TablesWithUID returns the canonical rule-table keys (the mute.CanonicalRuleTable
 // vocabulary) of every table holding a rule with this uid for the human's
@@ -272,6 +285,13 @@ func (ts *TrackingStores) TablesWithUID(id string, profileNo int, uid int64) []s
 			return false
 		}
 		r, err := ts.Maxbattles.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("tappable", func() bool {
+		if ts.Tappables == nil {
+			return false
+		}
+		r, err := ts.Tappables.SelectByIDProfile(id, profileNo)
 		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
 	})
 	return out

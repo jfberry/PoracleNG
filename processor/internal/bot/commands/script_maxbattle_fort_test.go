@@ -28,6 +28,7 @@ func scriptCtx(t *testing.T) *bot.CommandContext {
 		Gyms:       store.NewMockTrackingStore[db.GymTrackingAPI](store.GymGetUID, store.GymSetUID),
 		Forts:      store.NewMockTrackingStore[db.FortTrackingAPI](store.FortGetUID, store.FortSetUID),
 		Maxbattles: store.NewMockTrackingStore[db.MaxbattleTrackingAPI](store.MaxbattleGetUID, store.MaxbattleSetUID),
+		Tappables:  store.NewMockTrackingStore[db.TappableTrackingAPI](store.TappableGetUID, store.TappableSetUID),
 	}
 	return ctx
 }
