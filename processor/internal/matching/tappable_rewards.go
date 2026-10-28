@@ -57,7 +57,26 @@ func ParseTappableRewards(tw *webhook.TappableWebhook) []TappableRewardData {
 			r.PokemonID = *tw.RewardPokemonID
 		}
 	}
-	return []TappableRewardData{r}
+	return []TappableRewardData{untrackIfUnidentified(r)}
+}
+
+// untrackIfUnidentified clears the type of a reward whose identifying value
+// is missing or invalid (an item without an item id, candy / XL candy / mega
+// energy without a pokemon), so it is described but never matched — a
+// zero id would otherwise match "any item" / "any candy" rules. Stardust and
+// pokecoins are identified by their count; a missing count is amount 0.
+func untrackIfUnidentified(r TappableRewardData) TappableRewardData {
+	switch r.Type {
+	case TappableRewardItem:
+		if r.ItemID <= 0 {
+			r.Type, r.ItemID = 0, 0
+		}
+	case TappableRewardCandy, TappableRewardXLCandy, TappableRewardMegaEnergy:
+		if r.PokemonID <= 0 {
+			r.Type, r.PokemonID = 0, 0
+		}
+	}
+	return r
 }
 
 // parseTappableRewardArray decodes the rewards array. ok is false when the
@@ -105,7 +124,7 @@ func parseTappableRewardEntry(entry map[string]json.RawMessage) (TappableRewardD
 				r.PokemonID = jsonInt(branch.PokedexID)
 			}
 		}
-		return r, true
+		return untrackIfUnidentified(r), true
 	}
 	// An untrackable reward: keep the oneof name so it can be described.
 	for _, key := range tappableUntrackedKeys {

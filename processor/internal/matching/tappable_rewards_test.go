@@ -60,6 +60,56 @@ func TestParseTappableRewards(t *testing.T) {
 			want: nil,
 		},
 		{
+			// A reward whose identifying value is missing or invalid is kept
+			// for display but untrackable (type 0): a zero id would match the
+			// "any item" / "any candy" rules.
+			name: "item, candy, xl candy and mega energy without a valid id are untrackable",
+			tw: webhook.TappableWebhook{Rewards: json.RawMessage(`[{"item":null,"count":1},{"item":"abc","count":1},
+				{"pokemon_candy":0,"count":3},{"xl_candy":-4,"count":1},{"mega_energy_pokemon_id":null,"count":20},
+				{"temp_evo_pokemon_branch":{"temp_evo_id":2},"count":10}]`)},
+			want: []TappableRewardData{
+				{Amount: 1, Key: "item"},
+				{Amount: 1, Key: "item"},
+				{Amount: 3, Key: "pokemon_candy"},
+				{Amount: 1, Key: "xl_candy"},
+				{Amount: 20, Key: "mega_energy_pokemon_id"},
+				{Amount: 10, Key: "temp_evo_pokemon_branch"},
+			},
+		},
+		{
+			name: "stardust and pokecoin without a count are amount 0, still trackable",
+			tw:   webhook.TappableWebhook{Rewards: json.RawMessage(`[{"stardust":true},{"pokecoin":true,"count":null}]`)},
+			want: []TappableRewardData{
+				{Type: TappableRewardStardust, Key: "stardust"},
+				{Type: TappableRewardPokecoin, Key: "pokecoin"},
+			},
+		},
+		{
+			name: "top-level item without an item id is untrackable",
+			tw:   webhook.TappableWebhook{RewardType: ptr("item"), Count: ptr(1)},
+			want: []TappableRewardData{{Amount: 1, Key: "item"}},
+		},
+		{
+			name: "top-level candy, xl candy and mega energy without a pokemon are untrackable",
+			tw:   webhook.TappableWebhook{RewardType: ptr("pokemon_candy"), Count: ptr(6)},
+			want: []TappableRewardData{{Amount: 6, Key: "pokemon_candy"}},
+		},
+		{
+			name: "top-level xl candy with pokemon 0",
+			tw:   webhook.TappableWebhook{RewardType: ptr("xl_candy"), RewardPokemonID: ptr(0), Count: ptr(1)},
+			want: []TappableRewardData{{Amount: 1, Key: "xl_candy"}},
+		},
+		{
+			name: "top-level mega energy without a pokemon",
+			tw:   webhook.TappableWebhook{RewardType: ptr("mega_energy_pokemon_id"), Count: ptr(20)},
+			want: []TappableRewardData{{Amount: 20, Key: "mega_energy_pokemon_id"}},
+		},
+		{
+			name: "top-level stardust without a count is amount 0",
+			tw:   webhook.TappableWebhook{RewardType: ptr("stardust")},
+			want: []TappableRewardData{{Type: TappableRewardStardust, Key: "stardust"}},
+		},
+		{
 			name: "entry with only count is skipped",
 			tw:   webhook.TappableWebhook{Rewards: json.RawMessage(`[{"count":3}]`)},
 			want: []TappableRewardData{},

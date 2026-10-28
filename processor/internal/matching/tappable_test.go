@@ -1,11 +1,13 @@
 package matching
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func makeTappable(id string, rewardType, reward, amount int) *db.TappableTracking {
@@ -199,5 +201,22 @@ func TestTappableOverrideLocation(t *testing.T) {
 	}
 	if matched, _ := m.Match(tappableAt(51.0, reward), st); len(matched) != 0 {
 		t.Errorf("near the human's own location: got %d, want 0", len(matched))
+	}
+}
+
+// A malformed reward (item id null, candy without a pokemon) parses as an
+// untrackable reward, so it never fires an "all items" / "any candy" rule.
+func TestTappableMalformedRewardDoesNotMatchWildcard(t *testing.T) {
+	for _, tc := range []struct {
+		rewards string
+		rule    *db.TappableTracking
+	}{
+		{`[{"item":null,"count":1}]`, makeTappable("user1", TappableRewardItem, 0, 0)},
+		{`[{"pokemon_candy":null,"count":3}]`, makeTappable("user1", TappableRewardCandy, 0, 0)},
+	} {
+		tw := webhook.TappableWebhook{Rewards: json.RawMessage(tc.rewards)}
+		if n := matchTappable(t, tc.rule, tappableAt(51.0, ParseTappableRewards(&tw)...)); n != 0 {
+			t.Errorf("%s: %d matches, want 0", tc.rewards, n)
+		}
 	}
 }
