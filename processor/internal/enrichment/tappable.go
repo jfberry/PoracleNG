@@ -168,7 +168,7 @@ func tappableRewardList(rewards []matching.TappableRewardData, tr, enTr *i18n.Tr
 func tappableRewardSubject(tr *i18n.Translator, r matching.TappableRewardData) string {
 	switch r.Type {
 	case matching.TappableRewardItem:
-		return TranslateItemName(tr, r.ItemID)
+		return tappableItemName(tr, r.ItemID)
 	case matching.TappableRewardCandy, matching.TappableRewardXLCandy, matching.TappableRewardMegaEnergy:
 		if r.PokemonID == 0 {
 			return ""
@@ -203,7 +203,7 @@ func tappableRewardLabel(tr *i18n.Translator, r matching.TappableRewardData) str
 func tappableRewardText(tr *i18n.Translator, r matching.TappableRewardData) string {
 	switch r.Type {
 	case matching.TappableRewardItem:
-		name := TranslateItemName(tr, r.ItemID)
+		name := tappableItemName(tr, r.ItemID)
 		if name == "" {
 			return ""
 		}
@@ -219,6 +219,17 @@ func tappableRewardText(tr *i18n.Translator, r matching.TappableRewardData) stri
 		return joinNonEmpty(amountPrefix(r.Amount), tr.T(gamedata.PokemonTranslationKey(r.PokemonID)), label)
 	}
 	return joinNonEmpty(amountPrefix(r.Amount), tappableRewardLabel(tr, r))
+}
+
+// tappableItemName is the translated item name, or "Unknown item 1234" (the
+// rowtext pattern) for an item with no translation, rather than the raw
+// item_1234 key.
+func tappableItemName(tr *i18n.Translator, itemID int) string {
+	if itemID <= 0 {
+		return ""
+	}
+	return translateOr(tr, gamedata.ItemTranslationKey(itemID),
+		fmt.Sprintf("%s %d", tr.T("tracking.unknown_item"), itemID))
 }
 
 func amountPrefix(n int) string {

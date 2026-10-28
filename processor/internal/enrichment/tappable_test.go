@@ -207,3 +207,19 @@ func TestTappableTypeName_Fallbacks(t *testing.T) {
 		}
 	}
 }
+
+// An item with no translation renders "Unknown item 1234", not the raw
+// item_1234 key.
+func TestTappableTranslate_UntranslatedItem(t *testing.T) {
+	bundle := newInvasionBundle(t, map[string]map[string]string{
+		"en": {"tracking.unknown_item": "Unknown item"},
+	})
+	e := newInvasionEnricher(t, nil, bundle)
+	tw := tappableTestHook(`[{"item":1234,"count":2}]`)
+	rewards := matching.ParseTappableRewards(tw)
+	base, _ := e.Tappable(tw, rewards, TileModeSkip)
+	m := e.TappableTranslate(base, tw, rewards, "en")
+	if m["rewardName"] != "Unknown item 1234" || m["rewardString"] != "2 Unknown item 1234" {
+		t.Errorf("rewardName = %q, rewardString = %q, want Unknown item 1234", m["rewardName"], m["rewardString"])
+	}
+}
