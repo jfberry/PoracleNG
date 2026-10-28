@@ -268,6 +268,7 @@ func TestUnsubscribeRoutesEveryRenderedAlertType(t *testing.T) {
 		"gym":         "gyms",       // gym.go
 		"fort-update": "forts",      // fort.go
 		"maxbattle":   "maxbattles", // maxbattle.go
+		"tappable":    "tappables",  // tappable.go
 	}
 	for alertType, want := range cases {
 		t.Run(alertType, func(t *testing.T) {
@@ -313,6 +314,7 @@ func TestAlertTypeTable(t *testing.T) {
 		"pokestop": "lure", "lure": "lure", "nest": "nest", "gym": "gym",
 		"fort-update": "fort", "fort_update": "fort",
 		"max_battle": "maxbattle", "maxbattle": "maxbattle",
+		"tappable": "tappable",
 	}
 	for in, want := range cases {
 		if got, ok := alertTypeTable(in); !ok || got != want {

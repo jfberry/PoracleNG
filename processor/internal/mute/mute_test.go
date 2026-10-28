@@ -341,7 +341,7 @@ func TestAddKeepsDifferentTables(t *testing.T) {
 }
 
 func TestCanonicalRuleTable(t *testing.T) {
-	for _, n := range []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"} {
+	for _, n := range []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle", "tappable"} {
 		if got, ok := CanonicalRuleTable(n); !ok || got != n {
 			t.Errorf("%s -> %q,%v", n, got, ok)
 		}

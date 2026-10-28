@@ -628,6 +628,12 @@ func TestRowText_AllTypesShowOverrides(t *testing.T) {
 				OverrideLocationLabel: "Home",
 			})
 		}},
+		{"tappable", func() string {
+			return g.TappableRowText(tr, &db.TappableTracking{
+				RewardType: 4, Reward: 25, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
 	}
 
 	for _, c := range cases {
@@ -845,5 +851,44 @@ func TestRowText_DefaultEditByType(t *testing.T) {
 	// Grunt invasion alerts never edit, so plain invasion rules stay unlabelled.
 	if got := g.InvasionRowText(tr, &db.InvasionTracking{GruntType: "Water", Template: "1"}); strings.Contains(got, "edit") {
 		t.Errorf("grunt invasion: got %s", got)
+	}
+}
+
+func TestTappableRowText(t *testing.T) {
+	g := testGenerator(t)
+	tr := g.Translations.For("en")
+
+	cases := []struct {
+		name string
+		row  db.TappableTracking
+		want []string
+		not  []string
+	}{
+		{"candy pokemon", db.TappableTracking{RewardType: 4, Reward: 25, Amount: 3}, []string{"candy poke_25", "minimum 3"}, nil},
+		{"candy any", db.TappableTracking{RewardType: 4}, []string{"Reward: **candy**"}, []string{"minimum"}},
+		{"xl candy pokemon", db.TappableTracking{RewardType: 9, Reward: 25}, []string{"XL candy poke_25"}, nil},
+		{"xl candy any", db.TappableTracking{RewardType: 9}, []string{"Reward: **XL candy**"}, nil},
+		{"mega energy", db.TappableTracking{RewardType: 12, Reward: 6}, []string{"mega energy poke_6"}, nil},
+		{"stardust min", db.TappableTracking{RewardType: 3, Reward: 500}, []string{"500 or more stardust"}, nil},
+		{"pokecoin", db.TappableTracking{RewardType: 8}, []string{"pokecoins"}, nil},
+		{"item any", db.TappableTracking{RewardType: 2}, []string{"any item"}, nil},
+		{"item specific", db.TappableTracking{RewardType: 2, Reward: 1301, Amount: 2}, []string{"minimum 2"}, []string{"any item"}},
+		{"distance clean template", db.TappableTracking{RewardType: 4, Distance: 500, Clean: 1, Template: "fancy"}, []string{"500", "clean", "fancy"}, nil},
+		{"no edit label", db.TappableTracking{RewardType: 4, Template: "1"}, nil, []string{"edit"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := g.TappableRowText(tr, &c.row)
+			for _, w := range c.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("want %q in %q", w, got)
+				}
+			}
+			for _, n := range c.not {
+				if strings.Contains(got, n) {
+					t.Errorf("did not want %q in %q", n, got)
+				}
+			}
+		})
 	}
 }

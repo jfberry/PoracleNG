@@ -100,6 +100,8 @@
   "tracking.reward_mega_energy_fmt": "mega energy {0}",
   "tracking.reward_candy": "candy",
   "tracking.reward_candy_fmt": "candy {0}",
+  "tracking.reward_xl_candy": "XL candy",
+  "tracking.reward_xl_candy_fmt": "XL candy {0}",
   "tracking.reward_any_pokemon": "any pokemon",
   "tracking.reward_any_item": "any item",
   "tracking.reward_min_fmt": "minimum {0}",
