@@ -111,6 +111,39 @@ func TestHandleMute_Pokemon(t *testing.T) {
 	}
 }
 
+// A tappable has no pokemon_id: the pokemon mute covers the first reward
+// with a pokemon, the same one the webhook handler's mute.Event carries —
+// here the candy, after an item reward. Rewards arrive as []any after the
+// snapshot's JSON round-trip.
+func TestHandleMute_PokemonTappable(t *testing.T) {
+	for name, rewards := range map[string]any{
+		"stored": []any{
+			map[string]any{"type": "item", "itemId": float64(1301), "pokemonId": float64(0)},
+			map[string]any{"type": "pokemon_candy", "pokemonId": float64(41)},
+		},
+		"in memory": []map[string]any{
+			{"type": "item", "itemId": 1301, "pokemonId": 0},
+			{"type": "pokemon_candy", "pokemonId": 41},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := mute.NewStore()
+			snap := &snapshots.Snapshot{
+				Target:     "u1",
+				AlertType:  "tappable",
+				Enrichment: map[string]any{"rewardPokemonId": float64(0), "rewards": rewards},
+			}
+			def := buttons.Def{ID: "mute_pokemon", Label: "Mute", Action: buttons.ActionMute, Scope: buttons.ScopePokemon}
+			if _, err := HandleMute(context.Background(), snap, def, "u1", Deps{MuteStore: store}); err != nil {
+				t.Fatalf("HandleMute: %v", err)
+			}
+			if !store.Match("u1", mute.Event{PokemonID: 41}, time.Now().Unix()) {
+				t.Errorf("expected mute store to contain pokemon 41")
+			}
+		})
+	}
+}
+
 func TestHandleMute_Area(t *testing.T) {
 	store := mute.NewStore()
 	snap := &snapshots.Snapshot{
