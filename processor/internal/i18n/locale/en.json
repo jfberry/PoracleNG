@@ -479,6 +479,7 @@
   "msg.fort.usage": "Valid commands are e.g. `{0}fort pokestop`, `{0}fort everything`, `{0}fort remove pokestop`",
   "msg.tappable.usage": "Valid commands are e.g. `{0}tappable zubat`, `{0}tappable xlcandy:pikachu`, `{0}tappable rare_candy`, `{0}tappable stardust:500`, `{0}tappable remove everything`",
   "msg.tappable.no_reward": "No tappable reward specified",
+  "msg.tappable.invalid_number": "`{0}` isn't a valid amount — use a whole number, 0 or more.",
   "msg.tappable.amount_not_applicable": "`amount:N` doesn't apply here — `stardust:N` and `pokecoins:N` already set their own minimum.",
   "msg.tappable.bulk_not_permitted": "You do not have permission to track every tappable reward or every item at once. Track specific rewards instead.",
   "tappable.type.box": "Box",

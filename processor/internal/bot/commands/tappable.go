@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"strconv"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -97,7 +99,8 @@ func tappableRewards(ctx *bot.CommandContext, parsed *bot.ParsedArgs, amount int
 		key        string
 	}{{matching.TappableRewardStardust, "stardust"}, {matching.TappableRewardPokecoin, "pokecoin"}} {
 		if val, ok := parsed.Strings[kind.key]; ok {
-			out = append(out, tappableReward{kind.rewardType, questParseInt(val)})
+			n, _ := tappableNumber(val) // validated by invalidTappableNumber
+			out = append(out, tappableReward{kind.rewardType, n})
 		} else if parsed.HasKeyword("arg." + kind.key) {
 			out = append(out, tappableReward{kind.rewardType, amount})
 			amountUsed = true
@@ -110,8 +113,8 @@ func tappableRewards(ctx *bot.CommandContext, parsed *bot.ParsedArgs, amount int
 	pokemonConsumed := false
 	// kind:<name> that resolves to no pokemon is reported as unrecognized
 	// rather than widened to "any pokemon" (which, on remove, would delete
-	// every rule of that kind). Added after item matching, which resets
-	// parsed.Unrecognized.
+	// every rule of that kind). Added after item matching, so the full-phrase
+	// item match only ever sees the bare tokens.
 	var unresolved []string
 	for _, kind := range tappablePokemonKinds {
 		var mons []bot.ResolvedPokemon
@@ -140,14 +143,44 @@ func tappableRewards(ctx *bot.CommandContext, parsed *bot.ParsedArgs, amount int
 		amountUsed = true
 	}
 
-	if itemID := matchItemName(ctx, parsed); itemID > 0 {
-		parsed.Unrecognized = nil
+	if itemID, itemTokens := matchItemName(ctx, parsed); itemID > 0 {
+		consumeUnrecognized(parsed, itemTokens)
 		out = append(out, tappableReward{matching.TappableRewardItem, itemID})
 		amountUsed = true
 	}
 	parsed.Unrecognized = append(parsed.Unrecognized, unresolved...)
 
 	return out, amountUsed
+}
+
+// tappableNumberKeys are the prefixes whose value is a minimum amount.
+var tappableNumberKeys = []string{"stardust", "pokecoin", "amount"}
+
+// tappableNumber parses a non-negative whole number (digits only).
+func tappableNumber(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
+// invalidTappableNumber returns the first stardust: / pokecoins: / amount:
+// argument whose value isn't a non-negative whole number ("" when all are).
+func invalidTappableNumber(parsed *bot.ParsedArgs) string {
+	for _, key := range tappableNumberKeys {
+		if val, ok := parsed.Strings[key]; ok {
+			if _, valid := tappableNumber(val); !valid {
+				return key + ":" + val
+			}
+		}
+	}
+	return ""
 }
 
 // appendTappablePokemon adds one reward per distinct pokemon id: tappable
@@ -196,6 +229,12 @@ func (c *TappableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return []bot.Reply{*overrideReply}
 	}
 
+	// Checked before remove too: 0 is the wildcard, so a typo read as 0
+	// would widen a rule on add and delete several on remove.
+	if bad := invalidTappableNumber(parsed); bad != "" {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.tappable.invalid_number", bad)}}
+	}
+
 	if parsed.HasKeyword("arg.remove") {
 		return c.handleRemove(ctx, parsed)
 	}
@@ -207,7 +246,7 @@ func (c *TappableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	amountStr, amountSet := parsed.Strings["amount"]
 	amount := 0
 	if amountSet {
-		amount = questParseInt(amountStr)
+		amount, _ = tappableNumber(amountStr) // validated by invalidTappableNumber
 	}
 
 	var rewards []tappableReward

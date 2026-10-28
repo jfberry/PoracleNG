@@ -638,3 +638,23 @@ func TestQuest_Remove_BareRemovesAll(t *testing.T) {
 	runQuest(t, ctx, "remove")
 	assert.Empty(t, questKinds(t, ctx))
 }
+
+// An item match consumes only the item's tokens, so a stray arg next to an
+// item name is reported instead of silently dropped.
+func TestQuest_ItemMatchKeepsOtherUnrecognized(t *testing.T) {
+	ctx := questCtx(t)
+	ctx.GameData.Items[1301] = &gamedata.Item{ItemID: 1301}
+	ctx.Translations.AddTranslator(i18n.NewTranslator("en", map[string]string{"item_1301": "Rare Candy"}))
+
+	// Tokens as the parser produces them from rare_candy.
+	r := (&QuestCommand{}).Run(ctx, []string{"rare candy", "garbage"})
+	require.NotEmpty(t, r)
+	assert.Equal(t, "🙅", r[0].React, r[0].Text)
+	assert.Contains(t, r[0].Text, "garbage")
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	assert.Empty(t, rows)
+
+	r = (&QuestCommand{}).Run(ctx, []string{"rare candy"})
+	require.NotEmpty(t, r)
+	assert.Equal(t, "✅", r[0].React, r[0].Text)
+}

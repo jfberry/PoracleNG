@@ -464,3 +464,76 @@ func TestTappable_UnresolvedPokemonIsUnrecognized(t *testing.T) {
 	require.Equal(t, "🙅", r[0].React, r[0].Text)
 	assert.Len(t, tappableRows(t, ctx), 2, "nothing removed")
 }
+
+// A value that isn't a non-negative whole number is refused before anything
+// is written: read as 0 it would be the wildcard.
+func TestTappable_InvalidNumbersRefused(t *testing.T) {
+	for _, in := range []string{"stardust:-1", "stardust:typo", "pokecoins:x", "amount:abc", "zubat amount:-2", "stardust amount:1e3"} {
+		t.Run(in, func(t *testing.T) {
+			ctx := tappableCtx(t)
+			r := runTappable(t, ctx, in)
+			require.Equal(t, "🙅", r[0].React, r[0].Text)
+			assert.NotContains(t, r[0].Text, "msg.tappable", "message must be translated")
+			assert.Empty(t, tappableRows(t, ctx))
+		})
+	}
+}
+
+// On remove, a typo must not widen to "every stardust rule".
+func TestTappable_RemoveInvalidNumberDeletesNothing(t *testing.T) {
+	ctx := tappableCtx(t)
+	runTappable(t, ctx, "stardust:500")
+	runTappable(t, ctx, "stardust:1000")
+	require.Len(t, tappableRows(t, ctx), 2)
+	for _, in := range []string{"remove stardust:typo", "remove stardust:-1", "remove pokecoins:x"} {
+		r := runTappable(t, ctx, in)
+		assert.Equal(t, "🙅", r[0].React, "%s: %s", in, r[0].Text)
+	}
+	assert.Len(t, tappableRows(t, ctx), 2)
+}
+
+// An item match consumes only the item's tokens; anything else is still
+// reported, on add and on remove.
+func TestTappable_ItemMatchKeepsOtherUnrecognized(t *testing.T) {
+	for _, in := range []string{"rare_candy edit", "rare_candy garbage", "garbage rare_candy"} {
+		t.Run(in, func(t *testing.T) {
+			ctx := tappableCtx(t)
+			r := runTappable(t, ctx, in)
+			require.Equal(t, "🙅", r[0].React, r[0].Text)
+			assert.Empty(t, tappableRows(t, ctx))
+		})
+	}
+
+	ctx := tappableCtx(t)
+	runTappable(t, ctx, "rare_candy")
+	r := runTappable(t, ctx, "remove rare_candy garbage")
+	assert.Equal(t, "🙅", r[0].React, r[0].Text)
+	assert.Len(t, tappableRows(t, ctx), 1)
+
+	// Spaced item name: the tokens join into the item (full-phrase match).
+	ctx = tappableCtx(t)
+	r = runTappable(t, ctx, "rare candy")
+	require.Equal(t, "✅", r[0].React, r[0].Text)
+	assert.ElementsMatch(t, []tappableKey{{2, 1301, 0}}, tappableKeys(tappableRows(t, ctx)))
+}
+
+// xl_candy (the slash choice value and {{rewardType}} spelling), which the
+// parser turns into "xl candy", and spaced "xl candy" work like xlcandy.
+func TestTappable_XLCandySpellings(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want []tappableKey
+	}{
+		{"xl_candy", []tappableKey{{9, 0, 0}}},
+		{"xl candy", []tappableKey{{9, 0, 0}}},
+		{"xl_candy:pikachu", []tappableKey{{9, 25, 0}}},
+		{"xl_candy zubat amount:2", []tappableKey{{9, 41, 2}}},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			ctx := tappableCtx(t)
+			r := runTappable(t, ctx, tc.in)
+			require.Equal(t, "✅", r[0].React, r[0].Text)
+			assert.ElementsMatch(t, tc.want, tappableKeys(tappableRows(t, ctx)))
+		})
+	}
+}

@@ -144,6 +144,11 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 			if val != key && val != "" {
 				kw[val] = key
 			}
+			for _, alt := range extraSpellings[key] {
+				if _, taken := kw[alt]; !taken {
+					kw[alt] = key
+				}
+			}
 		}
 		am.keywordMap[lang] = kw
 	}
@@ -203,6 +208,17 @@ func (am *ArgMatcher) buildMultiWordVocabularies(languages []string) {
 			}
 			for id := range am.gameData.Costumes {
 				add(am.prefixedMultiWord["costume"], tr, gamedata.CostumeTranslationKey(id))
+			}
+		}
+	}
+	// Multi-word extra spellings ("xl candy" typed with a space).
+	for key, alts := range extraSpellings {
+		if strings.HasPrefix(key, "arg.prefix.") {
+			continue
+		}
+		for _, alt := range alts {
+			if strings.Contains(alt, " ") {
+				am.bareMultiWord[alt] = true
 			}
 		}
 	}
@@ -318,6 +334,15 @@ var knownPrefixKeys = []string{
 	"arg.prefix.ultra", "arg.prefix.ultrahigh", "arg.prefix.ultracp",
 	"arg.prefix.little", "arg.prefix.littlehigh", "arg.prefix.littlecp",
 	"arg.prefix.area", "arg.prefix.location",
+}
+
+// extraSpellings are fixed alternative spellings accepted for a keyword or
+// prefix key in every language, alongside its translation. "xl candy" is
+// what the parser makes of xl_candy (the slash choice value and the
+// {{rewardType}} spelling), so it must reach the xlcandy matchers.
+var extraSpellings = map[string][]string{
+	"arg.xl_candy":        {"xl candy"},
+	"arg.prefix.xl_candy": {"xl candy"},
 }
 
 // knownKeywordKeys lists all arg.* keyword keys used by any command.
@@ -986,7 +1011,15 @@ func (am *ArgMatcher) resolvePrefix(key, lang string) []string {
 			val := strings.ToLower(tr.T(key))
 			if val != key && val != "" && !seen[val] {
 				prefixes = append(prefixes, val)
+				seen[val] = true
 			}
+		}
+	}
+
+	for _, alt := range extraSpellings[key] {
+		if !seen[alt] {
+			prefixes = append(prefixes, alt)
+			seen[alt] = true
 		}
 	}
 
