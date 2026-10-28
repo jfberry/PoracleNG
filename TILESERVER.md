@@ -157,6 +157,14 @@ No type-specific fields beyond the common set. The quest icon is in `imgUrl`.
 
 ---
 
+## Tappable (`poracle-tappable`)
+
+No type-specific fields beyond the common set. The first reward's icon (candy, item, stardust, …) is in `imgUrl`. Encounter tappables arrive as pokemon webhooks and use `poracle-monster`.
+
+**Non-pregen keys:** `latitude`, `longitude`, `imgUrl`, `style`
+
+---
+
 ## Fort Update (`poracle-fort-update`)
 
 | Field | Type | Description |

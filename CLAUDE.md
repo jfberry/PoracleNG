@@ -11,7 +11,7 @@ Golbat (scanner)
     |  POST / (webhook array)
     v
 Processor (Go, port 3030)
-    |  - Parses webhooks (pokemon, raid, invasion, quest, lure, gym, nest, fort_update, max_battle, weather)
+    |  - Parses webhooks (pokemon, raid, invasion, quest, lure, gym, nest, fort_update, max_battle, tappable, weather)
     |  - Loads tracking rules from MySQL into memory, atomically swaps on reload
     |  - Matches each webhook against all tracking rules (geofence, distance, filters)
     |  - Enriches with computed fields (three layers: base, per-language, per-user)
@@ -38,7 +38,7 @@ processor/                      # Go binary
     fort.go                     # Fort update webhook handler
     maxbattle.go                # Max battle webhook handler
     render.go                   # Render pool: processRenderJob, delivery job construction
-    test.go                     # poracle-test handlers (all 8 types)
+    test.go                     # poracle-test handlers (one per test type)
     ...                         # One file per webhook type
   internal/
     config/                     # TOML config loader
@@ -61,7 +61,7 @@ processor/                      # Go binary
     api/                        # All /api/* endpoints: tracking CRUD, humans, profiles, geofence, tiles, config, reload, test
       tracking.go               # Shared tracking CRUD helpers, diff logic, flexBool/flexInt types
       trackingMonster.go        # Pokemon tracking endpoints
-      trackingRaid.go, ...      # Per-type tracking endpoints (10 types)
+      trackingRaid.go, ...      # Per-type v1 tracking endpoints (10 types)
     delivery/                   # Go-native message delivery (Discord REST, Telegram Bot API)
       dispatcher.go             # Top-level orchestrator: Dispatch, Start, Stop
       queue.go                  # FairQueue with per-destination lanes (one drainer per destination), per-platform semaphores
@@ -381,7 +381,7 @@ Role-loss handling is left to Discord: private-thread visibility inherits View C
 
 Hosts that dispatch commands (Discord/Telegram gateways, slash dispatcher, autocreate, `/api/command`) must call `bot.RunLocked(cmd, ctx, args)`, never `cmd.Run` directly: it takes the process-wide per-human lock (`internal/humanlock`) on `ctx.TargetID`, serialising the command against API writes (`api.HumanLock` middleware) and the reconcilers. The lock is not reentrant, so commands that delegate to other commands call `Run` directly, and commands that act on other humans (`!apply`, `!poracle-admin`, `!enable`, `!disable`, `!community`, `!unregister`) implement `bot.TargetLockExempt` and lock each human they write themselves.
 
-All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion, maxbattle) follow:
+All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion, maxbattle, tappable) follow:
 
 1. `BuildTarget(args)` — resolve who the command is for (DM user, channel, webhook, admin override)
 2. Parse args using typed parameter matchers (`bot/argmatch.go`)
@@ -459,9 +459,10 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 - `!raid`, `!egg` — level/pokemon + team/exclusive/move/template/distance/rsvp
 - `!quest` — stardust/energy/candy/item/pokemon rewards
 - `!nest`, `!lure`, `!gym`, `!fort`, `!invasion`, `!maxbattle` — type-specific filters
+- `!tappable` — tappable rewards (reward boxes and other map objects): `stardust[:N]`, `pokecoins[:N]`, `candy[:pokemon]`, `xlcandy[:pokemon]`, `energy[:pokemon]`, item names, `all items`, `everything`, `amount:N`; a bare pokemon name means its candy. Matches when any of the tappable's rewards matches. Encounter tappables are not covered (Golbat sends them as `pokemon` webhooks). Slash: `/tappable` (one required `reward` kind plus `pokemon` / `item` / `amount`)
 - `!tracked` — list all active tracking, shows `[id:XX]` per rule for targeted removal
 - `!raid remove id:12` or `!untrack raid id:12` — remove a specific tracking rule by database UID (any tracking type; bare `!untrack id:45` removes pokemon rules only)
-- `!untrack <type> [args]` — reroute to per-type remove handler (e.g. `!untrack raid id:12`, `!untrack egg level:5`, `!untrack invasion grunt:bug`); mirrors the `/untrack <subtype>` slash form. First token is matched against the canonical English type list (`raid`, `egg`, `quest`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`); other tokens fall through to the existing pokemon-untrack path.
+- `!untrack <type> [args]` — reroute to per-type remove handler (e.g. `!untrack raid id:12`, `!untrack egg level:5`, `!untrack invasion grunt:bug`); mirrors the `/untrack <subtype>` slash form. First token is matched against the canonical English type list (`raid`, `egg`, `quest`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`, `tappable`); other tokens fall through to the existing pokemon-untrack path.
 - `!mute <scope> <value> [duration:1h]` / `!unmute <scope> <value>` — silence alerts for a gym, pokemon species, area, pokestop, or station for a time-bounded window. `!mute everything [duration:1h]` self-mutes the user across all alert types. Per-type aliases work too (`!raid mute id:X` ≡ `!mute raid id:X`). Mutes are listed by `!tracked`. See the "Mute Infrastructure" section for store + matcher integration.
 - `!poracle-admin <group> [subcommand] [args]` (also `!pa`) — administrative umbrella for live operations, admin-only. Groups: `slash` (slash-command lifecycle, incl. `list` — registered commands as Discord `</name:id>` mentions), `reload` (dts/geofence/state), `status` (health snapshot), `ratelimit` (inspect/reset alert limits), `summary` (summary buffer), `cache` (geocoder stats/clear), `maintenance` (pause/resume delivery), `emoji` (emoji config inspection), `reconcile` (Discord role sync), `config` (effective config dump), `warnings` (captured WARN/ERROR log buffer). See `docs/admin-commands/` for design and smoke-test checklist.
 - `!backup <name>` / `!restore <name>` (admin) — per-profile tracking template saved to `backups/<name>.json` covering every tracking table (`backupTables`; not profiles or summary schedules). Restore **replaces**: table/column names from the file are validated (allow-listed table, strict identifier, real column via information_schema) before anything changes, then in one transaction every backup table is cleared for the target's current profile and refilled from the file (empty/absent tables end up empty). `!script` emits re-runnable commands for every tracking type, including `!maxbattle` and `!fort`.
@@ -478,7 +479,7 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 
 The `!poracle-test` command calls the processor's `/api/test` endpoint, which loads test webhooks from `fallbacks/testdata.json` (bundled) merged with `config/testdata.json` (user custom), runs full enrichment, renders via the render queue, and delivers directly via the dispatcher.
 
-Supported types: `pokemon`, `raid`, `pokestop`, `gym`, `nest`, `quest`, `fort-update`, `max-battle`
+Supported types: `pokemon`, `raid`, `pokestop`, `gym`, `nest`, `quest`, `fort-update`, `max-battle`, `tappable`
 
 ### Test Data
 
@@ -577,24 +578,24 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | GET/POST/DELETE | `/api/v2/humans/{id}/mutes` | v2 mutes; `tracking_type` required for `scope=tracking` |
 | GET | `/api/snapshots/{messageID}?target={id}` | Inspect a delivered-message snapshot (admin diagnostics; 503 if `[snapshots] enabled = false`) |
 | GET | `/api/dts/actions` | List registered button actions + their scopes/params (drives the config editor's button UI) |
-| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`, `costume`, `customMaps`) so clients can do explicit feature detection without probing endpoints |
+| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`, `costume`, `customMaps`, `tappable`) so clients can do explicit feature detection without probing endpoints |
 | GET | `/metrics` | Prometheus metrics |
 | GET | `/openapi.json` | OpenAPI 3.1 spec (whole `/api` + `/api/v2` surface; public) |
 | GET | `/docs` | Interactive API docs (public) |
 
-Tracking types: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle.
+Tracking types: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle (v1 and v2); incident and tappable are v2 only.
 
 **`/api/v2/*` (strict v2 surface)**: Alongside the in-place `/api/*` endpoints above sits a clean, strict, documented v2 API for tracking + humans/profiles. It is served by the same huma instance (typed bodies, `additionalProperties:false`, no lenient coercion, problem+json errors).
-- **Tracking** is human-scoped: `GET|POST /api/v2/humans/{id}/tracking/{type}`, `GET|PUT|DELETE /api/v2/humans/{id}/tracking/{type}/{uid}`, bulk `DELETE …/{type}?uid=1,2,3` (or body `{"uids":[…]}`, not both), bulk `PATCH …/{type}` (`{"uids":[…],"set":{…}}` — delivery settings only, one outcome per rule), and a full snapshot `GET /api/v2/humans/{id}/tracking` (human + all-type rules + profiles + locations + summaries). Query params: `?profile=`, `?include_descriptions=`, `?silent=`, `?all_profiles=`. v2 adds an **11th tracking type, `incident`** (game `PokestopEvent`, e.g. Showcase), not present in v1.
+- **Tracking** is human-scoped: `GET|POST /api/v2/humans/{id}/tracking/{type}`, `GET|PUT|DELETE /api/v2/humans/{id}/tracking/{type}/{uid}`, bulk `DELETE …/{type}?uid=1,2,3` (or body `{"uids":[…]}`, not both), bulk `PATCH …/{type}` (`{"uids":[…],"set":{…}}` — delivery settings only, one outcome per rule), and a full snapshot `GET /api/v2/humans/{id}/tracking` (human + all-type rules + profiles + locations + summaries). Query params: `?profile=`, `?include_descriptions=`, `?silent=`, `?all_profiles=`. v2 has 12 tracking types: the 10 v1 types plus **`incident`** (game `PokestopEvent`, e.g. Showcase) and **`tappable`** (reward boxes and other tappable map objects), neither present in v1.
 - **humans/profiles** are discrete typed action endpoints under `/api/v2/humans/{id}/…` (enable/disable, admin-disable, language, location, areas, check-location, locations CRUD incl. a **new `PUT …/locations/{label}`** to update coords, roles, profiles CRUD with a strict typed `active_hours` schema, profile switch). Pure action endpoints return a minimal `{"status":"ok"}` ack; resource endpoints return the typed body directly.
 - **v2 has its own response shapes** — it never reuses the frozen v1 DTOs (`HumanResponse`, `ProfileResponse`, …). The human is `v2Human` (`api/v2_human_shape.go`: booleans, real arrays, nullable `area_restriction`), profiles are `v2ProfileResponse`, and the snapshot embeds the same types as the per-resource endpoints. Coordinates are `latitude` / `longitude` in requests and responses alike.
 - **`PUT …/tracking/{type}/{uid}` keeps the rule's `uid`**: the full replace is delete + insert, then `store.UIDReassigner.ReassignUID` moves the new row back onto the old uid, so mutes and `id:N` references survive. `store.ApplyDiff` does the same for every update (bot commands, v1 and v2 POST), so an edited rule never changes id.
 - **`?dry_run=true`** on POST, PUT, single and bulk DELETE, PATCH, and area DELETE/PATCH: same validation and diff, nothing written; created rules have uid 0 and the response carries `"dry_run": true`.
 - **`previous`**: rules in `updated` (POST/PUT/PATCH) carry `previous` (dedicated schema; the rule as stored before the edit). A commit reports what it actually replaced.
-- **PATCH** `…/tracking/{type}` is the bulk settings update, body `{uids, set{distance,clean,edit,summary,template,ping}}`. Per-rule outcomes `updated` / `unchanged` / `refused{uid,reason: invalid|conflict|not_found,detail,conflicts_with}`; repeated uids deduped (first kept); earlier rules in the request count in their patched state for the conflict check, so first in `uids` order wins. `summary` is quest only; `edit` is rejected for gym/invasion/maxbattle/nest/quest.
+- **PATCH** `…/tracking/{type}` is the bulk settings update, body `{uids, set{distance,clean,edit,summary,template,ping}}`. Per-rule outcomes `updated` / `unchanged` / `refused{uid,reason: invalid|conflict|not_found,detail,conflicts_with}`; repeated uids deduped (first kept); earlier rules in the request count in their patched state for the conflict check, so first in `uids` order wins. `summary` is quest only; `edit` is rejected for gym/invasion/maxbattle/nest/quest/tappable.
 - **Bulk DELETE** takes `?uid=` or body `{"uids":[…]}` (not both, not neither: 422). **PUT** returns 409 "would duplicate rule N" when the edit would make the rule a duplicate or near-duplicate (one updatable field) of another. Squash behaviour comes from `store.SquashPolicy` / `RowDiffPolicy` (`DiffResult.Replaced`); an existing row is an update target for at most one candidate in a batch, and a duplicate match pins its row. Maxbattle `clean`/`distance`/`template` are `diff:"update"`.
 - **Area ops**: `DELETE /api/v2/humans/{id}/areas?name=&profile=&all_profiles=&dry_run=` returns `{name, removed_from, broadened{type:[uid]}, dry_run}` and also strips `override_areas` (`broadened` = rules whose override list became empty). `PATCH …/areas?from=&to=&profile=&all_profiles=&trusted=&dry_run=` returns `{from, to (canonical), renamed_in, dry_run}`; `to` must be permitted (422, nothing changes).
-- **Wildcards**: nullable v2 fields use shared constants (`v2_wildcards.go`) for both `Translate` and `ToRule`; a test checks every nullable field on all 11 types round-trips `null`. The documented contract is "`null` means unconstrained"; the stored sentinels are internal.
+- **Wildcards**: nullable v2 fields use shared constants (`v2_wildcards.go`) for both `Translate` and `ToRule`; a test checks every nullable field on all 12 types round-trips `null`. The documented contract is "`null` means unconstrained"; the stored sentinels are internal.
 - **OpenAPI**: top-level `servers: [{url:"/api"}]`; `GET /health` is documented (path-level `servers: [{url:"/"}]`, public).
 - Design doc: `docs/v2-api-design.md` (its "Changes" section lists breaking changes for v2 clients).
 
@@ -618,7 +619,7 @@ State is loaded from MySQL into an immutable snapshot, then atomically swapped:
 - **`state.Load()`** — DB only, reuses existing geofence data. Used by `/api/reload`, periodic timer, and tracking API mutations via `triggerReload()`
 - **`state.LoadWithGeofences()`** — full reload including geofence files and Koji fetch. Used at startup and `/api/geofence/reload`
 
-Tracking API routes call `triggerReload()` after mutations to push changes immediately. All 10 tracking types trigger reloads on create/update/delete.
+Tracking API routes call `triggerReload()` after mutations to push changes immediately. Every tracking type triggers a reload on create/update/delete.
 
 **Gym state persistence**: Gym team/slot state is saved to `config/.cache/gym-state.json` on shutdown and restored on startup. This prevents false team-change alerts after a restart, since the processor would otherwise treat all gyms as "new" and trigger change notifications.
 
@@ -637,7 +638,7 @@ Helper functions `IsClean(clean)` and `IsEdit(clean)` test individual bits. When
 
 ### Pokemon change events
 
-The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set: pokemon jobs carry base edit key `pokemon:<encounterID>` (renderer appends `:<userID>`) and `EditMaxAge` from `[tracking] pokemon_edit_window_mins` (default 5, 0 = no limit). `FairQueue.processJob` skips the edit when the tracked original's `SentAt` is older than `EditMaxAge` (or unknown), replies instead, and tracks the reply under its own `clean:` key so the original keeps its clean-deletion. `[tracking] pokemon_edit = false` drops the edit key entirely. v2 rejects `edit: true` for gym/invasion/nest/maxbattle/quest (their alerts never carry an edit key). The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
+The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set: pokemon jobs carry base edit key `pokemon:<encounterID>` (renderer appends `:<userID>`) and `EditMaxAge` from `[tracking] pokemon_edit_window_mins` (default 5, 0 = no limit). `FairQueue.processJob` skips the edit when the tracked original's `SentAt` is older than `EditMaxAge` (or unknown), replies instead, and tracks the reply under its own `clean:` key so the original keeps its clean-deletion. `[tracking] pokemon_edit = false` drops the edit key entirely. v2 rejects `edit: true` for gym/invasion/nest/maxbattle/quest/tappable (their alerts never carry an edit key). The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
 
 ### Raid/egg RSVP change events
 
@@ -756,9 +757,9 @@ The store is a separate pogreb instance from the geocoder cache — different wo
 - `!<type> mute ...` aliases (e.g. `!raid mute id:X`) route through `RouteToMuteFromType`.
 - `!tracked` shows the active mutes alongside tracking rules.
 - Mute buttons on alerts (see "Button actions" below) write the same `mute.Entry` shape via `buttonactions.HandleMute`.
-- **v2 mutes API** (`internal/api/v2_mutes.go`): `GET|POST /api/v2/humans/{id}/mutes`, `DELETE …/mutes?scope=&value=` (single; `scope=tracking` also needs `&tracking_type=`) and `DELETE …/mutes` (all). Strict schemas, problem+json; mute identity is `(scope, rule table, value)` — the table (`tracking_type`, any of the 11 type names, `incident` stored as `invasion`) is required for `scope=tracking` and rejected for other scopes, because rule uids are per table — so deletes address via query params; DELETE returns `{deleted:[…]}` like v2 tracking. Area values validate against `AreaLogic` when present, else live `StateMgr` fences (production path). The v2 full snapshot includes a `mutes` array. The API documents the in-memory volatility — entries vanish on restart. Design: `docs/superpowers/specs/2026-06-11-mute-api-design.md`.
+- **v2 mutes API** (`internal/api/v2_mutes.go`): `GET|POST /api/v2/humans/{id}/mutes`, `DELETE …/mutes?scope=&value=` (single; `scope=tracking` also needs `&tracking_type=`) and `DELETE …/mutes` (all). Strict schemas, problem+json; mute identity is `(scope, rule table, value)` — the table (`tracking_type`, any of the 12 type names, `incident` stored as `invasion`) is required for `scope=tracking` and rejected for other scopes, because rule uids are per table — so deletes address via query params; DELETE returns `{deleted:[…]}` like v2 tracking. Area values validate against `AreaLogic` when present, else live `StateMgr` fences (production path). The v2 full snapshot includes a `mutes` array. The API documents the in-memory volatility — entries vanish on restart. Design: `docs/superpowers/specs/2026-06-11-mute-api-design.md`.
 
-Tracking mutes are table-aware: uids are per-table, so `mute.Entry.RuleTable` and `MatchedUser.RuleTable` carry the table, and the matcher compares `mute.Event.MatchedRuleUID` **and** the table (populated per matched user in `cmd/processor/helpers.go`) against `tracking`-scope entries. An untyped tracking entry matches nothing. v2 mutes: `tracking_type` (any of the 11 type names; `incident` maps to `invasion`; GET returns the canonical name) is required for `scope=tracking` and a `422` otherwise; `POST` checks the uid is the human's rule in that table on any profile (status stays 200); `DELETE ?scope=tracking&tracking_type=&value=`. Bot: `!<type> mute id:N` keeps the type; bare `!mute id:N` looks the uid up in the current profile (one hit is typed; several are refused with `msg.mute.uid_ambiguous`; none is refused); bare `!unmute id:N` resolves from the active mutes (ambiguous refused). `!tracked` shows "<type> rule <uid>". An alert mute button with `scope=tracking` writes one typed entry per `TrackingUID`.
+Tracking mutes are table-aware: uids are per-table, so `mute.Entry.RuleTable` and `MatchedUser.RuleTable` carry the table, and the matcher compares `mute.Event.MatchedRuleUID` **and** the table (populated per matched user in `cmd/processor/helpers.go`) against `tracking`-scope entries. An untyped tracking entry matches nothing. v2 mutes: `tracking_type` (any of the 12 type names; `incident` maps to `invasion`; GET returns the canonical name) is required for `scope=tracking` and a `422` otherwise; `POST` checks the uid is the human's rule in that table on any profile (status stays 200); `DELETE ?scope=tracking&tracking_type=&value=`. Bot: `!<type> mute id:N` keeps the type; bare `!mute id:N` looks the uid up in the current profile (one hit is typed; several are refused with `msg.mute.uid_ambiguous`; none is refused); bare `!unmute id:N` resolves from the active mutes (ambiguous refused). `!tracked` shows "<type> rule <uid>". An alert mute button with `scope=tracking` writes one typed entry per `TrackingUID`.
 
 ## Button Actions
 
@@ -841,6 +842,7 @@ MySQL (or MariaDB). Key tables:
 - `gym` — gym tracking (team, slot_changes, battle_changes, gym_id)
 - `forts` — fort update tracking (fort_type, include_empty, change_types)
 - `maxbattle` — max battle tracking (pokemon_id, level, gmax, move)
+- `tappable` — tappable reward tracking (reward_type, reward, amount)
 - `profiles` — user profiles (profile_no, name, pokemon/raid/egg/invasion area overrides)
 - `user_locations` — per-user saved named locations (label → lat/lon) referenced by per-rule `override_location_label`
 

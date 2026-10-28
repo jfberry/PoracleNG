@@ -237,7 +237,7 @@ These fields are available in every alert template, with the exceptions noted: t
 
 `distance`, `bearing`, `bearingEmoji` and `userTrackDistance` are per-user fields computed for **pokemon alerts only** — see [Distance and bearing](#distance-and-bearing-pokemon-only). Other alert types render once per (template, platform, language) group and have no per-user distance.
 
-### Weather Fields (types with S2 cell data: pokemon, raid, egg, invasion, maxbattle)
+### Weather Fields (types with S2 cell data: pokemon, raid, egg, invasion, maxbattle, tappable)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -1160,6 +1160,68 @@ Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for n
 | `tths` | int | Seconds |
 
 `evolutions` / `megaEvolutions` are not set for max battles.
+
+---
+
+## Tappable (`tappable`)
+
+A tappable is a map object (Golbat type `TAPPABLE_TYPE_BOX`, `…_BREAKFAST`, `…_MAPLE`, `…_ROUTE_PIN`, …) that gives rewards when tapped: candy, XL candy, mega energy, items, stardust or pokecoins. Golbat sends a `tappable` webhook once per new or changed reward. Tappables that give a pokemon encounter are **not** covered — Golbat sends those as `pokemon` webhooks (`seenType` `tappable_encounter` / `tappable_lure_encounter`), so they render with the pokemon templates.
+
+A tappable sits either on a spawnpoint (`spawnpointId` set, coordinate-only map links) or on a pokestop (`pokestopId` / `pokestopName` set, map links point at the stop). The first reward is exposed as flat fields; every reward is in the `rewards` array. `imgUrl` / `imgUrlAlt` / `stickerUrl` are the first reward's icon (item, stardust, pokecoin, candy, XL candy or mega energy), falling back to `[fallbacks] img_url`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `color` | string | Tappable color hex (4CAF50) |
+| `tappableTypeName` | string | Translated tappable type (e.g. "Box"); per language |
+| `tappableTypeNameEng` | string | English copy of `tappableTypeName` |
+| `tappableType` | string | Golbat tappable type (e.g. `TAPPABLE_TYPE_BOX`); raw `tappable_type` |
+| `encounterId` | string | Tappable encounter ID (raw `encounter_id`) |
+| `spawnpointId` | string | Spawnpoint ID (absent for pokestop tappables) |
+| `pokestopName` | string | Pokestop name (pokestop tappables only; "Unknown" when Golbat has no name). `name` is an alias |
+| `pokestopId` | string | Pokestop ID (pokestop tappables only) |
+| `rewardString` | string | Translated rewards, comma-joined (e.g. "6 Zubat Candy", "Rare Candy", "250 Stardust"); per language |
+| `rewardStringEng` | string | English copy of `rewardString` |
+| `rewardName` | string | Translated name of the first reward's item or pokemon (the reward kind for stardust / pokecoins); per language |
+| `rewardNameEng` | string | English copy of `rewardName` |
+| `rewardType` | string | First reward's kind as Golbat names it: `item`, `stardust`, `pokecoin`, `pokemon_candy`, `xl_candy`, `mega_energy_pokemon_id`, `temp_evo_pokemon_branch`, `experience`, … |
+| `rewardTypeId` | int | First reward's quest reward type id: 2 item, 3 stardust, 4 candy, 8 pokecoin, 9 XL candy, 12 mega energy; 0 = not trackable |
+| `reward` | int | First reward as a tracking rule stores it: item id, pokemon id, or the amount for stardust / pokecoins |
+| `rewardAmount` | int | First reward's count |
+| `rewardPokemonId` | int | First reward's pokemon (candy / XL candy / mega energy), else 0 |
+| `rewardItemId` | int | First reward's item id, else 0 |
+| `rewardCount` | int | Number of rewards |
+| `rewards` | array | Every reward (see below); the translated `name` / `text` entries are per language |
+| `time` | string | Disappear time (empty when unknown) |
+| `disappearTime` | string | Disappear time, formatted (absent when unknown) |
+| `disappear_time` | int | Unix disappear timestamp; 0 / absent when unknown (for Discord `<t:N:R>`) |
+| `disappearTimeVerified` | bool | The disappear time is confirmed; `confirmedTime` is the same |
+| `tthd` / `tthh` / `tthm` / `tths` | int | Time remaining — only set when the disappear time is known |
+| `gameWeatherName` | string | Current weather in the S2 cell |
+| `gameWeatherEmoji` | string | Current weather emoji |
+
+`{{#each rewards}}` entries:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Translated reward (e.g. "6 Zubat Candy") |
+| `textEng` | string | English copy of `text` |
+| `name` | string | Translated item / pokemon name |
+| `nameEng` | string | English copy of `name` |
+| `type` | string | Golbat reward kind (`item`, `pokemon_candy`, …) |
+| `typeId` | int | Quest reward type id (0 = not trackable) |
+| `amount` | int | Reward count |
+| `pokemonId` | int | Pokemon id (candy / XL candy / mega energy) |
+| `itemId` | int | Item id |
+
+A rule matches when **any** reward matches it, so a box with candy and an item fires for a candy rule even when the item is listed first. Rewards with no trackable type (experience, stickers, …) are still listed and rendered. When `disappear_time` is 0 the expiry is unknown: there are no TTH fields and clean-deletion uses the default TTH.
+
+Example:
+
+```handlebars
+{{tappableTypeName}}: {{rewardString}}{{#if disappear_time}} — gone <t:{{disappear_time}}:R>{{/if}}
+{{#each rewards}}• {{text}}
+{{/each}}
+```
 
 ---
 

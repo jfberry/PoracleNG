@@ -30,7 +30,7 @@ source of truth. Design rationale: [`v2-api-design.md`](v2-api-design.md).
 
 ## Endpoint mapping — tracking
 
-`{type}` ∈ `pokemon, raid, egg, quest, invasion, incident (NEW), lure, nest, gym, fort, maxbattle`.
+`{type}` ∈ `pokemon, raid, egg, quest, invasion, incident (NEW), lure, nest, gym, fort, maxbattle, tappable (NEW)`.
 
 | v1 | v2 | Notes |
 |---|---|---|

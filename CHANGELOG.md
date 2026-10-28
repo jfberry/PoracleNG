@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`tappable` tracking type.** Alerts for tappables — reward boxes and other
+  map objects that give candy, XL candy, mega energy, items, stardust or
+  pokecoins when tapped. Track with `!tappable` (`stardust[:N]`,
+  `pokecoins[:N]`, `candy[:pokemon]`, `xlcandy[:pokemon]`,
+  `energy[:pokemon]`, item names, `all items`, `everything`, `amount:N`; a
+  bare pokemon name means its candy), `/tappable` + `/untrack tappable`, or
+  v2 `/api/v2/humans/{id}/tracking/tappable` (no v1 API). A rule matches when
+  any of the tappable's rewards matches. New `tappable` DTS type with
+  Discord/Telegram fallback templates and `!poracle-test tappable,…` data,
+  `[general] disable_tappable`, a `tappable` command-security key, mutes and
+  the unsubscribe button. `GET /health` reports `capabilities.tappable` and
+  `/api/config/poracleWeb` `disabledHooks` lists `tappable` when disabled.
+  **Operators:** Golbat must be built from a version with the `tappable`
+  webhook and configured to send `tappable` to Poracle, and the tileserver
+  needs the `poracle-tappable` template (in `tileserver_templates/`).
+  Encounter tappables are not covered — Golbat sends them as `pokemon`
+  webhooks, so `!track` handles them. `!restore` of a backup taken before
+  this release clears the profile's tappable rules (restore replaces every
+  tracking table).
 - **`exemptFromAreaSecurity` geofence property.** A fence that declares it
   (native or GeoJSON) is outside the community system: area_security never
   filters it out of a user's permitted areas, and reconciliation never prunes

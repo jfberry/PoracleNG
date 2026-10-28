@@ -10,6 +10,8 @@
 
 ## Changes
 
+**2026-10 — `tappable` tracking type.** Added (non-breaking): a 12th tracking type, `tappable` (reward boxes and other map objects that give candy, items, stardust… when tapped), on every tracking endpoint and in the full snapshot. It is v2 only — there is no v1 tappable API. `GET /health` reports `capabilities.tappable: true`, and `/api/config/poracleWeb` `disabledHooks` lists `tappable` when `[general] disable_tappable` is set. See [Per-type fields](#per-type-fields).
+
 **2026-10 — v2 API improvements for full client migration (#328).** Breaking for v2 clients:
 
 - **Mutes:** `tracking_type` is required when `scope=tracking` (`422` otherwise); an untyped tracking mute matches nothing. `DELETE …/mutes?scope=tracking&tracking_type=&value=`.
@@ -91,7 +93,7 @@ So: *is `{"status":"ok"}` the consistent success response?* Yes — it is the co
 
 ### Resource model
 
-Tracking rules are **sub-resources of the human** (the human *is* the user). `uid` is unique per type, and every item operation is **scoped by `(human, uid)`** — the ownership guard v1 enforces (`WHERE id=? AND uid=?`); you cannot touch a uid that isn't the addressed human's. `{type}` ∈ `pokemon`, `raid`, `egg`, `quest`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`.
+Tracking rules are **sub-resources of the human** (the human *is* the user). `uid` is unique per type, and every item operation is **scoped by `(human, uid)`** — the ownership guard v1 enforces (`WHERE id=? AND uid=?`); you cannot touch a uid that isn't the addressed human's. `{type}` ∈ `pokemon`, `raid`, `egg`, `quest`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`, `tappable`.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -125,7 +127,7 @@ Tracking rules are **sub-resources of the human** (the human *is* the user). `ui
 
 ### Wildcard & sentinel conventions
 
-> **The `null` contract.** `null` means unconstrained. A v2 client never needs to know how that is stored, and the stored representation may change without notice. Read `null`, write `null` (or omit): a GET → PUT / POST of any stored rule results in `unchanged`, enforced by a test over every nullable field of all 11 types. Schemas carry display bounds (`minimum`/`maximum`) where a natural bound exists; a field whose only ceiling is a sentinel has no `maximum`.
+> **The `null` contract.** `null` means unconstrained. A v2 client never needs to know how that is stored, and the stored representation may change without notice. Read `null`, write `null` (or omit): a GET → PUT / POST of any stored rule results in `unchanged`, enforced by a test over every nullable field of all 12 types. Schemas carry display bounds (`minimum`/`maximum`) where a natural bound exists; a field whose only ceiling is a sentinel has no `maximum`.
 >
 > The sentinel table below is **internal, for readers of the v1 API and of the database only**. It is not part of the v2 contract and a v2 client must not depend on it. In the code, each field's wildcard is a shared named constant (`v2_wildcards.go`) used by both `Translate` and `ToRule`.
 
@@ -140,7 +142,7 @@ The sentinels (internal; verified against the matcher's "match any" semantics):
 | `100` / `55` / `15` / `6` / `5` | the ceiling of the range, i.e. "no upper bound" | pokemon `max_iv` (100), `max_level` (55), `max_atk`/`max_def`/`max_sta` (15), `max_rarity` (6), `max_size` (5) |
 | `4096` | "no upper rank limit" (PVP ranks never exceed it) | pokemon `pvp_ranking_worst` |
 | `9000000` | "no upper weight" | pokemon `max_weight` |
-| `0` | context-dependent "any / none / no floor" — e.g. `form` 0 = any form, `pvp_ranking_league` 0 = IV-mode (no PVP), nest `pokemon_id`/`min_spawn_avg` 0 = any, quest `reward` 0 = all items/pokemon/candy/mega-energy of that `reward_type` | most types |
+| `0` | context-dependent "any / none / no floor" — e.g. `form` 0 = any form, `pvp_ranking_league` 0 = IV-mode (no PVP), nest `pokemon_id`/`min_spawn_avg` 0 = any, quest and tappable `reward` 0 = all items/pokemon/candy/mega-energy of that `reward_type`, tappable `amount` 0 = no minimum count | most types |
 | `0` (distance) | **NOT zero metres** — `distance` 0 means "match by the profile's geofence AREAS instead of a radius". A positive `distance` switches to a haversine radius. | common field, all types |
 
 **raid / maxbattle `level` is derived from `pokemon_id`** (the matcher reads `level` only in by-level mode — `matching/raid.go:65`, `matching/maxbattle.go:48`):
@@ -164,7 +166,7 @@ So `90` is the by-level "all tiers" value; `9000` is the specific-boss `level` *
 Concretely, the projection rules are:
 
 - **`uid`** — always present.
-- **Required fields** (`pokemon.pokemon_id`, `quest.reward_type`, `incident.display_type`, `gym.team`, `lure.lure_id`, `egg.level`) — always present with their value; never nulled.
+- **Required fields** (`pokemon.pokemon_id`, `quest.reward_type`, `tappable.reward_type`, `incident.display_type`, `gym.team`, `lure.lure_id`, `egg.level`) — always present with their value; never nulled.
 - **Active invasion/incident mode** — an invasion read emits `grunt_type`, the stored value, for every rule (catch-alls included); `type_id` / `grunt_id` / `everything` / `boss` are write conveniences and are omitted. Invasion `gender` is `null` at its `any` default and shown as male/female on every rule, the `everything`/`boss` catch-alls included, since the matcher applies it to them.
 - **Every other optional filter** — `null` when the stored value equals its documented wildcard/default (the same sentinels listed above; enums null at their default — `team`/`gender` `any`, `rsvp_changes` `none`, `fort_type` `everything`; bools null when `false`; `include_empty` null at its `true` default; `change_types`/`override_areas` null when empty; `gym_id`/`station_id`/`override_location_label` null when unset). Otherwise the meaningful value is emitted.
 
@@ -178,7 +180,7 @@ The wire form is **present-but-null** (e.g. `"min_iv": null`), not an omitted ke
 | `distance` | int | metres; `0` = use the profile's areas instead of a radius |
 | `template` | string | template name; empty = server default |
 | `clean` | bool | auto-delete the alert on expiry |
-| `edit` | bool | keep the message updated in place — honoured for pokemon (within the server's edit window), raid, egg, lure and incident (showcase); rejected with 422 for gym, invasion, nest, maxbattle and quest |
+| `edit` | bool | keep the message updated in place — honoured for pokemon (within the server's edit window), raid, egg, lure and incident (showcase); rejected with 422 for gym, invasion, nest, maxbattle, quest and tappable |
 | `summary` | bool | route into the summary digest (where supported) |
 | `ping` | string | mention string appended to the alert |
 | `override_location_label` | string? | use a saved named location instead of the profile location |
@@ -209,6 +211,8 @@ The wire form is **present-but-null** (e.g. `"min_iv": null`), not an omitted ke
 **fort** — `fort_type` (enum `pokestop|gym|everything`), `include_empty` (bool, **default `true`**), `change_types` (string[] of `location|new|removal|image_url|name|description`).
 
 **maxbattle** — `pokemon_id` (int, omit = track by level / any boss; stored `9000`), `level` (int, by-level only — omit for any tier; derived from `pokemon_id`, see Wildcard conventions), `gmax` (bool), `move` (int).
+
+**tappable** — `reward_type`* (int — quest reward ids, no wildcard: `2`=item, `3`=stardust, `4`=candy, `8`=pokecoins, `9`=xl_candy, `12`=mega_energy; anything else is a `422`), `reward` (int — item id for `2`, pokemon id for `4`/`9`/`12`, **minimum amount** for `3`/`8`; omit or send 0 to match any reward of that category), `amount` (int — minimum reward count for `2`/`4`/`9`/`12`; omit for no minimum; **rejected with 422 for `3`/`8`**, whose minimum is `reward`). No `form`, `shiny` or `summary`; `edit: true` is rejected with 422. A rule matches when any of the tappable's rewards matches. Encounter tappables are not covered: Golbat sends them as pokemon webhooks, so they are tracked with `pokemon` rules.
 
 \* = required.
 
@@ -302,7 +306,7 @@ Profiles likewise return `area` as `[]string` and `active_hours` as the typed ar
 
 ### `blocked_alerts` (read-only on the human resource)
 
-`[]string`, **derived from `command_security` during reconciliation — not settable via the API**. Appears in `GET /v2/humans/{id}`. Enum values: `monster` (= pokemon alerts), `pvp`, `raid`, `egg`, `quest`, `invasion`, `lure`, `nest`, `gym`, `fort`, `maxbattle`, `specificgym`, `specificstation`. (Note the `monster`↔pokemon token mismatch is a v1 carry-over; documented, not "fixed," since it's an internal-derived read field.)
+`[]string`, **derived from `command_security` during reconciliation — not settable via the API**. Appears in `GET /v2/humans/{id}`. Enum values: `monster` (= pokemon alerts), `pvp`, `raid`, `egg`, `quest`, `invasion`, `lure`, `nest`, `gym`, `fort`, `maxbattle`, `tappable`, `specificgym`, `specificstation`. (Note the `monster`↔pokemon token mismatch is a v1 carry-over; documented, not "fixed," since it's an internal-derived read field.)
 
 ### Saved locations — full CRUD (one **new** capability)
 

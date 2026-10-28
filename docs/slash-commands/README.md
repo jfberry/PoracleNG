@@ -21,6 +21,6 @@ Slash is:
 - **All-ephemeral by default** — Poracle conversations are inherently private; no public-channel response surface.
 - **Coexisting with text commands** — existing `!` text commands work unchanged.
 
-18 commands surfaced: `/version /tracked /help /info /language /track /raid /egg /quest /invasion /lure /nest /maxbattle /gym /fort /untrack /area /profile /location`.
+24 commands surfaced: `/version /tracked /help /info /language /start /stop /track /raid /egg /quest /tappable /invasion /incident /lure /nest /maxbattle /gym /fort /untrack /area /profile /location /summary`. `/tappable` takes one required `reward` kind (candy, XL candy, mega energy, item, stardust, pokecoins, everything) qualified by `pokemon` / `item` / `amount`; `/untrack tappable` removes a tappable rule.
 
-Text-only commands (deliberately): `!poracle`, `!poracle-test`, admin operations (`!broadcast`, `!apply`, `!enable`, `!disable`, `!unregister`, `!channel`, `!webhook`, `!autocreate`, `!role`, `!ask`, `!script`, `!userlist`, `!backup`, `!restore`, `!start`, `!stop`).
+Text-only commands (deliberately): `!poracle`, `!poracle-test`, admin operations (`!broadcast`, `!apply`, `!enable`, `!disable`, `!unregister`, `!channel`, `!webhook`, `!autocreate`, `!role`, `!ask`, `!script`, `!userlist`, `!backup`, `!restore`).
