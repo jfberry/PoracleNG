@@ -483,10 +483,16 @@ func (c *ScriptCommand) tappableToScript(ctx *bot.CommandContext, prefix string,
 	case matching.TappableRewardPokecoin:
 		withMin("pokecoins")
 	case matching.TappableRewardItem:
-		if name := c.itemName(ctx, t.Reward); t.Reward > 0 && name != "" {
-			parts = append(parts, name)
-		} else {
+		switch name := c.itemName(ctx, t.Reward); {
+		case t.Reward == 0:
 			parts = append(parts, "all_items")
+		case name != "":
+			parts = append(parts, name)
+		default:
+			// No English name to re-parse: emit a token !tappable rejects
+			// (like reward_type:N below) rather than all_items, which would
+			// re-import as a broader rule.
+			parts = append(parts, fmt.Sprintf("item:%d", t.Reward))
 		}
 	default:
 		parts = append(parts, fmt.Sprintf("reward_type:%d", t.RewardType))

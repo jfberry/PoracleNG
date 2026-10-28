@@ -388,6 +388,19 @@ func TestTappable_ScriptLines(t *testing.T) {
 	assert.Equal(t, "!tappable all_items", c.tappableToScript(ctx, "!", &db.TappableTrackingAPI{RewardType: 2}))
 }
 
+// An item with no English name must not export as all_items (a broader
+// rule on re-import); the placeholder is refused by !tappable instead.
+func TestTappable_ScriptUnnamedItemNotBroadened(t *testing.T) {
+	ctx := scriptCtx(t)
+	line := (&ScriptCommand{}).tappableToScript(ctx, "!", &db.TappableTrackingAPI{RewardType: 2, Reward: 4242})
+	assert.Equal(t, "!tappable item:4242", line)
+
+	tctx := tappableCtx(t)
+	r := runTappable(t, tctx, strings.TrimPrefix(line, "!tappable "))
+	assert.Equal(t, "🙅", r[0].React, r[0].Text)
+	assert.Empty(t, tappableRows(t, tctx))
+}
+
 func TestTappable_Tracked(t *testing.T) {
 	ctx := scriptCtx(t)
 	require.Equal(t, "✅", runTappable(t, ctx, "xlcandy")[0].React)
