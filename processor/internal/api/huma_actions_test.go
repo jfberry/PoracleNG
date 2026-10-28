@@ -102,6 +102,7 @@ func TestHumaTest_ResolvesDTSTypeNames(t *testing.T) {
 		// CLI-display hyphenated forms must keep working.
 		{"fort-update", "fort_update"},
 		{"max-battle", "max_battle"},
+		{"tappable", "tappable"},
 		// invasion/lure are unaffected: they resolve to themselves, exactly
 		// as the pre-fix passthrough behaved (see resolveTestWireType's doc
 		// comment for why the pokestop-guard direction differs from

@@ -44,6 +44,8 @@ func TestResolveTestWireType(t *testing.T) {
 		{"gym", "gym"},
 		{"nest", "nest"},
 		{"quest", "quest"},
+		{"tappable", "tappable"},
+		{"Tappable", "tappable"},
 
 		// CLI-display hyphenated forms.
 		{"fort-update", "fort_update"},

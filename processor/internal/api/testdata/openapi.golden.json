@@ -20764,7 +20764,7 @@
                     "description": "Target platform string (defaults to discord)"
                   },
                   "type": {
-                    "description": "Webhook type string: pokemon, raid, invasion, quest, pokestop, gym, nest, fort-update, max-battle"
+                    "description": "Webhook type string: pokemon, raid, invasion, quest, pokestop, gym, nest, fort-update, max-battle, tappable"
                   },
                   "webhook": {
                     "description": "Raw webhook message payload (open shape; depends on the type field)"
@@ -22996,7 +22996,7 @@
                     "type": "object"
                   },
                   "type": {
-                    "description": "DTS template-type name (monster, monsterChanged, maxbattle, ...) OR raw webhook type (pokemon, raid, invasion, quest, pokestop, gym, nest, fort_update/fort-update, max_battle/max-battle, ...) — resolved case-insensitively (see internal/api's resolveTestWireType)",
+                    "description": "DTS template-type name (monster, monsterChanged, maxbattle, ...) OR raw webhook type (pokemon, raid, invasion, quest, pokestop, gym, nest, fort_update/fort-update, max_battle/max-battle, tappable, ...) — resolved case-insensitively (see internal/api's resolveTestWireType)",
                     "type": "string"
                   },
                   "webhook": {

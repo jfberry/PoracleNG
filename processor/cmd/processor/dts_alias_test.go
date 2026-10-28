@@ -37,6 +37,7 @@ func TestDtsAlias_DTSNamesResolve(t *testing.T) {
 		{"gym", "gym", "gym", false},
 		{"nest", "nest", "nest", false},
 		{"maxbattle", "max_battle", "maxbattle", false},
+		{"tappable", "tappable", "tappable", false},
 	}
 
 	for _, tc := range cases {
@@ -269,7 +270,7 @@ func TestEnrichForType_AliasTemplateTypeAuthoritative(t *testing.T) {
 
 func TestDtsTypeMap_ContainsCanonicalEntries(t *testing.T) {
 	m := dtsTypeMap()
-	for _, name := range []string{"monster", "raid", "egg", "quest", "invasion", "lure", "gym", "nest", "maxbattle"} {
+	for _, name := range []string{"monster", "raid", "egg", "quest", "invasion", "lure", "gym", "nest", "maxbattle", "tappable"} {
 		if _, ok := m[name]; !ok {
 			t.Errorf("dtsTypeMap() missing entry %q", name)
 		}

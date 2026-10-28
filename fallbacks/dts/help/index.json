@@ -10,7 +10,7 @@
       "fields": [
         {
           "name": "Tracking commands",
-          "value": "`{{prefix}}help track` — alerts for specific pokemon (IV, CP, PVP)\n`{{prefix}}help raid` — raid bosses at gyms\n`{{prefix}}help egg` — raid eggs before they hatch\n`{{prefix}}help quest` — field research tasks\n`{{prefix}}help incident` — Team Rocket, Kecleon, Showcases, gold stops\n`{{prefix}}help lure` — lure modules at pokestops\n`{{prefix}}help nest` — pokemon nest spawns\n`{{prefix}}help gym` — gym team changes and battles\n`{{prefix}}help fort` — pokestop/gym location updates\n`{{prefix}}help maxbattle` — dynamax/gigantamax raids"
+          "value": "`{{prefix}}help track` — alerts for specific pokemon (IV, CP, PVP)\n`{{prefix}}help raid` — raid bosses at gyms\n`{{prefix}}help egg` — raid eggs before they hatch\n`{{prefix}}help quest` — field research tasks\n`{{prefix}}help incident` — Team Rocket, Kecleon, Showcases, gold stops\n`{{prefix}}help lure` — lure modules at pokestops\n`{{prefix}}help nest` — pokemon nest spawns\n`{{prefix}}help gym` — gym team changes and battles\n`{{prefix}}help fort` — pokestop/gym location updates\n`{{prefix}}help maxbattle` — dynamax/gigantamax raids\n`{{prefix}}help tappable` — reward tappables (candy, items, stardust)"
         },
         {
           "name": "Review and remove tracking",

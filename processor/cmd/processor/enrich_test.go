@@ -184,6 +184,15 @@ func TestEnrichTypes_TemplateTypeAndNonEmptyBase(t *testing.T) {
 			},
 			wantTemplateType: "maxbattle",
 		},
+		{
+			name:        "tappable",
+			webhookType: "tappable",
+			testID:      "default",
+			enrich: func(raw json.RawMessage) (*enrichResult, error) {
+				return ps.enrichTappable(raw, "en", true)
+			},
+			wantTemplateType: "tappable",
+		},
 	}
 
 	for _, tc := range cases {

@@ -121,6 +121,7 @@ var typeEnrichEntries = map[string][]string{
 	"rsvpChanges":    {"Raid", "RaidTranslate"},
 	"egg":            {"Raid", "RaidTranslate"},
 	"maxbattle":      {"Maxbattle", "MaxbattleTranslate"},
+	"tappable":       {"Tappable", "TappableTranslate"},
 }
 
 // derivedFieldSources maps catalogued view fields that are derived later

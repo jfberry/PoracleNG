@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -109,6 +110,7 @@ func TestResolveHookType_ExistingFormsUnchanged(t *testing.T) {
 		{"rsvp-changes", "rsvp_changes"},
 		{"fort-update", "fort_update"},
 		{"max-battle", "max_battle"},
+		{"tappable", "tappable"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.token, func(t *testing.T) {
@@ -326,5 +328,44 @@ func TestPoracleTest_UnknownType(t *testing.T) {
 	}
 	if fake.gotWebhookType != "" {
 		t.Errorf("not-a-real-type: ProcessTest was called with webhookType %q, want no call", fake.gotWebhookType)
+	}
+}
+
+// TestPoracleTest_TappableFreshensTimestamps: the tappable preview keeps the
+// scenario's own lifetime (the pokestop scenario expires 120 s after its tap)
+// but moves it to now, so the alert isn't already expired.
+func TestPoracleTest_TappableFreshensTimestamps(t *testing.T) {
+	ctx, fake := poracleTestCmdCtx(t)
+	before := time.Now().Unix()
+	replies := runPoracleTest(t, ctx, "tappable", "pokestop")
+	if len(replies) == 0 || replies[0].React != "✅" {
+		t.Fatalf("tappable,pokestop: replies = %+v, want a ✅ ack", replies)
+	}
+	if fake.gotWebhookType != "tappable" {
+		t.Errorf(`ProcessTest webhookType = %q, want "tappable"`, fake.gotWebhookType)
+	}
+	var hook struct {
+		DisappearTime int64 `json:"disappear_time"`
+		Updated       int64 `json:"updated"`
+	}
+	if err := json.Unmarshal(fake.gotRaw, &hook); err != nil {
+		t.Fatal(err)
+	}
+	if hook.Updated < before {
+		t.Errorf("updated = %d, want >= %d (freshened)", hook.Updated, before)
+	}
+	if got := hook.DisappearTime - hook.Updated; got != 120 {
+		t.Errorf("disappear_time - updated = %d, want 120", got)
+	}
+}
+
+func TestFreshenTappableHook_UnknownExpiryLeftAlone(t *testing.T) {
+	hook := map[string]any{"disappear_time": float64(0), "updated": float64(1)}
+	freshenTappableHook(hook, 1000)
+	if hook["disappear_time"] != float64(0) {
+		t.Errorf("disappear_time = %v, want 0 (unknown stays unknown)", hook["disappear_time"])
+	}
+	if hook["updated"] != int64(1000) {
+		t.Errorf("updated = %v, want 1000", hook["updated"])
 	}
 }

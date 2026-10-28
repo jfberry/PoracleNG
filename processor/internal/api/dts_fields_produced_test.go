@@ -142,6 +142,7 @@ func TestFieldCatalogue_PerTypeGroups(t *testing.T) {
 		{"quest", true, true, false, true},
 		{"nest", true, true, false, true},
 		{"fort-update", true, false, true, true},
+		{"tappable", true, true, true, true},
 		{"weatherchange", false, false, true, true},
 		{"questSummary", false, false, false, false},
 		{"greeting", false, false, false, false},

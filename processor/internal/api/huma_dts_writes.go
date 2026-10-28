@@ -292,7 +292,7 @@ func RegisterDTSSaveTemplates(api huma.API, ts dtsSaveWriter) {
 // huma never rejects a wrong-typed scalar before the handler — preserving the
 // legacy lenient 400 contract.
 type dtsEnrichRequest struct {
-	Type     openJSON `json:"type" doc:"Webhook type string: pokemon, raid, invasion, quest, pokestop, gym, nest, fort-update, max-battle"`
+	Type     openJSON `json:"type" doc:"Webhook type string: pokemon, raid, invasion, quest, pokestop, gym, nest, fort-update, max-battle, tappable"`
 	Webhook  openJSON `json:"webhook" doc:"Raw webhook message payload (open shape; depends on the type field)"`
 	Language openJSON `json:"language" doc:"Locale code string (defaults to en)"`
 	Platform openJSON `json:"platform" doc:"Target platform string (defaults to discord)"`

@@ -14,7 +14,7 @@
         },
         {
           "name": "Tip",
-          "value": "The output covers every tracking type — pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle — for your currently-active profile only. Switch profile first (`{{prefix}}profile switch <name>`) to export a different profile."
+          "value": "The output covers every tracking type — pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle, tappable — for your currently-active profile only. Switch profile first (`{{prefix}}profile switch <name>`) to export a different profile."
         }
       ]
     }

@@ -466,6 +466,58 @@ var maxbattleFields = []FieldDef{
 	{Name: "total_stationed_gmax", Type: "int", Description: "Total stationed Gmax", Category: "other"},
 }
 
+var tappableFields = []FieldDef{
+	{Name: "rewardString", Type: "string", Description: "Translated rewards, comma-joined (e.g. \"6 Zubat Candy\", \"Rare Candy\", \"250 Stardust\")", Category: "reward", Preferred: true},
+	{Name: "rewardStringEng", Type: "string", Description: "English copy of rewardString", Category: "reward"},
+	{Name: "rewardName", Type: "string", Description: "Translated name of the first reward's item or pokemon (the reward kind for stardust / pokecoins)", Category: "reward", Preferred: true},
+	{Name: "rewardNameEng", Type: "string", Description: "English copy of rewardName", Category: "reward"},
+	{Name: "rewardType", Type: "string", Description: "First reward's kind as Golbat names it: item, stardust, pokecoin, pokemon_candy, xl_candy, mega_energy_pokemon_id, temp_evo_pokemon_branch, experience, ...", Category: "reward"},
+	{Name: "rewardTypeId", Type: "int", Description: "First reward's quest reward type id (2 item, 3 stardust, 4 candy, 8 pokecoin, 9 XL candy, 12 mega energy; 0 = not trackable)", Category: "reward"},
+	{Name: "reward", Type: "int", Description: "First reward as a tracking rule stores it: item id, pokemon id, or the amount for stardust / pokecoins", Category: "reward"},
+	{Name: "rewardAmount", Type: "int", Description: "First reward's count", Category: "reward", Preferred: true},
+	{Name: "rewardPokemonId", Type: "int", Description: "First reward's pokemon (candy / XL candy / mega energy), else 0", Category: "reward"},
+	{Name: "rewardItemId", Type: "int", Description: "First reward's item id, else 0", Category: "reward"},
+	{Name: "rewardCount", Type: "int", Description: "Number of rewards", Category: "reward"},
+	{Name: "rewards", Type: "array", Description: "Every reward: {type, typeId, amount, pokemonId, itemId, name, nameEng, text, textEng} — iterate with {{#each rewards}}", Category: "reward"},
+	{Name: "tappableTypeName", Type: "string", Description: "Translated tappable type (e.g. \"Box\")", Category: "identity", Preferred: true},
+	{Name: "tappableTypeNameEng", Type: "string", Description: "English copy of tappableTypeName", Category: "identity"},
+	{Name: "tappableType", Type: "string", Description: "Golbat tappable type (e.g. TAPPABLE_TYPE_BOX)", Category: "identity"},
+	{Name: "tappable_type", Type: "string", Description: "Golbat tappable type (webhook `type`)", Category: "identity", PreferredAlternative: "tappableType"},
+	{Name: "encounterId", Type: "string", Description: "Tappable encounter ID", Category: "identity"},
+	{Name: "encounter_id", Type: "string", Description: "Tappable encounter ID (webhook)", Category: "identity", RawWebhook: true, PreferredAlternative: "encounterId"},
+	{Name: "spawnpointId", Type: "string", Description: "Spawnpoint ID (absent for pokestop tappables)", Category: "identity"},
+	{Name: "pokestopName", Type: "string", Description: "Pokestop name (pokestop tappables only; \"Unknown\" when Golbat has no name)", Category: "location", Preferred: true},
+	{Name: "pokestopId", Type: "string", Description: "Pokestop ID (pokestop tappables only)", Category: "location"},
+	{Name: "time", Type: "string", Description: "Disappear time (empty when unknown)", Category: "time", Preferred: true},
+	{Name: "disappearTime", Type: "string", Description: "Disappear time, formatted (absent when unknown)", Category: "time"},
+	{Name: "disappear_time", Type: "int", Description: "Unix disappear timestamp, 0 when unknown (for Discord <t:N:R>)", Category: "time"},
+	{Name: "disappearTimeVerified", Type: "bool", Description: "The disappear time is confirmed", Category: "time"},
+	{Name: "confirmedTime", Type: "bool", Description: "Same as disappearTimeVerified", Category: "time"},
+	{Name: "gameWeatherName", Type: "string", Description: "Current weather in the S2 cell", Category: "weather"},
+	{Name: "gameWeatherEmoji", Type: "string", Description: "Current weather emoji", Category: "weather"},
+	{Name: "color", Type: "string", Description: "Tappable embed color hex (always 4CAF50)", Category: "other"},
+}
+
+var tappableBlockScopes = []BlockScope{
+	{
+		Helper:         "each",
+		Args:           []string{"rewards"},
+		IterableFields: []string{"rewards"},
+		Description:    "Iterate over the tappable's rewards",
+		Fields: []FieldDef{
+			{Name: "text", Type: "string", Description: "Translated reward (e.g. \"6 Zubat Candy\")", Category: "reward", Preferred: true},
+			{Name: "textEng", Type: "string", Description: "English copy of text", Category: "reward"},
+			{Name: "name", Type: "string", Description: "Translated item / pokemon name", Category: "reward"},
+			{Name: "nameEng", Type: "string", Description: "English copy of name", Category: "reward"},
+			{Name: "type", Type: "string", Description: "Golbat reward kind (item, pokemon_candy, ...)", Category: "reward"},
+			{Name: "typeId", Type: "int", Description: "Quest reward type id (0 = not trackable)", Category: "reward"},
+			{Name: "amount", Type: "int", Description: "Reward count", Category: "reward"},
+			{Name: "pokemonId", Type: "int", Description: "Pokemon id (candy / XL candy / mega energy)", Category: "reward"},
+			{Name: "itemId", Type: "int", Description: "Item id", Category: "reward"},
+		},
+	},
+}
+
 var weatherChangeFields = []FieldDef{
 	{Name: "weatherName", Type: "string", Description: "New weather name", Category: "weather", Preferred: true},
 	{Name: "oldWeatherName", Type: "string", Description: "Previous weather name", Category: "weather", Preferred: true},
@@ -780,6 +832,11 @@ var lureSnippets = []Snippet{
 	{Label: "Countdown", Insert: "<t:{{expirationTimestamp}}:R>", Description: "Discord relative countdown", Category: "lure", Platform: "discord"},
 }
 
+var tappableSnippets = []Snippet{
+	{Label: "Countdown", Insert: "{{#if disappear_time}}<t:{{disappear_time}}:R>{{/if}}", Description: "Discord relative countdown (skipped when the expiry is unknown)", Category: "tappable", Platform: "discord"},
+	{Label: "Each reward", Insert: "{{#each rewards}}{{text}}\n{{/each}}", Description: "One line per reward", Category: "tappable"},
+}
+
 var maxbattleSnippets = []Snippet{
 	{Label: "Countdown", Insert: "<t:{{endTimestamp}}:R>", Description: "Discord relative countdown", Category: "maxbattle", Platform: "discord"},
 }
@@ -856,6 +913,7 @@ var fieldsByType = map[string]fieldEntry{
 	"gym":           {Fields: alertFields(true, true, true, gymFields), Snippets: commonSnippets},
 	"fort-update":   {Fields: alertFields(true, false, true, fortUpdateFields), Snippets: commonSnippets},
 	"maxbattle":     {Fields: alertFields(true, true, true, maxbattleFields), Snippets: append(commonSnippets, maxbattleSnippets...)},
+	"tappable":      {Fields: alertFields(true, true, true, tappableFields), BlockScopes: tappableBlockScopes, Snippets: append(commonSnippets, tappableSnippets...)},
 	"weatherchange": {Fields: alertFields(false, false, true, weatherChangeFields), Snippets: commonSnippets},
 	"greeting":      {Fields: greetingFields, Snippets: commonSnippets},
 }

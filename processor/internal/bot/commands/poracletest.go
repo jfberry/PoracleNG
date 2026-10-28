@@ -86,7 +86,7 @@ func loadTestdata(baseDir string) ([]testdataEntry, error) {
 // spellings (pokemon, raid, pokestop, ...) plus the CLI-display hyphenated
 // spelling for each derived type (monster-changed, max-battle, ...). Also
 // echoed verbatim in the usage/unknown-type reply text.
-var validHooks = []string{"pokemon", "raid", "pokestop", "incident", "gym", "nest", "quest", "quest-summary", "monster-changed", "rsvp-changes", "fort-update", "max-battle", "showcase", "weatherchange"}
+var validHooks = []string{"pokemon", "raid", "pokestop", "incident", "gym", "nest", "quest", "quest-summary", "monster-changed", "rsvp-changes", "fort-update", "max-battle", "showcase", "weatherchange", "tappable"}
 
 func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if !ctx.IsAdmin {
@@ -283,6 +283,8 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 		battleEnd := nowSecs + 120*60
 		hook["battle_end"] = battleEnd
 		hook["end_time"] = battleEnd
+	case "tappable":
+		freshenTappableHook(hook, nowSecs)
 	case "quest", "gym", "quest_summary":
 		// No timestamp freshening needed
 	case "monster_changed":
@@ -424,6 +426,8 @@ func resolveDTSType(hookType string, webhook map[string]any) string {
 		return "maxbattle"
 	case "showcase":
 		return "showcase"
+	case "tappable":
+		return "tappable"
 	case "quest_summary":
 		return "questSummary"
 	case "monster_changed":
@@ -433,6 +437,25 @@ func resolveDTSType(hookType string, webhook map[string]any) string {
 	default:
 		return hookType // quest, gym, nest, egg, invasion, lure — match 1:1
 	}
+}
+
+// freshenTappableHook moves a tappable test webhook's `updated` to now and
+// its `disappear_time` to now plus the scenario's own lifetime
+// (disappear_time - updated; 10 minutes when that isn't positive), so a
+// 120-second fort tappable stays a 120-second preview. disappear_time 0
+// (unknown) is left alone.
+func freshenTappableHook(hook map[string]any, nowSecs int64) {
+	disappear, _ := hook["disappear_time"].(float64)
+	if disappear == 0 {
+		hook["updated"] = nowSecs
+		return
+	}
+	lifetime := int64(10 * 60)
+	if updated, ok := hook["updated"].(float64); ok && disappear > updated {
+		lifetime = int64(disappear - updated)
+	}
+	hook["updated"] = nowSecs
+	hook["disappear_time"] = nowSecs + lifetime
 }
 
 // moveNestHook moves a nest test webhook to (lat, lon): the centre point
