@@ -1,30 +1,32 @@
-[{
-  "id": "location",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!location",
-      "description": "Manage your default location and saved named locations. Distance filters (`d:<metres>`) measure from a location.",
-      "fields": [
-        {
-          "name": "Default location",
-          "value": "`{{prefix}}location` — show your current default\n`{{prefix}}location 51.5074,-0.1278` — set by lat,lon\n`{{prefix}}location 10 Downing Street, London` — set by address (requires geocoder)\n`{{prefix}}location remove default` — clear it"
-        },
-        {
-          "name": "Saved named locations",
-          "value": "`{{prefix}}location add Home 51.5074,-0.1278` — save a named location by coords\n`{{prefix}}location add Home Canterbury` — or by address (requires geocoder)\n`{{prefix}}location add \"Holiday Home\" santa monica` — multi-word names need quotes\n`{{prefix}}location list` — list default + all saved\n`{{prefix}}location show Home` — show one (use `default` for the default location)\n`{{prefix}}location remove Home` — delete (refuses if any tracking rule references it)"
-        },
-        {
-          "name": "Use on tracking rules",
-          "value": "`{{prefix}}track pikachu d:500 location:Home` — distance check from Home instead of your default\n`{{prefix}}track pikachu area:london,paris` — restrict to specific areas instead of your default areas\n\n`location:` requires `d:`. `area:` and `d:` are mutually exclusive. `area:` and `location:` are mutually exclusive."
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}area` — manage your default areas\n`{{prefix}}tracked` — see which rules use which override"
-        }
-      ]
+[
+  {
+    "id": "location",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!location",
+        "description": "Set the point that `d:` distances are measured from, and save named locations to use on individual rules.",
+        "fields": [
+          {
+            "name": "Your location",
+            "value": "`{{prefix}}location 51.5074,-0.1278` — set it by coordinates\n`{{prefix}}location 10 Downing Street, London` — set it by address (if the server has a geocoder)\n`{{prefix}}location` — show it\n`{{prefix}}location remove default` — clear it\n\nEach profile has its own location; this sets the one for the profile you are on."
+          },
+          {
+            "name": "Saved locations",
+            "value": "`{{prefix}}location add home 51.5074,-0.1278` — save a named location\n`{{prefix}}location add work Canterbury` — or save one by address\n`{{prefix}}location add \"holiday home\" Santa Monica` — put quotes round names with spaces\n`{{prefix}}location list` — your location and all saved ones\n`{{prefix}}location show home` — show one (`default` shows your location)\n`{{prefix}}location remove home` — delete one (refused while a tracking rule uses it)\n\nNames are stored in lower case. Saved locations are shared by all your profiles. To move one, remove it and add it again."
+          },
+          {
+            "name": "Use on tracking rules",
+            "value": "`{{prefix}}track pikachu d:500 location:home` — measure from \"home\" instead of your location\n`{{prefix}}track pikachu area:north,south` — use these areas instead of your selected ones\n\n`location:` needs a `d:`. `area:` can't be combined with `d:` or `location:`. Your admin may limit the `d:` distance."
+          },
+          {
+            "name": "Related",
+            "value": "`{{prefix}}help area` — choose your areas\n`{{prefix}}tracked` — shows which rules use `location:` or `area:`"
+          }
+        ]
+      }
     }
   }
-}]
+]

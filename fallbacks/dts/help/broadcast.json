@@ -1,30 +1,32 @@
-[{
-  "id": "broadcast",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!broadcast (admin)",
-      "description": "Send a message from `config/broadcast.json` to registered users selected by location or area. Useful for maintenance notices, feature announcements, or event warnings.",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}broadcast <filter> <message id>`\n\nThe message id is the `id` of an entry in `config/broadcast.json` (see `examples/broadcast.json`). Entries can set `\"platform\": \"discord\"` or `\"telegram\"`, or omit it to serve both. Only enabled user registrations receive it, never channels, groups or webhooks."
-        },
-        {
-          "name": "Filter the audience",
-          "value": "`{{prefix}}broadcast 51.5,-0.12 d5000 donate` — users whose location is within 5000 m\n`{{prefix}}broadcast @london @paris donate` — users who have any of those areas selected\n\nA location (with a `d` distance in metres) and areas can be combined; a user matching either receives the message. At least one filter is required."
-        },
-        {
-          "name": "Test",
-          "value": "`{{prefix}}broadcast test donate` — send the message only to yourself."
-        },
-        {
-          "name": "Care",
-          "value": "Broadcasts count against per-user rate limits. A large broadcast can take minutes to complete as the dispatcher paces it through platform API limits. You'll see delivery progress in logs."
-        }
-      ]
+[
+  {
+    "id": "broadcast",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!broadcast (admin)",
+        "description": "Send a message from `config/broadcast.json` to registered users chosen by location or area — for maintenance notices, announcements or event warnings.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}broadcast [<lat>,<lon> d<metres>] [@<area> …] [test] <message id>`\n\nThe message id is the `id` of an entry in `config/broadcast.json` (see `examples/broadcast.json`). An entry can set `\"platform\": \"discord\"` or `\"telegram\"`, or leave it out to serve both. If any recipient's platform has no entry, nothing is sent.\n\nOnly enabled users receive it — never channels, groups or webhooks."
+          },
+          {
+            "name": "Choose the audience",
+            "value": "`{{prefix}}broadcast 51.5,-0.12 d5000 donate` — users whose location is within 5000 m\n`{{prefix}}broadcast @london @paris donate` — users who have either area selected\n\nWrite the coordinates without a space after the comma, before the message id. A location and areas can be combined: a user matching either gets the message. At least one is required. Areas are matched against the areas of each user's active profile; write spaces in area names as underscores (`@north_london`)."
+          },
+          {
+            "name": "Test",
+            "value": "`{{prefix}}broadcast test donate` — send the message only to yourself."
+          },
+          {
+            "name": "Care",
+            "value": "A broadcast counts against each recipient's alert limit. The reply lists everyone it was sent to; delivery to a large audience takes a while because messages are paced to the platform's rate limits."
+          }
+        ]
+      }
     }
   }
-}]
+]

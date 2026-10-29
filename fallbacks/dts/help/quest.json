@@ -1,46 +1,48 @@
-[{
-  "id": "quest",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!quest",
-      "description": "Alerts for field research task rewards at pokestops.",
-      "fields": [
-        {
-          "name": "Pokemon rewards",
-          "value": "`{{prefix}}quest pikachu`\n`{{prefix}}quest pikachu charmander d:500` — either pokemon as a reward, within 500m\n`{{prefix}}quest shiny pikachu` — only tasks that can give a shiny"
-        },
-        {
-          "name": "Item rewards — use underscores for multi-word names",
-          "value": "`{{prefix}}quest razz_berry`\n`{{prefix}}quest golden_razz_berry`\n`{{prefix}}quest rare_candy`\n`{{prefix}}quest silver_pinap_berry`\n`{{prefix}}quest fast_tm charged_tm`\n\nUse `{{prefix}}info items` to see every item name the bot recognises — the list it prints is the exact token to use here (replacing spaces with underscores)."
-        },
-        {
-          "name": "Stardust / mega energy / candy",
-          "value": "`{{prefix}}quest stardust:1000` — tasks rewarding 1000+ stardust\n`{{prefix}}quest energy:charizard` — Mega Charizard energy\n`{{prefix}}quest candy:lapras` — rare candy awarded specifically for Lapras\n\nMultiple rewards in one command are OR-matched:\n`{{prefix}}quest pikachu rare_candy silver_pinap_berry`"
-        },
-        {
-          "name": "Distance and area",
-          "value": "`d:500`\n`area:city_centre`"
-        },
-        {
-          "name": "Message flags",
-          "value": "`clean` — auto-delete when the quest expires\n`edit` — single message edited in place\n`ping`"
-        },
-        {
-          "name": "Summary mode",
-          "value": "`{{prefix}}quest pikachu summary` — buffer this rule's matches and deliver them as a grouped digest on a schedule you set with `{{prefix}}summary quest settime ...`. See `{{prefix}}help summary` for the full schedule syntax."
-        },
-        {
-          "name": "Remove",
-          "value": "`{{prefix}}quest remove pikachu`\n`{{prefix}}quest remove all_items` — every item-reward rule\n`{{prefix}}quest remove all_pokemon` — every pokemon-reward rule\n`{{prefix}}quest remove stardust`\n`{{prefix}}untrack id:<N>`"
-        },
-        {
-          "name": "Full manual",
-          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
-        }
-      ]
+[
+  {
+    "id": "quest",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!quest",
+        "description": "Alerts for field research rewards at pokestops. Every reward you name becomes its own rule.",
+        "fields": [
+          {
+            "name": "Pokemon rewards",
+            "value": "`{{prefix}}quest pikachu`\n`{{prefix}}quest pikachu dratini d:500` — either one, within 500 m\n`{{prefix}}quest vulpix form:alola` — one form only\n`{{prefix}}quest shiny pikachu` — only rewards flagged as shiny"
+          },
+          {
+            "name": "Item rewards",
+            "value": "`{{prefix}}quest rare_candy`\n`{{prefix}}quest golden_razz_berry amount:3` — 3 or more\n`{{prefix}}quest fast_tm`\nOne item per command. `{{prefix}}info items` lists the item names; write spaces as `_`."
+          },
+          {
+            "name": "Stardust, pokecoins, candy, mega energy",
+            "value": "`{{prefix}}quest stardust` — any amount; `stardust:1000` — 1000 or more\n`{{prefix}}quest pokecoins` — any amount; `pokecoins:10` — 10 or more\n`{{prefix}}quest candy:lapras` — Lapras candy; bare `candy` — any species\n`{{prefix}}quest energy:charizard` — Charizard mega energy; bare `energy` — any\n`amount:N` sets a minimum for items, candy and energy."
+          },
+          {
+            "name": "Several rewards at once",
+            "value": "`{{prefix}}quest pikachu rare_candy stardust:1000` — three rules\n`{{prefix}}quest everything` — every reward type\n`{{prefix}}quest all_pokemon` / `{{prefix}}quest all_items` — every pokemon / item reward\nYour admin may restrict `everything`, `all_pokemon` and `all_items`."
+          },
+          {
+            "name": "Where",
+            "value": "With neither `d:` nor `area:`, your `{{prefix}}area` list is used (unless your admin set a default distance).\n`d:500` — within that many metres of your location\n`location:home d:500` — measured from a saved location (`{{prefix}}help location`)\n`area:city_centre` — only these areas instead of your list; several: `area:north,south`. Can't be combined with `d:`"
+          },
+          {
+            "name": "Options",
+            "value": "`clean` — delete the alert when the quest expires\n`summary` — collect matches into a scheduled digest instead of alerting straight away (`{{prefix}}help summary`)\n`template:2` — use another alert layout your admin has set up{{#if isDiscord}}\n@mention users or roles in the command to ping them with each alert.{{/if}}"
+          },
+          {
+            "name": "Remove",
+            "value": "`{{prefix}}quest remove pikachu`\n`{{prefix}}quest remove stardust`\n`{{prefix}}quest remove all_items` — every item rule\n`{{prefix}}quest remove all_pokemon` — every pokemon rule\n`{{prefix}}quest remove pikachu summary` — only the summary-mode rule\n`{{prefix}}quest remove everything`\n`{{prefix}}quest remove id:12` — one rule; `{{prefix}}tracked` shows the ids"
+          },
+          {
+            "name": "Full manual",
+            "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+          }
+        ]
+      }
     }
   }
-}]
+]

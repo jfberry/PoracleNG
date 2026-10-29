@@ -34,6 +34,12 @@ func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	view := map[string]any{
 		"prefix":      prefix,
 		"userIsAdmin": ctx.IsAdmin,
+		// Lets one platform-agnostic template gate commands that aren't
+		// always available: !role (Discord, with role_subscriptions set)
+		// and !ask (only when [ai] is enabled).
+		"isDiscord":   platform == "discord",
+		"askEnabled":  ctx.NLP != nil,
+		"roleEnabled": platform == "discord" && ctx.Config != nil && len(ctx.Config.Discord.RoleSubscriptions) > 0,
 	}
 
 	if len(args) > 0 {
@@ -122,14 +128,18 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 			return []bot.Reply{{Text: result}}
 		}
 
-		// Clear title/description (Discord requires the keys to exist) and
-		// drop fields whose name+value both rendered empty — lets template
-		// authors gate whole sections via {{#if ...}} around the strings.
+		// Clear the title (help titles are a hardcoded "!command" that is
+		// redundant beside the user's own message) and drop fields whose
+		// name+value both rendered empty — lets template authors gate whole
+		// sections via {{#if ...}} around the strings. The description is
+		// kept: help templates use it for the topic overview. The greeting
+		// fallback still has it cleared — its description is the
+		// "thank you for registering" text, which makes no sense as help.
 		if embed, ok := msg["embed"].(map[string]any); ok {
 			if _, has := embed["title"]; has {
 				embed["title"] = ""
 			}
-			if _, has := embed["description"]; has {
+			if _, has := embed["description"]; has && templateType == "greeting" {
 				embed["description"] = ""
 			}
 			if rawFields, ok := embed["fields"].([]any); ok {
@@ -172,20 +182,30 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 		return []bot.Reply{{Text: result}}
 	}
 
+	desc, _ := embed["description"].(string)
+	desc = strings.TrimSpace(desc)
+
 	fields, _ := embed["fields"].([]any)
 	if len(fields) == 0 {
-		// No fields — try description
-		if desc, ok := embed["description"].(string); ok && desc != "" {
+		// No fields — the description is all there is.
+		if desc != "" {
 			return []bot.Reply{{Text: desc}}
 		}
 		return []bot.Reply{{Text: result}}
 	}
 
-	// Build text from embed fields, splitting at 1024 chars per message.
-	// Empty-on-both-sides fields drop out so {{#if}}-gated sections
-	// don't leave blank gaps in the Telegram output.
+	// Otherwise the description leads the text, as it does in the Discord
+	// embed — except for the greeting fallback, matching Discord.
+	if templateType == "greeting" {
+		desc = ""
+	}
+
+	// Build text from the description and embed fields, splitting at
+	// 1024 chars per message. Empty-on-both-sides fields drop out so
+	// {{#if}}-gated sections don't leave blank gaps in the Telegram output.
 	var replies []bot.Reply
 	var current strings.Builder
+	current.WriteString(desc)
 	for _, f := range fields {
 		field, ok := f.(map[string]any)
 		if !ok {

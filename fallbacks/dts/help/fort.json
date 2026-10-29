@@ -1,38 +1,44 @@
-[{
-  "id": "fort",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!fort",
-      "description": "Alerts for pokestop and gym location updates — new stops appearing, removed stops, renames, location moves, photo changes.",
-      "fields": [
-        {
-          "name": "Fort type",
-          "value": "`{{prefix}}fort pokestop` — only pokestops\n`{{prefix}}fort gym` — only gyms\n`{{prefix}}fort everything` — both"
-        },
-        {
-          "name": "Change types",
-          "value": "`new` — new stops/gyms being added\n`removal` — stops being removed\n`name` — name changes\n`location` — location moves\n`photo` — photo updates\n`include_empty` — also alert on empty/no-change events (noisy)"
-        },
-        {
-          "name": "Distance and area",
-          "value": "`d:2000`\n`area:region_north`"
-        },
-        {
-          "name": "Message flags",
-          "value": "`ping`\n`clean` — auto-delete (fort changes don't have a natural expiry, so clean has little effect)"
-        },
-        {
-          "name": "Remove",
-          "value": "`{{prefix}}fort remove pokestop`\n`{{prefix}}fort remove everything`\n`{{prefix}}untrack id:<N>`"
-        },
-        {
-          "name": "Full manual",
-          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
-        }
-      ]
+[
+  {
+    "id": "fort",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!fort",
+        "description": "Alerts when pokestops, gyms or stations change: new ones, removals, renames, moves, new photos or descriptions.",
+        "fields": [
+          {
+            "name": "What to watch",
+            "value": "`{{prefix}}fort pokestop`\n`{{prefix}}fort gym`\n`{{prefix}}fort station`\n`{{prefix}}fort everything` — all three (same as naming none)\nOne kind per rule; add another rule for a second kind."
+          },
+          {
+            "name": "Which changes",
+            "value": "Name none to get every change, or pick:\n`new` — added\n`removal` — removed\n`name` — renamed\n`description` — description changed\n`location` — moved\n`photo` — photo changed\nExample: `{{prefix}}fort pokestop new removal d:2000`"
+          },
+          {
+            "name": "Unnamed forts",
+            "value": "`include_empty` — also alert for forts with no name and no description (often newly found, can be noisy)"
+          },
+          {
+            "name": "Where",
+            "value": "With neither `d:` nor `area:`, your `{{prefix}}area` list is used (unless your admin set a default distance).\n`d:2000` — within that many metres of your location\n`location:home d:2000` — measured from a saved location (`{{prefix}}help location`)\n`area:region_north` — only these areas instead of your list; several: `area:north,south`. Can't be combined with `d:`"
+          },
+          {
+            "name": "Options",
+            "value": "`template:2` — use another alert layout your admin has set up{{#if isDiscord}}\n@mention users or roles in the command to ping them with each alert.{{/if}}"
+          },
+          {
+            "name": "Remove",
+            "value": "`{{prefix}}fort remove pokestop` — every pokestop rule\n`{{prefix}}fort remove everything`\n`{{prefix}}fort remove id:12` — one rule; `{{prefix}}tracked` shows the ids"
+          },
+          {
+            "name": "Full manual",
+            "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+          }
+        ]
+      }
     }
   }
-}]
+]

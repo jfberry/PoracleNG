@@ -1,22 +1,28 @@
-[{
-  "id": "unregister",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!unregister",
-      "description": "Permanently delete your account and every tracking rule you have. This cannot be undone.",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}unregister` — deletes you. You'll have to `{{prefix}}poracle` again from scratch if you change your mind."
-        },
-        {
-          "name": "Softer alternative",
-          "value": "If you just want alerts to stop for a while, use `{{prefix}}stop` instead — your tracking rules are preserved and `{{prefix}}start` brings them all back."
-        }
-      ]
+[
+  {
+    "id": "unregister",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!unregister",
+        "description": "Delete your account and everything with it. This can't be undone.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}unregister` — deletes your registration with all your tracking rules, profiles, saved locations and summary schedules. To come back you have to `{{prefix}}poracle` again and start from scratch."
+          },
+          {
+            "name": "Softer alternative",
+            "value": "To just stop alerts for a while, use `{{prefix}}stop`. Everything is kept, and `{{prefix}}start` turns alerts back on."
+          },
+          {
+            "name": "{{#if userIsAdmin}}Admins{{/if}}",
+            "value": "{{#if userIsAdmin}}`{{prefix}}unregister <id> <id>` — unregister others by ID{{#if isDiscord}} or @mention{{/if}}. Admins can't unregister themselves this way, and `{{prefix}}unregister` on its own does nothing for an admin. Give bare IDs, not `user:<id>`.{{/if}}"
+          }
+        ]
+      }
     }
   }
-}]
+]

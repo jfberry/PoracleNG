@@ -1,38 +1,44 @@
-[{
-  "id": "nest",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!nest",
-      "description": "Alerts for pokemon nest spawns — reliable repeat spawn points as reported by nest data sources.",
-      "fields": [
-        {
-          "name": "By pokemon",
-          "value": "`{{prefix}}nest charmander`\n`{{prefix}}nest dratini larvitar beldum d:3000`\n`{{prefix}}nest everything` — any nest (likely a lot of alerts!)"
-        },
-        {
-          "name": "Minimum spawn rate",
-          "value": "`minspawn:10` — only nests with 10+ spawns per hour (helps filter out low-activity reports)"
-        },
-        {
-          "name": "Distance and area",
-          "value": "`d:3000` — nests are typically worth larger radii than live alerts\n`area:region_north`"
-        },
-        {
-          "name": "Message flags",
-          "value": "`clean` — auto-delete when the nest rotates\n`ping`"
-        },
-        {
-          "name": "Remove",
-          "value": "`{{prefix}}nest remove charmander`\n`{{prefix}}nest remove everything`\n`{{prefix}}untrack id:<N>`"
-        },
-        {
-          "name": "Full manual",
-          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
-        }
-      ]
+[
+  {
+    "id": "nest",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!nest",
+        "description": "Alerts for pokemon nests: parks where one species spawns repeatedly until the next nest rotation.",
+        "fields": [
+          {
+            "name": "By pokemon",
+            "value": "`{{prefix}}nest charmander`\n`{{prefix}}nest dratini larvitar beldum d:3000`\n`{{prefix}}nest vulpix form:alola` — one form only\n`{{prefix}}nest everything` — any nest (a lot of alerts)"
+          },
+          {
+            "name": "Narrow by generation or type",
+            "value": "`{{prefix}}nest everything gen1` — gen 1 species only\n`{{prefix}}nest everything fire` — fire types only\n`{{prefix}}nest bulbasaur charmander fire` — keeps only the named pokemon that are fire type\nA type or `gen` on its own, without pokemon or `everything`, is not enough."
+          },
+          {
+            "name": "Minimum spawn rate",
+            "value": "`minspawn:10` — only nests averaging 10 or more spawns an hour"
+          },
+          {
+            "name": "Where",
+            "value": "With neither `d:` nor `area:`, your `{{prefix}}area` list is used (unless your admin set a default distance).\n`d:3000` — within that many metres of your location\n`location:home d:3000` — measured from a saved location (`{{prefix}}help location`)\n`area:region_north` — only these areas instead of your list; several: `area:north,south`. Can't be combined with `d:`"
+          },
+          {
+            "name": "Options",
+            "value": "`clean` — delete the alert when the nest expires\n`template:2` — use another alert layout your admin has set up{{#if isDiscord}}\n@mention users or roles in the command to ping them with each alert.{{/if}}"
+          },
+          {
+            "name": "Remove",
+            "value": "`{{prefix}}nest remove charmander`\n`{{prefix}}nest remove everything`\n`{{prefix}}nest remove id:12` — one rule; `{{prefix}}tracked` shows the ids"
+          },
+          {
+            "name": "Full manual",
+            "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+          }
+        ]
+      }
     }
   }
-}]
+]

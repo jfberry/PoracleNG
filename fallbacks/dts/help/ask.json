@@ -1,0 +1,22 @@
+[{
+  "id": "ask",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!ask",
+      "description": "Describe what you want to be alerted about in plain English, and the bot suggests the command to run. Nothing is tracked until you run that command yourself.",
+      "fields": [
+        {
+          "name": "Examples",
+          "value": "`{{prefix}}ask perfect dragonite`\n`{{prefix}}ask level 5 raids`\n`{{prefix}}ask stardust quests`"
+        },
+        {
+          "name": "What you get back",
+          "value": "A suggested command to copy and paste, or a short numbered list when your request could mean more than one thing. Check the suggestion before you run it."
+        }
+      ]
+    }
+  }
+}]
