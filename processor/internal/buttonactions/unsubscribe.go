@@ -89,6 +89,8 @@ func alertTypeTable(alertType string) (string, bool) {
 		return "fort", true
 	case "max_battle", "maxbattle":
 		return "maxbattle", true
+	case "tappable":
+		return "tappable", true
 	}
 	return "", false
 }
@@ -122,6 +124,8 @@ func deleteTrackingByAlertType(alertType, humanID string, uids []int64, deps Dep
 		return deleteUIDsAndReport(deps.Tracking.Gyms.DeleteByUIDs, humanID, uids)
 	case "fort":
 		return deleteUIDsAndReport(deps.Tracking.Forts.DeleteByUIDs, humanID, uids)
+	case "tappable":
+		return deleteUIDsAndReport(deps.Tracking.Tappables.DeleteByUIDs, humanID, uids)
 	default: // maxbattle
 		return deleteUIDsAndReport(deps.Tracking.Maxbattles.DeleteByUIDs, humanID, uids)
 	}

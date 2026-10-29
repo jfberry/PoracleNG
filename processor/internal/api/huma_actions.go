@@ -94,7 +94,7 @@ func (b testBody) MarshalJSON() ([]byte, error) {
 // so openObjectSchema can derive a documented schema for {type, target,
 // webhook}. webhook is openJSON so its schema stays OPEN.
 type testBodyShape struct {
-	Type    string         `json:"type" doc:"DTS template-type name (monster, monsterChanged, maxbattle, ...) OR raw webhook type (pokemon, raid, invasion, quest, pokestop, gym, nest, fort_update/fort-update, max_battle/max-battle, ...) — resolved case-insensitively (see internal/api's resolveTestWireType)"`
+	Type    string         `json:"type" doc:"DTS template-type name (monster, monsterChanged, maxbattle, ...) OR raw webhook type (pokemon, raid, invasion, quest, pokestop, gym, nest, fort_update/fort-update, max_battle/max-battle, tappable, ...) — resolved case-insensitively (see internal/api's resolveTestWireType)"`
 	Target  testTargetJSON `json:"target" doc:"Delivery destination + render context (id, type, language, template, location)"`
 	Webhook openJSON       `json:"webhook" doc:"Raw webhook message payload (arbitrary JSON; shape depends on the type field)"`
 }

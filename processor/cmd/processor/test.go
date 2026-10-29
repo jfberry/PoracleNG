@@ -75,6 +75,8 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 		return ps.processTestPokestop(raw, matchedUser)
 	case "showcase":
 		return ps.processTestShowcase(raw, matchedUser)
+	case "tappable":
+		return ps.processTestTappable(raw, matchedUser)
 	default:
 		return fmt.Errorf("unsupported test webhook type: %s", webhookType)
 	}
@@ -391,6 +393,23 @@ func (ps *ProcessorService) processTestMaxbattle(raw json.RawMessage, target web
 	return nil
 }
 
+func (ps *ProcessorService) processTestTappable(raw json.RawMessage, target webhook.MatchedUser) error {
+	r, err := ps.enrichTappable(raw, target.Language, false)
+	if err != nil {
+		return err
+	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	job := ps.renderJobFromEnrich(r, target, "tappable", raw, false, false)
+	// Same as ProcessTappable: an unverified expiry is Golbat's guess, so
+	// alert_minimum_time doesn't apply to it.
+	verified, _ := r.base["disappear_time_verified"].(bool)
+	job.SkipMinAlertTime = !verified
+	ps.renderCh <- job
+	return nil
+}
+
 func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webhook.MatchedUser) error {
 	// Pokestop can be invasion or lure — peek at fields
 	var peek struct {
@@ -446,6 +465,8 @@ func resolveDTSTypeFromRaw(webhookType string, raw json.RawMessage) string {
 		return "maxbattle"
 	case "showcase":
 		return "showcase"
+	case "tappable":
+		return "tappable"
 	case "quest_summary":
 		return "questSummary"
 	case "monster_changed":

@@ -69,7 +69,7 @@ func TestUntrackMapperEmitsIDTokenForPokemon(t *testing.T) {
 // keyword alongside "id:N"; without it the typed command treats the UID as
 // just a filter and silently no-ops, leaving the rule in place.
 func TestUntrackMapperEmitsRemoveAndIDForNonPokemon(t *testing.T) {
-	for _, sub := range []string{"raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"} {
+	for _, sub := range []string{"raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle", "tappable"} {
 		tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
 			subopt(sub, sopt("tracking", "123")),
 		})
@@ -101,7 +101,7 @@ func TestUntrackMapperPokemonRemoveAll(t *testing.T) {
 // rerouted to !raid remove everything which the raid command's
 // HasKeyword("arg.everything") branch handles.
 func TestUntrackMapperNonPokemonRemoveAll(t *testing.T) {
-	for _, sub := range []string{"raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"} {
+	for _, sub := range []string{"raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle", "tappable"} {
 		tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
 			subopt(sub, sopt("tracking", "everything")),
 		})

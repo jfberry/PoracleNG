@@ -285,6 +285,15 @@ var typeAliases = map[string][]aliasPair{
 		{"move1emoji", "quickMoveEmoji"},
 		{"move2emoji", "chargeMoveEmoji"},
 	},
+	"tappable": {
+		{"pokestopName", "pokestop_name"},
+		{"pokestopId", "pokestop_id"},
+		{"name", "pokestop_name"},
+		{"encounterId", "encounter_id"},
+		{"spawnpointId", "spawnpoint_id"},
+		{"tappableType", "tappable_type"},
+		{"disappearTimeVerified", "disappear_time_verified"},
+	},
 	"greeting": {},
 }
 

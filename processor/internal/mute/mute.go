@@ -75,7 +75,7 @@ type Event struct {
 var ruleTables = map[string]string{
 	"pokemon": "pokemon", "raid": "raid", "egg": "egg", "quest": "quest",
 	"invasion": "invasion", "lure": "lure", "nest": "nest", "gym": "gym",
-	"fort": "fort", "maxbattle": "maxbattle",
+	"fort": "fort", "maxbattle": "maxbattle", "tappable": "tappable",
 	// v2 "incident" rules live in the invasion table.
 	"incident": "invasion",
 }

@@ -220,3 +220,21 @@ func TestCalculateTelegramChannelPermissions(t *testing.T) {
 		t.Error("community admins only apply when area security is enabled")
 	}
 }
+
+func TestTappableCommandSecurity(t *testing.T) {
+	if got := commandSecurityName("cmd.tappable"); got != "tappable" {
+		t.Errorf("commandSecurityName(cmd.tappable) = %q, want tappable", got)
+	}
+	cfg := testConfig()
+	cfg.Discord.CommandSecurity = map[string][]string{"tappable": {"role_tappers"}}
+	blocked := BlockedAlerts(cfg, "user1", []string{"role_other"})
+	if blocked == nil || !strings.Contains(*blocked, `"tappable"`) {
+		t.Errorf("tappable should be blocked without role_tappers, got %v", blocked)
+	}
+	if CommandAllowed(cfg, "discord", "cmd.tappable", "user1", []string{"role_other"}) {
+		t.Error("cmd.tappable should be refused without role_tappers")
+	}
+	if !CommandAllowed(cfg, "discord", "cmd.tappable", "user1", []string{"role_tappers"}) {
+		t.Error("cmd.tappable should be allowed with role_tappers")
+	}
+}

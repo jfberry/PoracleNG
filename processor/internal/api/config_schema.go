@@ -106,6 +106,7 @@ var configSchema = []ConfigSection{
 			{Name: "disable_max_battle", Type: "bool", Default: false, Description: "Disable max battle webhook processing", HotReload: false},
 			{Name: "disable_fort_update", Type: "bool", Default: false, Description: "Disable fort update webhook processing", HotReload: false},
 			{Name: "disable_showcase", Type: "bool", Default: false, Description: "Disable Showcase (pokestop contest) webhook processing", HotReload: false},
+			{Name: "disable_tappable", Type: "bool", Default: false, Description: "Disable tappable (reward box / map object) webhook processing", HotReload: false},
 		},
 	},
 
@@ -346,7 +347,7 @@ var configSchema = []ConfigSection{
 			{
 				Name:        "static_map_type",
 				Title:       "Static Map Type Per Alert",
-				Description: "Choose between staticMap (single-pin) and multiStaticMap (multi-pin) tileserver templates per renderer maptype. Keys are lowercase renderer maptypes, e.g. pokemon, raid, quest, questsummary. Every maptype defaults to staticMap. Prefix the value with * to disable pregeneration for that maptype.",
+				Description: "Choose between staticMap (single-pin) and multiStaticMap (multi-pin) tileserver templates per renderer maptype. Keys are lowercase renderer maptypes, e.g. pokemon, raid, quest, questsummary, tappable. Every maptype defaults to staticMap. Prefix the value with * to disable pregeneration for that maptype.",
 				Fields: []ConfigFieldDef{
 					{Name: "maptype", Type: "string", Description: "Renderer maptype this entry applies to, lowercase (e.g. pokemon, raid, questsummary)"},
 					{Name: "type", Type: "select", Default: "staticMap", Description: "TileserverCache template to use for this maptype", Options: []ConfigSelectOption{
@@ -358,7 +359,7 @@ var configSchema = []ConfigSection{
 			{
 				Name:        "tileserver_settings",
 				Title:       "Tileserver Settings",
-				Description: "Per-alert-type tile overrides. \"default\" applies to any alert type without its own entry. Known maptypes: default, monster, raid, pokestop, quest, weather, location, nest, gym.",
+				Description: "Per-alert-type tile overrides. \"default\" applies to any alert type without its own entry. Known maptypes: default, monster, raid, pokestop, quest, weather, location, nest, gym, tappable.",
 				Fields: []ConfigFieldDef{
 					{Name: "maptype", Type: "string", Description: "Alert type this entry applies to (e.g. default, monster, raid, gym)"},
 					{Name: "type", Type: "select", Default: "staticMap", Description: "TileserverCache endpoint to call", Options: []ConfigSelectOption{

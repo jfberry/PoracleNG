@@ -37,6 +37,7 @@ type AllData struct {
 	Nests      []*NestTracking
 	Forts      []*FortTracking
 	Maxbattles []*MaxbattleTracking
+	Tappables  []*TappableTracking
 }
 
 // LoadAll loads all tracking data from the database.
@@ -92,6 +93,10 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load maxbattles: %w", err)
 	}
+	tappables, err := LoadTappables(db)
+	if err != nil {
+		return nil, fmt.Errorf("load tappables: %w", err)
+	}
 
 	// Filter orphaned tracking/profile rows (no matching human)
 	for key := range profiles {
@@ -108,6 +113,7 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 	nests = filterSlice(nests, humans)
 	forts = filterSlice(forts, humans)
 	maxbattles = filterSlice(maxbattles, humans)
+	tappables = filterSlice(tappables, humans)
 
 	return &AllData{
 		Humans:     humans,
@@ -122,6 +128,7 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 		Nests:      nests,
 		Forts:      forts,
 		Maxbattles: maxbattles,
+		Tappables:  tappables,
 	}, nil
 }
 

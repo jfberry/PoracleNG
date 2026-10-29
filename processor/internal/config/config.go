@@ -238,6 +238,7 @@ type GeneralConfig struct {
 	DisableMaxBattle  bool `toml:"disable_max_battle"`
 	DisableFortUpdate bool `toml:"disable_fort_update"`
 	DisableShowcase   bool `toml:"disable_showcase"`
+	DisableTappable   bool `toml:"disable_tappable"`
 }
 
 // LanguageEntry defines the command aliases for a language variant.

@@ -124,6 +124,8 @@ func coverageBundle() *i18n.Bundle {
 		"slash.desc.nest":      "Track a nesting pokemon",
 		"slash.cmd.maxbattle":  "maxbattle",
 		"slash.desc.maxbattle": "Track a max battle",
+		"slash.cmd.tappable":   "tappable",
+		"slash.desc.tappable":  "Track a tappable reward",
 		"slash.cmd.gym":        "gym",
 		"slash.desc.gym":       "Track gym team / slot / battle changes",
 		"slash.cmd.fort":       "fort",

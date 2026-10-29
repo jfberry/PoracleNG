@@ -532,6 +532,7 @@ func TestDtsTypeForKnownMappings(t *testing.T) {
 		"nest":      "nest",
 		"gym":       "gym",
 		"maxbattle": "maxbattle",
+		"tappable":  "tappable",
 	}
 	for cmd, want := range cases {
 		if got := dtsTypeFor(cmd); got != want {

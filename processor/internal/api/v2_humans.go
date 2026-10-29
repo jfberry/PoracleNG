@@ -674,7 +674,7 @@ type v2RemoveAreaOutput struct {
 	Body struct {
 		Name        string             `json:"name" doc:"The name as requested"`
 		RemovedFrom []int              `json:"removed_from" doc:"Profile numbers whose area list held the name and no longer does. Empty when no targeted profile held it."`
-		Broadened   map[string][]int64 `json:"broadened" doc:"Rules whose only override area was this name, keyed by tracking type (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle). Their override is cleared, so they now match across all of the human's areas instead of one. Empty when no rule was affected."`
+		Broadened   map[string][]int64 `json:"broadened" doc:"Rules whose only override area was this name, keyed by tracking type (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle, tappable). Their override is cleared, so they now match across all of the human's areas instead of one. Empty when no rule was affected."`
 		DryRun      bool               `json:"dry_run" doc:"True when nothing was written"`
 	}
 }

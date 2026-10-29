@@ -225,6 +225,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	var nestList []db.NestTrackingAPI
 	var fortList []db.FortTrackingAPI
 	var maxbattleList []db.MaxbattleTrackingAPI
+	var tappableList []db.TappableTrackingAPI
 
 	if !cfg.DisablePokemon {
 		if v, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
@@ -299,6 +300,14 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if !cfg.DisableMaxBattle {
 		if v, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			maxbattleList = v
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
+		}
+	}
+	if !cfg.DisableTappable {
+		if v, err := ctx.Tracking.Tappables.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			tappableList = v
 			for i := range v {
 				updateMaxUID(v[i].UID)
 			}
@@ -452,6 +461,20 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		sb.WriteByte('\n')
 	}
 
+	if !cfg.DisableTappable {
+		if len(tappableList) > 0 {
+			sb.WriteString(tr.T("section.tappables") + "\n")
+			for i := range tappableList {
+				sb.WriteString(fmtID(tappableList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.TappableRowText(tr, tappableAPIToTracking(&tappableList[i])), tappableList[i].Distance))
+				sb.WriteByte('\n')
+			}
+		} else {
+			sb.WriteString(tr.T("section.tappables.none"))
+		}
+		sb.WriteByte('\n')
+	}
+
 	// Property mutes section — list active mutes (entity + UID scopes)
 	// for this user (#109). One place to see "what's currently
 	// silenced" alongside "what's tracked".
@@ -489,7 +512,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	// inline). Telegram sends it as a document, Discord as a file upload.
 	totalRules := len(monsters) + len(raidList) + len(eggList) + len(questList) +
 		len(invasionList) + len(lureList) + len(gymList) + len(nestList) +
-		len(fortList) + len(maxbattleList)
+		len(fortList) + len(maxbattleList) + len(tappableList)
 	return bot.SplitOrAttachReply(
 		strings.TrimSpace(sb.String()),
 		"tracked.txt",

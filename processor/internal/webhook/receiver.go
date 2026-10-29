@@ -32,6 +32,7 @@ type Processor interface {
 	ProcessFortUpdate(raw json.RawMessage) error
 	ProcessMaxbattle(raw json.RawMessage) error
 	ProcessShowcase(raw json.RawMessage) error
+	ProcessTappable(raw json.RawMessage) error
 }
 
 // NewHandler creates a new webhook Handler.
@@ -134,6 +135,10 @@ func (h *Handler) handle(c *gin.Context) {
 		case "max_battle":
 			if err := h.processor.ProcessMaxbattle(hook.Message); err != nil {
 				log.Errorf("Failed to process max_battle: %s", err)
+			}
+		case "tappable":
+			if err := h.processor.ProcessTappable(hook.Message); err != nil {
+				log.Errorf("Failed to process tappable: %s", err)
 			}
 		}
 	}

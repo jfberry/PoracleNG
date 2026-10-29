@@ -417,6 +417,38 @@ type MaxbattleWebhook struct {
 	Updated                int64   `json:"updated"`
 }
 
+// TappableWebhook mirrors Golbat's tappable webhook message: reward tappables
+// only (encounter tappables arrive as pokemon webhooks). The top-level
+// reward_type / item_id / reward_pokemon_id / count describe rewards[0] only;
+// rewards holds every reward as protojson LootItemProto objects and may be
+// null. disappear_time is 0 when unknown.
+type TappableWebhook struct {
+	EncounterID           string          `json:"encounter_id"`  // decimal string (exceeds 2^53)
+	SpawnpointID          string          `json:"spawnpoint_id"` // hex, "None" when absent
+	PokestopID            string          `json:"pokestop_id"`   // "None" when absent
+	PokestopName          *string         `json:"pokestop_name"` // null without a stop, "Unknown" if not found
+	Latitude              float64         `json:"latitude"`
+	Longitude             float64         `json:"longitude"`
+	Type                  string          `json:"type"`        // e.g. TAPPABLE_TYPE_BOX
+	RewardType            *string         `json:"reward_type"` // LootItemProto oneof name, e.g. "pokemon_candy"
+	ItemID                *int            `json:"item_id"`
+	RewardPokemonID       *int            `json:"reward_pokemon_id"`
+	Count                 *int            `json:"count"`
+	Rewards               json.RawMessage `json:"rewards"`
+	DisappearTime         int64           `json:"disappear_time"`
+	DisappearTimeVerified bool            `json:"disappear_time_verified"`
+	Updated               int64           `json:"updated"`
+}
+
+// TappableNone is the placeholder Golbat sends for an absent spawnpoint_id or
+// pokestop_id.
+const TappableNone = "None"
+
+// HasPokestop reports whether the tappable sits on a pokestop.
+func (t *TappableWebhook) HasPokestop() bool {
+	return t.PokestopID != "" && t.PokestopID != TappableNone
+}
+
 // FortWebhook mirrors Golbat's fort_update webhook message.
 type FortWebhook struct {
 	ChangeType string        `json:"change_type"` // "new", "edit", "removal"

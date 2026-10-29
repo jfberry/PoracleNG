@@ -107,6 +107,11 @@ type RenderJob struct {
 	// in seconds; the render pool converts it to a delivery.TTH in Task B.
 	// Zero means "use the default" (map-derived from enrichment).
 	OverrideCleanTTH int64
+	// SkipMinAlertTime renders without the renderer's alert_minimum_time
+	// check (RenderAlertUngated). Set when the TTH is an estimate, not a real
+	// expiry: an unverified tappable (Golbat guesses tap+120s). Non-pokemon
+	// only.
+	SkipMinAlertTime bool
 	TileImageData    []byte // inline tile bytes, set during tile resolution
 }
 
@@ -166,7 +171,11 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 			)
 		}
 	} else {
-		jobs = ps.dtsRenderer.RenderAlert(
+		render := ps.dtsRenderer.RenderAlert
+		if job.SkipMinAlertTime {
+			render = ps.dtsRenderer.RenderAlertUngated
+		}
+		jobs = render(
 			job.TemplateType,
 			job.Enrichment,
 			job.PerLangEnrichment,

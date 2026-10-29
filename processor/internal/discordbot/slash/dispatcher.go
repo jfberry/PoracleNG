@@ -428,6 +428,10 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 			base = autocomplete.PrependActivePokemon(base, d.deps, d.deps.RecentActivity.ActiveQuestMega(), userLang)
 		}
 		return base
+	// /tappable item — same translated item lookup as /quest, without a
+	// recent-activity boost.
+	case opt == "item" && cmd == "tappable":
+		return autocomplete.Item(context.Background(), d.deps, focused, userLang)
 	// /invasion grunt_type: typed grunts (Fire, Water…) and bosses
 	// (Giovanni, Arlo, Cliff, Sierra). Incidents live on /incident.
 	// Empty focused boosts currently-active grunt types (TypeID-keyed
@@ -468,7 +472,7 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		}
 		return base
 	// Tracker location: autocomplete from the user's saved named locations.
-	// Used by the `location` option on all 10 tracker commands so a user can
+	// Used by the `location` option on every tracker command so a user can
 	// pick a saved location by name rather than typing coordinates.
 	case opt == "location" && isTrackerCommand(cmd):
 		return d.userstateAutocomplete(ic, "locations", "", focused)
@@ -483,13 +487,13 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 	return nil
 }
 
-// isTrackerCommand reports whether cmd is one of the 10 tracker command
+// isTrackerCommand reports whether cmd is one of the tracker command
 // short names. Used to scope autocomplete for the shared `location` and
 // `areas` options that appear on every tracker command.
 func isTrackerCommand(cmd string) bool {
 	switch cmd {
 	case "track", "raid", "egg", "quest", "invasion", "incident",
-		"lure", "nest", "maxbattle", "gym", "fort":
+		"lure", "nest", "maxbattle", "gym", "fort", "tappable":
 		return true
 	}
 	return false
@@ -638,7 +642,7 @@ func subCommandName(ic *discordgo.InteractionCreate) string {
 // naming.
 //
 // The DTS types come from fallbacks/dts.json: monster, raid, egg, quest,
-// invasion, lure, nest, gym, fort-update, maxbattle.
+// invasion, lure, nest, gym, fort-update, maxbattle, tappable.
 // autocompleteTranslator resolves a translator for autocomplete suggestions,
 // returning nil when no bundle is wired (tests) so callers fall back to their
 // English defaults rather than panicking.

@@ -68,7 +68,7 @@ func untrackCtx(t *testing.T) (*bot.CommandContext, map[string]*spyCommand) {
 	// Build a registry with spy commands for the types we want to test.
 	registry := bot.NewRegistry()
 	spies := map[string]*spyCommand{}
-	for _, typeName := range []string{"raid", "egg", "invasion", "quest", "incident", "lure", "nest", "gym", "fort", "maxbattle"} {
+	for _, typeName := range []string{"raid", "egg", "invasion", "quest", "incident", "lure", "nest", "gym", "fort", "maxbattle", "tappable"} {
 		spy := &spyCommand{name: "cmd." + typeName}
 		spies[typeName] = spy
 		registry.Register(spy)
@@ -180,7 +180,7 @@ func TestUntrack_LookupReturnsNil_ReturnsError(t *testing.T) {
 
 // TestUntrack_ValidUntrackType_HelperCoverage exercises validUntrackType.
 func TestUntrack_ValidUntrackType_HelperCoverage(t *testing.T) {
-	for _, typ := range []string{"raid", "egg", "quest", "invasion", "incident", "lure", "nest", "gym", "fort", "maxbattle"} {
+	for _, typ := range []string{"raid", "egg", "quest", "invasion", "incident", "lure", "nest", "gym", "fort", "maxbattle", "tappable"} {
 		assert.True(t, validUntrackType(typ), "%s should be a valid untrack type", typ)
 	}
 	for _, notType := range []string{"pokemon", "pikachu", "track", "untrack", ""} {

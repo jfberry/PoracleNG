@@ -133,6 +133,8 @@ func (ps *ProcessorService) enrichForType(name string, raw json.RawMessage, lang
 			result, err = ps.enrichMaxbattle(raw, language)
 		case "showcase":
 			result, err = ps.enrichShowcase(raw, language, freshenStaleTime)
+		case "tappable":
+			result, err = ps.enrichTappable(raw, language, freshenStaleTime)
 		default:
 			return nil, fmt.Errorf("unsupported webhook type: %s", webhookType)
 		}
@@ -564,6 +566,33 @@ func (ps *ProcessorService) enrichMaxbattle(raw json.RawMessage, language string
 
 	return &enrichResult{
 		templateType:  "maxbattle",
+		base:          base,
+		perLang:       perLang,
+		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
+	}, nil
+}
+
+func (ps *ProcessorService) enrichTappable(raw json.RawMessage, language string, freshenStaleTime bool) (*enrichResult, error) {
+	var tw webhook.TappableWebhook
+	if err := json.Unmarshal(raw, &tw); err != nil {
+		return nil, fmt.Errorf("parse tappable: %w", err)
+	}
+
+	if freshenStaleTime && tw.DisappearTime > 0 && tw.DisappearTime < time.Now().Unix() {
+		tw.DisappearTime = time.Now().Unix() + 600
+	}
+
+	rewards := matching.ParseTappableRewards(&tw)
+	base, tilePending := ps.enricher.Tappable(&tw, rewards, enrichment.TileModeURL)
+
+	var perLang map[string]any
+	if ps.enricher.Translations != nil {
+		perLang = ps.enricher.TappableTranslate(base, &tw, rewards, language)
+	}
+
+	return &enrichResult{
+		templateType:  "tappable",
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),

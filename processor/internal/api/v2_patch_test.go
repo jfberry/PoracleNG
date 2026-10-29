@@ -356,6 +356,10 @@ func TestV2Patch_EditUnsupportedMatchesTranslate(t *testing.T) {
 			_, err := translateV2Maxbattle(deps, "u1", 1, oc, &v2MaxbattleRule{Edit: &on})
 			return err
 		},
+		"tappable": func() error {
+			_, err := translateV2Tappable(deps, "u1", 1, oc, &v2TappableRule{RewardType: 4, Edit: &on})
+			return err
+		},
 	}
 	for name, f := range checks {
 		if got := isEditErr(f); got != v2EditUnsupported[name] {

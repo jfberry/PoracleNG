@@ -10,6 +10,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/matching"
 	// db types still used for MonsterTrackingAPI etc. struct references
 )
 
@@ -111,6 +112,16 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 	for _, mb := range maxbattles {
 		sb.WriteString(c.maxbattleToScript(ctx, prefix, &mb))
+		sb.WriteByte('\n')
+	}
+
+	// Tappable tracking
+	tappables, err := ctx.Tracking.Tappables.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
+	if err != nil {
+		log.Errorf("script: select tappables: %v", err)
+	}
+	for _, tp := range tappables {
+		sb.WriteString(c.tappableToScript(ctx, prefix, &tp))
 		sb.WriteByte('\n')
 	}
 
@@ -488,6 +499,74 @@ func (c *ScriptCommand) maxbattleToScript(ctx *bot.CommandContext, prefix string
 	return strings.Join(parts, " ")
 }
 
+// tappableToScript emits a !tappable line that recreates the rule: the
+// reward, amount, distance, template, clean and the location/area override.
+func (c *ScriptCommand) tappableToScript(ctx *bot.CommandContext, prefix string, t *db.TappableTrackingAPI) string {
+	parts := []string{prefix + "tappable"}
+
+	withPokemon := func(keyword string) {
+		if t.Reward > 0 {
+			parts = append(parts, keyword+":"+c.pokemonName(ctx, t.Reward))
+		} else {
+			parts = append(parts, keyword)
+		}
+	}
+	withMin := func(keyword string) {
+		if t.Reward > 0 {
+			parts = append(parts, fmt.Sprintf("%s:%d", keyword, t.Reward))
+		} else {
+			parts = append(parts, keyword)
+		}
+	}
+	switch t.RewardType {
+	case matching.TappableRewardCandy:
+		withPokemon("candy")
+	case matching.TappableRewardXLCandy:
+		withPokemon("xlcandy")
+	case matching.TappableRewardMegaEnergy:
+		withPokemon("energy")
+	case matching.TappableRewardStardust:
+		withMin("stardust")
+	case matching.TappableRewardPokecoin:
+		withMin("pokecoins")
+	case matching.TappableRewardItem:
+		switch name := c.itemName(ctx, t.Reward); {
+		case t.Reward == 0:
+			parts = append(parts, "all_items")
+		case name != "":
+			parts = append(parts, name)
+		default:
+			// No English name to re-parse: emit a token !tappable rejects
+			// (like reward_type:N below) rather than all_items, which would
+			// re-import as a broader rule.
+			parts = append(parts, fmt.Sprintf("item:%d", t.Reward))
+		}
+	default:
+		parts = append(parts, fmt.Sprintf("reward_type:%d", t.RewardType))
+	}
+
+	if t.Amount > 0 {
+		parts = append(parts, fmt.Sprintf("amount:%d", t.Amount))
+	}
+	if t.Distance > 0 {
+		parts = append(parts, fmt.Sprintf("d:%d", t.Distance))
+	}
+	if t.Template != ctx.DefaultTemplate() {
+		parts = append(parts, "template:"+t.Template)
+	}
+	// !tappable accepts clean but not edit (tappable alerts carry no edit key).
+	if t.Clean&1 != 0 {
+		parts = append(parts, "clean")
+	}
+	if t.OverrideLocationLabel != "" {
+		parts = append(parts, "location:"+strings.ReplaceAll(t.OverrideLocationLabel, " ", "_"))
+	}
+	if len(t.OverrideAreas) > 0 {
+		parts = append(parts, "area:"+strings.ReplaceAll(strings.Join(t.OverrideAreas, ","), " ", "_"))
+	}
+	return strings.Join(parts, " ")
+}
+
 // fortChangeTypeKeywords maps stored change_types values back to the
 // !fort keyword that produces them (photo is stored as Golbat's image_url).
 var fortChangeTypeKeywords = map[string]string{
@@ -547,6 +626,20 @@ func (c *ScriptCommand) pokemonName(ctx *bot.CommandContext, pokemonID int) stri
 		return fmt.Sprintf("%d", pokemonID)
 	}
 	return strings.ToLower(name)
+}
+
+// itemName returns the English item name with spaces as underscores (so
+// the line re-parses as one token), or "" when the item is unknown.
+func (c *ScriptCommand) itemName(ctx *bot.CommandContext, itemID int) string {
+	if ctx.GameData == nil {
+		return ""
+	}
+	tr := ctx.Translations.For("en")
+	name := tr.T(gamedata.ItemTranslationKey(itemID))
+	if name == gamedata.ItemTranslationKey(itemID) {
+		return ""
+	}
+	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
 }
 
 func (c *ScriptCommand) formName(ctx *bot.CommandContext, formID int) string {

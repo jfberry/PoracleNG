@@ -1,0 +1,42 @@
+[{
+  "id": "tappable",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!tappable",
+      "description": "Alerts for reward tappables on the map (boxes and other tappable objects that give candy, items or stardust when tapped).",
+      "fields": [
+        {
+          "name": "Candy",
+          "value": "`{{prefix}}tappable zubat` — candy for Zubat\n`{{prefix}}tappable candy:pikachu` — the same, spelled out\n`{{prefix}}tappable candy` — candy for any pokemon\n`{{prefix}}tappable xlcandy:pikachu` — XL candy\n`{{prefix}}tappable energy:charizard` — mega energy\n`amount:6` — only when at least this many are given"
+        },
+        {
+          "name": "Items — use underscores for multi-word names",
+          "value": "`{{prefix}}tappable rare_candy`\n`{{prefix}}tappable all_items` — any item\n\nUse `{{prefix}}info items` to see every item name the bot recognises."
+        },
+        {
+          "name": "Stardust / pokecoins",
+          "value": "`{{prefix}}tappable stardust:500` — 500+ stardust\n`{{prefix}}tappable pokecoins:10`"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:500`\n`area:city_centre`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete when the tappable disappears\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}tappable remove zubat`\n`{{prefix}}tappable remove everything`\n`{{prefix}}untrack tappable id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

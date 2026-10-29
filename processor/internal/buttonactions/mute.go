@@ -133,7 +133,11 @@ func muteScopeValue(scope string, snap *snapshots.Snapshot) (string, bool) {
 	case buttons.ScopeStation:
 		return viewString(snap, "station_id"), viewString(snap, "station_id") != ""
 	case buttons.ScopePokemon:
-		if id := viewInt(snap, "pokemon_id"); id > 0 {
+		id := viewInt(snap, "pokemon_id")
+		if snap.AlertType == "tappable" {
+			id = tappableMutePokemonID(snap)
+		}
+		if id > 0 {
 			return strconv.Itoa(id), true
 		}
 		return "", false
@@ -257,6 +261,35 @@ func viewString(snap *snapshots.Snapshot, key string) string {
 	return ""
 }
 
+// tappableMutePokemonID is the pokemon a tappable's pokemon-scope mute
+// covers: the first reward with a pokemon (candy / XL candy / mega energy),
+// the same one ProcessTappable puts on mute.Event. Tappables carry no
+// pokemon_id (it would drive {{id}}), so this reads the `rewards` list —
+// []map[string]any in memory, []any after the snapshot's JSON round-trip.
+func tappableMutePokemonID(snap *snapshots.Snapshot) int {
+	v, ok := snap.Lookup("rewards")
+	if !ok {
+		return 0
+	}
+	var entries []map[string]any
+	switch list := v.(type) {
+	case []map[string]any:
+		entries = list
+	case []any:
+		for _, e := range list {
+			if m, ok := e.(map[string]any); ok {
+				entries = append(entries, m)
+			}
+		}
+	}
+	for _, e := range entries {
+		if id := anyInt(e["pokemonId"]); id > 0 {
+			return id
+		}
+	}
+	return 0
+}
+
 // viewInt reads an integer-ish field from the snapshot's layers.
 // JSON unmarshal gives float64 for numbers; we coerce.
 func viewInt(snap *snapshots.Snapshot, key string) int {
@@ -264,6 +297,11 @@ func viewInt(snap *snapshots.Snapshot, key string) int {
 	if !ok {
 		return 0
 	}
+	return anyInt(v)
+}
+
+// anyInt coerces an integer-ish value (JSON unmarshal gives float64).
+func anyInt(v any) int {
 	switch n := v.(type) {
 	case int:
 		return n

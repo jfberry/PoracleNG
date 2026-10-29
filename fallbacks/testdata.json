@@ -1979,5 +1979,140 @@
       "poly_path": "[[[51.5069,-0.1301],[51.5087,-0.1301],[51.5087,-0.1268],[51.5069,-0.1268],[51.5069,-0.1301]]]",
       "reset_time": 1792198800
     }
+  },
+  {
+    "type": "tappable",
+    "test": "default",
+    "location": "current",
+    "webhook": {
+      "encounter_id": "16082073574809335024",
+      "spawnpoint_id": "476daa23b5b",
+      "pokestop_id": "None",
+      "pokestop_name": null,
+      "latitude": 48.16015080292662,
+      "longitude": 16.416816693472395,
+      "type": "TAPPABLE_TYPE_BOX",
+      "reward_type": "pokemon_candy",
+      "item_id": null,
+      "reward_pokemon_id": 41,
+      "count": 6,
+      "rewards": [
+        {
+          "pokemon_candy": 41,
+          "count": 6
+        }
+      ],
+      "disappear_time": 1793220544,
+      "disappear_time_verified": true,
+      "updated": 1793219372
+    }
+  },
+  {
+    "type": "tappable",
+    "test": "item",
+    "location": "current",
+    "webhook": {
+      "encounter_id": "11959033511157972759",
+      "spawnpoint_id": "47769fcc06d",
+      "pokestop_id": "None",
+      "pokestop_name": null,
+      "latitude": 48.16015080292662,
+      "longitude": 16.416816693472395,
+      "type": "TAPPABLE_TYPE_BOX",
+      "reward_type": "item",
+      "item_id": 1301,
+      "reward_pokemon_id": null,
+      "count": 1,
+      "rewards": [
+        {
+          "item": 1301,
+          "count": 1
+        }
+      ],
+      "disappear_time": 1793220544,
+      "disappear_time_verified": true,
+      "updated": 1793219372
+    }
+  },
+  {
+    "type": "tappable",
+    "test": "stardust",
+    "location": "current",
+    "webhook": {
+      "encounter_id": "4965955447367014431",
+      "spawnpoint_id": "477076c066f",
+      "pokestop_id": "None",
+      "pokestop_name": null,
+      "latitude": 48.16015080292662,
+      "longitude": 16.416816693472395,
+      "type": "TAPPABLE_TYPE_BOX",
+      "reward_type": "stardust",
+      "item_id": null,
+      "reward_pokemon_id": null,
+      "count": 250,
+      "rewards": [
+        {
+          "stardust": true,
+          "count": 250
+        }
+      ],
+      "disappear_time": 1793220544,
+      "disappear_time_verified": true,
+      "updated": 1793219372
+    }
+  },
+  {
+    "type": "tappable",
+    "test": "xlcandy",
+    "location": "current",
+    "webhook": {
+      "encounter_id": "11464639138520590419",
+      "spawnpoint_id": "4772643edfb",
+      "pokestop_id": "None",
+      "pokestop_name": null,
+      "latitude": 48.16015080292662,
+      "longitude": 16.416816693472395,
+      "type": "TAPPABLE_TYPE_BOX",
+      "reward_type": "xl_candy",
+      "item_id": null,
+      "reward_pokemon_id": 25,
+      "count": 1,
+      "rewards": [
+        {
+          "xl_candy": 25,
+          "count": 1
+        }
+      ],
+      "disappear_time": 1793220544,
+      "disappear_time_verified": true,
+      "updated": 1793219372
+    }
+  },
+  {
+    "type": "tappable",
+    "test": "pokestop",
+    "location": "current",
+    "webhook": {
+      "encounter_id": "9287461038290174652",
+      "spawnpoint_id": "None",
+      "pokestop_id": "2b1e3c4a5d6f4e7a8b9c0d1e2f3a4b5c.16",
+      "pokestop_name": "Prater Riesenrad",
+      "latitude": 48.16015080292662,
+      "longitude": 16.416816693472395,
+      "type": "TAPPABLE_TYPE_MAPLE",
+      "reward_type": "pokemon_candy",
+      "item_id": null,
+      "reward_pokemon_id": 854,
+      "count": 6,
+      "rewards": [
+        {
+          "pokemon_candy": 854,
+          "count": 6
+        }
+      ],
+      "disappear_time": 1793219492,
+      "disappear_time_verified": false,
+      "updated": 1793219372
+    }
   }
 ]

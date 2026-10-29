@@ -98,6 +98,7 @@ var trackingTypePathMap = map[string]string{
 	"gym":       "gym",
 	"forts":     "fort",
 	"maxbattle": "maxbattle",
+	"tappable":  "tappable",
 }
 
 func (s *SQLHumanStore) CountLocationReferences(id, label string) ([]ReferencingRule, error) {
@@ -131,7 +132,7 @@ func sortReferences(refs []ReferencingRule) {
 // Mirrors humanOwnedTables in db/human_queries.go minus user_locations (no override_areas).
 var trackingTablesWithOverrideAreas = []string{
 	"monsters", "raid", "egg", "quest", "invasion",
-	"lures", "nests", "gym", "forts", "maxbattle",
+	"lures", "nests", "gym", "forts", "maxbattle", "tappable",
 }
 
 // StripOverrideAreas walks every tracking row for the given human and drops

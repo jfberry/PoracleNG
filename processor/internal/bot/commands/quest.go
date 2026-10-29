@@ -12,10 +12,13 @@ import (
 )
 
 // matchItemName tries to match unrecognized args against item names from game data
-// using item_{id} translation keys. Returns the item ID or 0 if no match.
-func (c *QuestCommand) matchItemName(ctx *bot.CommandContext, parsed *bot.ParsedArgs) int {
+// using item_{id} translation keys. Returns the item ID (0 if no match) and
+// the unrecognized tokens that formed the name — every token when they join
+// into one item name, else the single matching token. Callers consume just
+// those (consumeUnrecognized) so stray args are still reported.
+func matchItemName(ctx *bot.CommandContext, parsed *bot.ParsedArgs) (int, []string) {
 	if ctx.GameData == nil || len(parsed.Unrecognized) == 0 {
-		return 0
+		return 0, nil
 	}
 
 	tr := ctx.Tr()
@@ -36,7 +39,7 @@ func (c *QuestCommand) matchItemName(ctx *bot.CommandContext, parsed *bot.Parsed
 		}
 
 		if fullPhrase == translatedName || fullPhrase == enName {
-			return id
+			return id, append([]string(nil), parsed.Unrecognized...)
 		}
 	}
 
@@ -51,12 +54,25 @@ func (c *QuestCommand) matchItemName(ctx *bot.CommandContext, parsed *bot.Parsed
 				continue
 			}
 			if lower == translatedName || lower == enName {
-				return id
+				return id, []string{arg}
 			}
 		}
 	}
 
-	return 0
+	return 0, nil
+}
+
+// consumeUnrecognized removes one occurrence of each token from
+// parsed.Unrecognized.
+func consumeUnrecognized(parsed *bot.ParsedArgs, tokens []string) {
+	for _, tok := range tokens {
+		for i, u := range parsed.Unrecognized {
+			if u == tok {
+				parsed.Unrecognized = append(parsed.Unrecognized[:i], parsed.Unrecognized[i+1:]...)
+				break
+			}
+		}
+	}
 }
 
 // QuestCommand implements !quest — track quest rewards (pokemon, stardust, pokecoins, items, candy, energy).
@@ -275,10 +291,10 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			}
 		}
 
-		if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
+		if itemID, itemTokens := matchItemName(ctx, parsed); itemID > 0 {
 			// Item quest tracking (reward_type = 2)
 			// Consume matched item tokens from Unrecognized
-			parsed.Unrecognized = nil
+			consumeUnrecognized(parsed, itemTokens)
 			insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 2, itemID, 0, amountVal))
 			amountUsed = true
 		}
@@ -477,10 +493,10 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 		}
 	}
 
-	if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
+	if itemID, itemTokens := matchItemName(ctx, parsed); itemID > 0 {
 		// Item reward (e.g. !quest remove pinap). Consume matched tokens
 		// so the unrecognized-arg checker doesn't also flag them.
-		parsed.Unrecognized = nil
+		consumeUnrecognized(parsed, itemTokens)
 		target(2, itemID, 0)
 	}
 

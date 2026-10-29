@@ -484,6 +484,41 @@
 {
   "id": 1,
   "language": "en",
+  "type": "tappable",
+  "default": true,
+  "platform": "discord",
+  "template": {
+    "embed": {
+      "title": "{{{rewardString}}}",
+      "url": "{{{googleMapUrl}}}",
+      "description": "{{tappableTypeName}} tappable{{#if pokestopName}} at {{{pokestopName}}}{{/if}}\n{{#if disappear_time}}Disappears: {{time}} (<t:{{disappear_time}}:R>)\n{{/if}}{{{addr}}}\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+      "color": "{{color}}",
+      "thumbnail": {
+        "url": "{{{imgUrl}}}"
+      },
+      "image": {
+        "url": "{{{staticMap}}}"
+      }
+    }
+  }
+},
+{
+  "id": 1,
+  "language": "en",
+  "type": "tappable",
+  "default": true,
+  "platform": "telegram",
+  "template": {
+    "content": "{{{rewardString}}}\n{{tappableTypeName}} tappable{{#if pokestopName}} at {{{pokestopName}}}{{/if}}\n{{#if disappear_time}}Disappears: {{time}} in {{tthm}}m {{tths}}s\n{{/if}}{{{addr}}}\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+    "sticker": "{{{stickerUrl}}}",
+    "parse_mode": "Markdown",
+    "location": true,
+    "webpage_preview": true
+  }
+},
+{
+  "id": 1,
+  "language": "en",
   "type": "weatherchange",
   "default": true,
   "platform": "discord",

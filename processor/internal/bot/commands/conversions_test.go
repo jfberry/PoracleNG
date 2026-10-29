@@ -185,6 +185,16 @@ func TestConverters_AllTypesPreserveOverrides(t *testing.T) {
 			t.Errorf("maxbattle: overrides not preserved; label=%q areas=%v", out.OverrideLocationLabel, out.OverrideAreas)
 		}
 	})
+	t.Run("tappable", func(t *testing.T) {
+		api := &db.TappableTrackingAPI{OverrideLocationLabel: label, OverrideAreas: areas, RewardType: 4, Reward: 41, Amount: 3}
+		out := tappableAPIToTracking(api)
+		if out.OverrideLocationLabel != label || !slicesEqual(out.OverrideAreas, areas) {
+			t.Errorf("tappable: overrides not preserved; label=%q areas=%v", out.OverrideLocationLabel, out.OverrideAreas)
+		}
+		if out.RewardType != 4 || out.Reward != 41 || out.Amount != 3 {
+			t.Errorf("tappable: reward not preserved: %+v", out)
+		}
+	})
 }
 
 // TestRaidAPIToTracking_PreservesCostume ensures raidAPIToTracking copies the

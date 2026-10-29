@@ -12,6 +12,7 @@ func (t *GymTracking) GetID() string       { return t.ID }
 func (t *NestTracking) GetID() string      { return t.ID }
 func (t *FortTracking) GetID() string      { return t.ID }
 func (t *MaxbattleTracking) GetID() string { return t.ID }
+func (t *TappableTracking) GetID() string  { return t.ID }
 
 // FilterOrphans removes monster tracking entries whose ID is not in the humans map.
 func (idx *MonsterIndex) FilterOrphans(humans map[string]*Human) {

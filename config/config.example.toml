@@ -204,6 +204,7 @@ locale = "en"                            # default locale - eg en, fr, de, it, r
 # timezone is always derived from the lat/lon.
 #default_timezone = "Europe/London"
 # disabled_commands - array of commands which will be disabled from use
+#   (command names, e.g. "track", "quest", "tappable")
 # disabled_commands = ["track", "Pokemon"]
 default_template_name = "1"              # default template name/number for new trackings
 # available_languages - languages users can swap between with !language command
@@ -247,6 +248,7 @@ disable_gym = false
 disable_fort_update = false
 disable_max_battle = false
 disable_showcase = false                 # disable Showcase (pokestop contest) processing
+disable_tappable = false                 # disable tappable (reward box / map object) processing
 
 # ---- Discord ----
 
@@ -350,7 +352,7 @@ thread_keep_alive_interval_hours = 24
 #
 #   Gateable whole-command keys:
 #     monster (!track), raid, egg, quest, gym, lure,
-#     invasion (covers !invasion and !incident), nest, maxbattle,
+#     invasion (covers !invasion and !incident), nest, maxbattle, tappable,
 #     poracle_admin (!poracle-admin)
 #   Feature keys (restrict a feature inside a command):
 #     pvp         - using PVP filters in !track
@@ -397,7 +399,10 @@ guilds = []
 # Optional allow-list of canonical short names to expose. Empty = all
 # commands this build supports. Use this to hide commands rather than
 # disable categories outright. Names always reference the canonical
-# English short form regardless of any i18n renaming.
+# English short form regardless of any i18n renaming. Supported names:
+#   version, tracked, help, info, language, start, stop, track, raid, egg,
+#   quest, tappable, invasion, incident, lure, nest, maxbattle, gym, fort,
+#   untrack, area, profile, location, summary
 # enable = ["track", "tracked", "raid", "untrack", "area", "profile", "location", "start", "stop"]
 enable = []
 
@@ -499,7 +504,7 @@ height = 250
 zoom = 15
 pregenerate = true
 include_stops = false
-# Override per alert type: monster, raid, pokestop, quest, weather, location, nest, gym
+# Override per alert type: monster, raid, pokestop, quest, weather, location, nest, gym, tappable
 # [geocoding.tileserver_settings.monster]
 # type = "staticMap"
 # include_stops = true
@@ -511,6 +516,7 @@ include_stops = false
 # requires a `poracle-multi-{maptype}.json` template in your tileserver
 # template set, which is a different render shape from a multi-pin
 # single tile.
+# Maptypes: pokemon, raid, quest, questsummary, tappable, ...
 # [geocoding.static_map_type]
 # questsummary = "staticMap"
 

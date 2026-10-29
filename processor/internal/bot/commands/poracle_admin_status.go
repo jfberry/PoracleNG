@@ -527,6 +527,7 @@ func renderTrackingSection(ctx *bot.CommandContext, tr translator) string {
 		{"gym", len(s.Gyms)},
 		{"fort", len(s.Forts)},
 		{"maxbattle", len(s.Maxbattles)},
+		{"tappable", len(s.Tappables)},
 	} {
 		sb.WriteString("\n    ")
 		sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.tracking_type",

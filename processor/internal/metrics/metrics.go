@@ -19,6 +19,7 @@ const (
 	TypeGym        = "gym"
 	TypeFortUpdate = "fort_update"
 	TypeMaxbattle  = "maxbattle"
+	TypeTappable   = "tappable"
 )
 
 // IntervalCounters tracks counts between periodic log resets.

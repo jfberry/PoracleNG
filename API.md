@@ -69,8 +69,10 @@ curl http://localhost:3030/health
 ```
 
 ```json
-{"status": "healthy"}
+{"status": "healthy", "version": "…", "capabilities": {"buttons": true, "snapshots": true, "autocreate": true, "tomlDts": true, "buttonResponseObject": true, "derivedDtsTypes": true, "costume": true, "customMaps": true, "tappable": true}}
 ```
+
+`capabilities` is a static feature map for client feature detection. `tappable` means the binary has the `tappable` tracking type (v2 tracking endpoints, DTS type, test data, `disabledHooks` entry).
 
 ### GET /metrics
 
@@ -94,7 +96,7 @@ All tracking types follow the same 4-endpoint pattern. The `{id}` parameter is t
 
 List all tracking rules for a user. Returns rules with a human-readable `description` field.
 
-**Types:** `pokemon`, `raid`, `egg`, `quest`, `invasion`, `lure`, `nest`, `gym`, `fort`, `maxbattle`
+**Types:** `pokemon`, `raid`, `egg`, `quest`, `invasion`, `lure`, `nest`, `gym`, `fort`, `maxbattle`. The newer `incident` and `tappable` types are v2 only (`/api/v2/humans/{id}/tracking/{type}`).
 
 ```bash
 curl -H "X-Poracle-Secret: secret" http://localhost:3030/api/tracking/pokemon/123456789
@@ -782,7 +784,7 @@ Two fields client authors most often need:
 | Field | Meaning |
 |-------|---------|
 | `availableLanguages` | The allow-list enforced by the set-language endpoints, sorted. **`null` means unrestricted** — the server accepts any language, so offer your full menu. A non-null array is exhaustive: anything outside it is rejected with 400. |
-| `disabledHooks` | Alert types disabled on this server, named to match the tracking-type names (`pokemon`, `raid`, `fort`, `invasion`, `lure`, `quest`, `weather`, `nest`, `gym`, `maxbattle`, `showcase`). Only flags the processor actually enforces appear; `disable_pokestop` is a deprecated no-op and is never reported. |
+| `disabledHooks` | Alert types disabled on this server, named to match the tracking-type names (`pokemon`, `raid`, `fort`, `invasion`, `lure`, `quest`, `weather`, `nest`, `gym`, `maxbattle`, `showcase`, `tappable`). Only flags the processor actually enforces appear; `disable_pokestop` is a deprecated no-op and is never reported. |
 
 ### GET /api/config/templates
 
@@ -957,7 +959,7 @@ Run a raw webhook through the enrichment pipeline and return the enriched variab
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `type` | string | yes | | Webhook type: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort_update, max_battle |
+| `type` | string | yes | | Webhook type: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort_update, max_battle, tappable |
 | `webhook` | object | yes | | Raw webhook payload (same format as Golbat sends) |
 | `language` | string | no | "en" | Language code for translations |
 | `platform` | string | no | "discord" | Platform for emoji resolution (discord or telegram) |
@@ -1021,7 +1023,7 @@ Returns available template fields, block scopes, and insertable snippets for a D
 }
 ```
 
-Types: monster, monsterNoIv, raid, egg, quest, invasion, lure, nest, gym, fort-update, maxbattle, weatherchange, greeting.
+Types: monster, monsterNoIv, raid, egg, quest, invasion, lure, nest, gym, fort-update, maxbattle, tappable, weatherchange, greeting.
 
 ### GET /api/dts/fields
 
@@ -1058,7 +1060,7 @@ Returns test webhook scenarios from `testdata.json`. The editor can use these as
 
 | Parameter | Description |
 |-----------|-------------|
-| `type` | Filter by webhook type (pokemon, raid, pokestop, gym, max_battle, quest, fort_update) |
+| `type` | Filter by webhook type (pokemon, raid, pokestop, gym, max_battle, quest, fort_update, tappable) |
 
 ```json
 {
@@ -1071,7 +1073,7 @@ Returns test webhook scenarios from `testdata.json`. The editor can use these as
 }
 ```
 
-Available test scenarios: boring, hundo, great-rank1, great-rank9, ultra1, unencountered, boosted, shiny (pokemon); egg1, level1, egg5, level5, egg6, level3 (raid); invasion, lure, giovanni, kecleon, goldstop, goldlure, showcase, pokemoncontest (pokestop); teamchange (gym); level1, level3 (max_battle); quest-item, quest-stardust, quest-pokecoins, quest-pokemon, quest-energy (quest); edit, new, remove, etc. (fort_update).
+Available test scenarios: boring, hundo, great-rank1, great-rank9, ultra1, unencountered, boosted, shiny (pokemon); egg1, level1, egg5, level5, egg6, level3 (raid); invasion, lure, giovanni, kecleon, goldstop, goldlure, showcase, pokemoncontest (pokestop); teamchange (gym); level1, level3 (max_battle); quest-item, quest-stardust, quest-pokecoins, quest-pokemon, quest-energy (quest); edit, new, remove, etc. (fort_update); default, item, stardust, xlcandy, pokestop (tappable).
 
 ### GET/POST /api/dts/reload
 
@@ -1598,7 +1600,7 @@ Content-Type: application/json
 | `human.type` | string | `discord:user`, `discord:channel`, `discord:webhook`, `telegram:user`, `telegram:channel`, `telegram:group`. |
 | `human.name` | string | Friendly name from the `humans` row. |
 | `areas` | string[] | Geofence area names containing the event's coordinates. Same set the matcher used for area-overlap checks (case as configured in your geofences, not lower-cased). |
-| `webhook_type` | string | One of `pokemon`, `raid`, `egg`, `quest`, `pokestop`, `invasion`, `nest`, `gym`, `fort_update`, `max_battle`. |
+| `webhook_type` | string | One of `pokemon`, `raid`, `egg`, `quest`, `pokestop`, `invasion`, `nest`, `gym`, `fort_update`, `max_battle`, `tappable`. |
 | `webhook` | object | The original Golbat message verbatim. Useful when the validator's decision depends on event details (raid level, pokemon IV, etc.). |
 
 ### Response

@@ -30,7 +30,7 @@ func TestShippedHelpTemplatesLoadAndRender(t *testing.T) {
 	helpIDs := []string{
 		"index",
 		"track", "untrack", "raid", "egg", "quest",
-		"invasion", "incident", "lure", "nest", "gym", "fort", "maxbattle",
+		"invasion", "incident", "lure", "nest", "gym", "fort", "maxbattle", "tappable",
 		"tracked", "script", "info",
 		"area", "location", "profile", "language",
 		"start", "stop", "poracle", "unregister",

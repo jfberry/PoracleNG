@@ -18,7 +18,7 @@ var validBackupName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // backupTables lists all tracking tables to export/import.
 var backupTables = []string{
-	"monsters", "raid", "egg", "quest", "invasion", "lures", "gym", "nests", "maxbattle", "forts",
+	"monsters", "raid", "egg", "quest", "invasion", "lures", "gym", "nests", "maxbattle", "forts", "tappable",
 }
 
 // legacyBackupTables are keys older backup files may contain for tables no

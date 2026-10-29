@@ -22,6 +22,7 @@ func fillAllTrackingStores(ts *store.TrackingStores) {
 	ts.Nests = store.NewMockTrackingStore[db.NestTrackingAPI](store.NestGetUID, store.NestSetUID)
 	ts.Forts = store.NewMockTrackingStore[db.FortTrackingAPI](store.FortGetUID, store.FortSetUID)
 	ts.Maxbattles = store.NewMockTrackingStore[db.MaxbattleTrackingAPI](store.MaxbattleGetUID, store.MaxbattleSetUID)
+	ts.Tappables = store.NewMockTrackingStore[db.TappableTrackingAPI](store.TappableGetUID, store.TappableSetUID)
 }
 
 // A lure rule created via !lure must show up in the !tracked listing.

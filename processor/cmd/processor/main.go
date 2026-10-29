@@ -450,6 +450,7 @@ func main() {
 	api.RegisterV2TrackingNest(humaAPI, trackingDeps)
 	api.RegisterV2TrackingLure(humaAPI, trackingDeps)
 	api.RegisterV2TrackingMaxbattle(humaAPI, trackingDeps)
+	api.RegisterV2TrackingTappable(humaAPI, trackingDeps)
 	api.RegisterV2TrackingGym(humaAPI, trackingDeps)
 	api.RegisterV2TrackingFort(humaAPI, trackingDeps)
 	api.RegisterV2TrackingRaid(humaAPI, trackingDeps)
@@ -762,6 +763,7 @@ func main() {
 	cmdRegistry.Register(&commands.NestCommand{})
 	cmdRegistry.Register(&commands.FortCommand{})
 	cmdRegistry.Register(&commands.MaxbattleCommand{})
+	cmdRegistry.Register(&commands.TappableCommand{})
 	cmdRegistry.Register(&commands.QuestCommand{})
 	cmdRegistry.Register(&commands.LureCommand{})
 	cmdRegistry.Register(&commands.LanguageCommand{})
@@ -1310,6 +1312,7 @@ type ProcessorService struct {
 	nestMatcher      *matching.NestMatcher
 	fortMatcher      *matching.FortMatcher
 	maxbattleMatcher *matching.MaxbattleMatcher
+	tappableMatcher  *matching.TappableMatcher
 	pvpCfg           *pvp.Config
 	activePokemon    *tracker.ActivePokemonTracker
 	recentActivity   *tracker.RecentActivity
@@ -1758,6 +1761,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		nestMatcher:      &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		fortMatcher:      &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		maxbattleMatcher: &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		tappableMatcher:  &matching.TappableMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		pvpCfg:           pvpCfg,
 		activePokemon:    activePokemon,
 		recentActivity:   tracker.NewRecentActivity(),

@@ -203,3 +203,19 @@ func maxbattleAPIToTracking(a *db.MaxbattleTrackingAPI) *db.MaxbattleTracking {
 		OverrideAreas:         a.OverrideAreas,
 	}
 }
+
+func tappableAPIToTracking(a *db.TappableTrackingAPI) *db.TappableTracking {
+	return &db.TappableTracking{
+		ID:                    a.ID,
+		ProfileNo:             a.ProfileNo,
+		RewardType:            a.RewardType,
+		Reward:                a.Reward,
+		Amount:                a.Amount,
+		Distance:              a.Distance,
+		Template:              a.Template,
+		Clean:                 a.Clean,
+		Ping:                  a.Ping,
+		OverrideLocationLabel: a.OverrideLocationLabel,
+		OverrideAreas:         a.OverrideAreas,
+	}
+}

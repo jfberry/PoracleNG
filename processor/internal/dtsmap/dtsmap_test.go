@@ -17,6 +17,8 @@ func TestAliasFold_CaseInsensitiveMatch(t *testing.T) {
 		{"monsterchanged", "monster_changed"},
 		{"monsternoiv", "pokemon"},
 		{"maxbattle", "max_battle"},
+		{"tappable", "tappable"},
+		{"TAPPABLE", "tappable"},
 		{"egg", "raid"},
 		{"rsvpchanges", "rsvp_changes"},
 		{"questsummary", "quest_summary"},

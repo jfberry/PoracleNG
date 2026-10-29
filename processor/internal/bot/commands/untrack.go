@@ -10,7 +10,7 @@ import (
 
 // UntrackCommand implements !untrack — remove pokemon tracking rules.
 // When the first argument is a recognised tracking type (raid, egg, quest,
-// invasion, incident, lure, nest, gym, fort, maxbattle) the command is
+// invasion, incident, lure, nest, gym, fort, maxbattle, tappable) the command is
 // rerouted to that type's command with "remove" prepended, matching what
 // the slash dispatcher does for /untrack <subtype>.
 type UntrackCommand struct{}
@@ -36,6 +36,7 @@ var validUntrackTypes = map[string]bool{
 	"gym":       true,
 	"fort":      true,
 	"maxbattle": true,
+	"tappable":  true,
 }
 
 // validUntrackType reports whether s is a recognised non-pokemon tracking type.

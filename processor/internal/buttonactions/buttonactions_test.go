@@ -111,6 +111,39 @@ func TestHandleMute_Pokemon(t *testing.T) {
 	}
 }
 
+// A tappable has no pokemon_id: the pokemon mute covers the first reward
+// with a pokemon, the same one the webhook handler's mute.Event carries —
+// here the candy, after an item reward. Rewards arrive as []any after the
+// snapshot's JSON round-trip.
+func TestHandleMute_PokemonTappable(t *testing.T) {
+	for name, rewards := range map[string]any{
+		"stored": []any{
+			map[string]any{"type": "item", "itemId": float64(1301), "pokemonId": float64(0)},
+			map[string]any{"type": "pokemon_candy", "pokemonId": float64(41)},
+		},
+		"in memory": []map[string]any{
+			{"type": "item", "itemId": 1301, "pokemonId": 0},
+			{"type": "pokemon_candy", "pokemonId": 41},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := mute.NewStore()
+			snap := &snapshots.Snapshot{
+				Target:     "u1",
+				AlertType:  "tappable",
+				Enrichment: map[string]any{"rewardPokemonId": float64(0), "rewards": rewards},
+			}
+			def := buttons.Def{ID: "mute_pokemon", Label: "Mute", Action: buttons.ActionMute, Scope: buttons.ScopePokemon}
+			if _, err := HandleMute(context.Background(), snap, def, "u1", Deps{MuteStore: store}); err != nil {
+				t.Fatalf("HandleMute: %v", err)
+			}
+			if !store.Match("u1", mute.Event{PokemonID: 41}, time.Now().Unix()) {
+				t.Errorf("expected mute store to contain pokemon 41")
+			}
+		})
+	}
+}
+
 func TestHandleMute_Area(t *testing.T) {
 	store := mute.NewStore()
 	snap := &snapshots.Snapshot{
@@ -246,6 +279,7 @@ func recordingTrackingStores(hits *[]string) *store.TrackingStores {
 		Gyms:       recordingStore[db.GymTrackingAPI]{name: "gyms", hits: hits},
 		Forts:      recordingStore[db.FortTrackingAPI]{name: "forts", hits: hits},
 		Maxbattles: recordingStore[db.MaxbattleTrackingAPI]{name: "maxbattles", hits: hits},
+		Tappables:  recordingStore[db.TappableTrackingAPI]{name: "tappables", hits: hits},
 	}
 }
 
@@ -267,6 +301,7 @@ func TestUnsubscribeRoutesEveryRenderedAlertType(t *testing.T) {
 		"gym":         "gyms",       // gym.go
 		"fort-update": "forts",      // fort.go
 		"maxbattle":   "maxbattles", // maxbattle.go
+		"tappable":    "tappables",  // tappable.go
 	}
 	for alertType, want := range cases {
 		t.Run(alertType, func(t *testing.T) {
@@ -312,6 +347,7 @@ func TestAlertTypeTable(t *testing.T) {
 		"pokestop": "lure", "lure": "lure", "nest": "nest", "gym": "gym",
 		"fort-update": "fort", "fort_update": "fort",
 		"max_battle": "maxbattle", "maxbattle": "maxbattle",
+		"tappable": "tappable",
 	}
 	for in, want := range cases {
 		if got, ok := alertTypeTable(in); !ok || got != want {

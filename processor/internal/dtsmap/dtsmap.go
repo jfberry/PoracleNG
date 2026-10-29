@@ -71,6 +71,7 @@ var types = map[string]Source{
 	"gym":            {WebhookType: "gym", TemplateType: "gym"},
 	"nest":           {WebhookType: "nest", TemplateType: "nest"},
 	"maxbattle":      {WebhookType: "max_battle", TemplateType: "maxbattle"},
+	"tappable":       {WebhookType: "tappable", TemplateType: "tappable"},
 
 	// Identity entries for raw webhook-type spellings not already covered
 	// above.
