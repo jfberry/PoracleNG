@@ -394,6 +394,14 @@ All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion,
 
 **`!track remove` delegates to `!untrack`**: `!track remove ...` is equivalent to `!untrack ...`, including gen/type filtering support.
 
+**Remove rules** (`bot/commands/remove.go`): every tracking command's remove goes through `checkRemoveArgs` and `ruleRemover.run`, which share four rules:
+- Unrecognised words are refused before anything is removed.
+- `id:N` stands alone; any other argument beside it is refused.
+- An argument the remove doesn't use is refused ("Not used when removing: …") rather than ignored. Each command's `removeSpec` lists its `selectors` (name rules to remove) and `filters` (narrow a selection but can't select alone, e.g. raid `costume:`, quest `summary`, invasion gender, nest/maxbattle `gen`/type). `ParsedArgs.Matched` records which param consumed each token so the refusal names what the user typed.
+- A remove has to name something. A bare `remove` is refused; `everything` removes every rule of the type (whatever values it holds), then filters narrow it.
+
+Commands that read selectors from the unrecognised words (quest item names, invasion grunt types) consume them first and pass the consumed words to `checkRemoveArgs`. `!untrack` uses the same gate; its `gen:` and type are selectors that add to named pokemon (`!untrack pikachu gen1` removes both), not filters.
+
 ### Command Security & Target Resolution Rules
 
 These rules govern who can execute commands, what they target, and where they can be run. **Do not change these without understanding the full security model.**

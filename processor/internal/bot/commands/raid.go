@@ -69,6 +69,10 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	parsed := ctx.ArgMatcher.Match(args, raidParams, ctx.Language)
 
+	if parsed.HasKeyword("arg.remove") {
+		return c.removeRaids(ctx, parsed)
+	}
+
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
 	}
@@ -105,11 +109,6 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.move.unknown", moveName)}}
 		}
 		move = id
-	}
-
-	// Handle remove
-	if parsed.HasKeyword("arg.remove") {
-		return c.removeRaids(ctx, parsed)
 	}
 
 	// Costume filter — 9000 = any (default), 0 = no costume, N = specific.
@@ -256,29 +255,20 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: react, Text: message}}
 }
 
+// raidRemoveSpec: raid rules are removed by boss or level; a costume
+// narrows the selection.
+var raidRemoveSpec = removeSpec{
+	selectors: []bot.ParamDef{pokemonParam, levelParam, raidLevelParam},
+	filters:   []bot.ParamDef{costumeParam},
+}
+
 func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
-	if reply := rejectFormOnRemove(ctx, parsed); reply != nil {
+	if reply := checkRemoveArgs(ctx, parsed, raidRemoveSpec, nil); reply != nil {
 		return []bot.Reply{*reply}
 	}
-
 	tr := ctx.Tr()
 
-	// Remove-by-UID targets specific rules directly and doesn't go through
-	// the pokemon/level/everything selection below, so a costume: arg has
-	// nothing to filter — resolve it only for the selection-based path
-	// (avoids rejecting `id:N costume:bad` and silently ignoring
-	// `id:N costume:1`).
-	if len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Raids, parsed.RemoveUIDs,
-			store.RaidGetUID,
-			func(r *db.RaidTrackingAPI) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(r)) },
-		)
-	}
-
-	// Costume filter: when present, narrows removal to rules with this
-	// exact costume ID, in addition to whatever pokemon/level/everything
-	// selection matched below. Mirrors untrack.go's costume-removal idiom.
-	var costumeFilter *int
+	var keep func(*db.RaidTrackingAPI) bool
 	if costumeArg, ok := parsed.Strings["costume"]; ok {
 		id, resolved := ctx.ArgMatcher.ResolveCostume(costumeArg, ctx.Language)
 		if !resolved {
@@ -289,65 +279,24 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 					bot.CommandPrefix(ctx)),
 			}}
 		}
-		costumeFilter = &id
+		keep = func(r *db.RaidTrackingAPI) bool { return r.Costume == id }
 	}
 
-	tracked, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("raid command: select for remove: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	var uidsToDelete []int64
-	var removed []db.RaidTrackingAPI
-	for _, existing := range tracked {
-		shouldRemove := false
-		// Remove by pokemon
+	levelRange, hasLevel := parsed.Ranges["level"]
+	selects := func(r *db.RaidTrackingAPI) bool {
 		for _, mon := range parsed.Pokemon {
-			if existing.PokemonID == mon.PokemonID {
-				shouldRemove = true
-				break
+			if r.PokemonID == mon.PokemonID {
+				return true
 			}
 		}
-		// Remove by level
-		if slices.Contains(parsed.RaidLevels, existing.Level) {
-			shouldRemove = true
-		}
-		if r, ok := parsed.Ranges["level"]; ok {
-			if r.HasMax {
-				if existing.Level >= r.Min && existing.Level <= r.Max {
-					shouldRemove = true
-				}
-			} else if existing.Level == r.Min {
-				shouldRemove = true
-			}
-		}
-		if parsed.HasKeyword("arg.everything") {
-			shouldRemove = true
-		}
-		if !shouldRemove {
-			continue
-		}
-		if costumeFilter != nil && existing.Costume != *costumeFilter {
-			continue
-		}
-		uidsToDelete = append(uidsToDelete, existing.UID)
-		removed = append(removed, existing)
+		return slices.Contains(parsed.RaidLevels, r.Level) ||
+			(hasLevel && rangeMatches(levelRange, r.Level))
 	}
 
-	if len(uidsToDelete) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-
-	if err := ctx.Tracking.Raids.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
-		log.Errorf("raid command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	ctx.TriggerReload()
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.RaidRowText(tr, raidAPIToTracking(&removed[i])))
-	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	return ruleRemover[db.RaidTrackingAPI]{
+		store:    ctx.Tracking.Raids,
+		getUID:   store.RaidGetUID,
+		describe: func(r *db.RaidTrackingAPI) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(r)) },
+		logName:  "raid",
+	}.run(ctx, parsed, selects, keep)
 }

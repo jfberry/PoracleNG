@@ -144,16 +144,24 @@ func TestInvasionAddRejectsTrailingTypo(t *testing.T) {
 	}
 }
 
-// Bare remove still clears everything (documented behaviour).
-func TestInvasionBareRemoveClearsAll(t *testing.T) {
+// A bare remove names nothing and is refused; everything clears them all.
+func TestInvasionBareRemoveRefused(t *testing.T) {
 	ctx, invasions := invasionTestCtx(t)
 	seedInvasions(t, invasions,
 		db.InvasionTrackingAPI{GruntType: "giovanni"},
 		db.InvasionTrackingAPI{GruntType: "npc_0"},
 	)
-	(&InvasionCommand{}).Run(ctx, []string{"remove"})
+	replies := (&InvasionCommand{}).Run(ctx, []string{"remove"})
+	if len(replies) == 0 || replies[0].React != "🙅" {
+		t.Errorf("bare remove replies = %+v, want a refusal", replies)
+	}
+	if n := len(invasions.AllRows()); n != 2 {
+		t.Errorf("rows = %d, want 2 (nothing removed)", n)
+	}
+
+	(&InvasionCommand{}).Run(ctx, []string{"remove", "everything"})
 	if n := len(invasions.AllRows()); n != 0 {
-		t.Errorf("rows = %d, want 0", n)
+		t.Errorf("rows = %d after remove everything, want 0", n)
 	}
 }
 
@@ -165,7 +173,7 @@ func TestInvasionRemoveRespectsGender(t *testing.T) {
 		db.InvasionTrackingAPI{GruntType: "giovanni", Gender: 2},
 		db.InvasionTrackingAPI{GruntType: "npc_0", Gender: 2},
 	)
-	(&InvasionCommand{}).Run(ctx, []string{"remove", "female"})
+	(&InvasionCommand{}).Run(ctx, []string{"remove", "everything", "female"})
 	rows := invasions.AllRows()
 	if len(rows) != 1 || rows[0].Gender != 1 {
 		t.Errorf("rows = %+v, want only the male giovanni rule left", rows)

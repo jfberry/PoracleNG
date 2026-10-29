@@ -55,6 +55,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 
 	parsed := ctx.ArgMatcher.Match(args, maxbattleParams, ctx.Language)
 
+	if parsed.HasKeyword("arg.remove") {
+		return c.removeMaxbattles(ctx, parsed)
+	}
+
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
 	}
@@ -82,11 +86,6 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.move.unknown", moveName)}}
 		}
 		move = id
-	}
-
-	// Handle remove
-	if parsed.HasKeyword("arg.remove") {
-		return c.removeMaxbattles(ctx, parsed)
 	}
 
 	var insert []db.MaxbattleTrackingAPI
@@ -221,71 +220,41 @@ func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.
 	return filterByGenAndType(ctx, monsters, parsed), nil
 }
 
+// maxbattleRemoveSpec: max battle rules are removed by pokemon or by
+// level; gen: and type narrow the selection.
+var maxbattleRemoveSpec = removeSpec{
+	selectors: []bot.ParamDef{pokemonParam, levelParam},
+	filters:   []bot.ParamDef{genParam, typeNameParam},
+}
+
 func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
-	if reply := rejectFormOnRemove(ctx, parsed); reply != nil {
+	if reply := checkRemoveArgs(ctx, parsed, maxbattleRemoveSpec, nil); reply != nil {
 		return []bot.Reply{*reply}
 	}
-
-	if len(parsed.RemoveUIDs) > 0 {
-		tr := ctx.Tr()
-		return removeByUIDs(ctx, ctx.Tracking.Maxbattles, parsed.RemoveUIDs,
-			store.MaxbattleGetUID,
-			func(r *db.MaxbattleTrackingAPI) string {
-				return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(r))
-			},
-		)
-	}
-
-	tracked, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("maxbattle command: select for remove: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	var uids []int64
-	var removed []db.MaxbattleTrackingAPI
-	if parsed.HasKeyword("arg.everything") {
-		for _, existing := range tracked {
-			uids = append(uids, existing.UID)
-			removed = append(removed, existing)
-		}
-	} else {
-		removeIDs := make(map[int]bool)
-		for _, mon := range parsed.Pokemon {
-			removeIDs[mon.PokemonID] = true
-		}
-		levelRange, hasLevel := parsed.Ranges["level"]
-		matchesLevel := func(existing *db.MaxbattleTrackingAPI) bool {
-			// Level rules are the by-level rows (wildcard pokemon); a
-			// pokemon-specific rule is removed by naming the pokemon.
-			if !hasLevel || existing.PokemonID != bot.WildcardID {
-				return false
-			}
-			if levelRange.HasMax {
-				return existing.Level >= levelRange.Min && existing.Level <= levelRange.Max
-			}
-			return existing.Level == levelRange.Min
-		}
-		for _, existing := range tracked {
-			if removeIDs[existing.PokemonID] || matchesLevel(&existing) {
-				uids = append(uids, existing.UID)
-				removed = append(removed, existing)
-			}
-		}
-	}
-
-	if len(uids) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-	if err := ctx.Tracking.Maxbattles.DeleteByUIDs(ctx.TargetID, uids); err != nil {
-		log.Errorf("maxbattle command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-	ctx.TriggerReload()
 	tr := ctx.Tr()
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&removed[i])))
+
+	levelRange, hasLevel := parsed.Ranges["level"]
+	selects := func(r *db.MaxbattleTrackingAPI) bool {
+		for _, mon := range parsed.Pokemon {
+			if r.PokemonID == mon.PokemonID {
+				return true
+			}
+		}
+		// Level rules are the by-level rows (wildcard pokemon); a
+		// pokemon-specific rule is removed by naming the pokemon.
+		return hasLevel && r.PokemonID == bot.WildcardID && rangeMatches(levelRange, r.Level)
 	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	var keep func(*db.MaxbattleTrackingAPI) bool
+	if inGenType := genTypeKeep(ctx, parsed); inGenType != nil {
+		keep = func(r *db.MaxbattleTrackingAPI) bool { return inGenType(r.PokemonID, r.Form) }
+	}
+
+	return ruleRemover[db.MaxbattleTrackingAPI]{
+		store:  ctx.Tracking.Maxbattles,
+		getUID: store.MaxbattleGetUID,
+		describe: func(r *db.MaxbattleTrackingAPI) string {
+			return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(r))
+		},
+		logName: "maxbattle",
+	}.run(ctx, parsed, selects, keep)
 }

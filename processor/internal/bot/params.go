@@ -86,6 +86,16 @@ type ParsedArgs struct {
 	StringLists map[string][]string
 	// Tokens that matched nothing
 	Unrecognized []string
+	// Matched records which param consumed each recognised token, in match
+	// order, so a caller can refuse params it accepts but won't use (a
+	// remove that ignores a filter) and name the token the user typed.
+	Matched []MatchedArg
+}
+
+// MatchedArg is one recognised token and the param that consumed it.
+type MatchedArg struct {
+	Token string
+	Param ParamDef
 }
 
 // NewParsedArgs creates an empty ParsedArgs with initialized maps.
