@@ -192,7 +192,7 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			team := req.Team.intValue(4)
 			if team < 0 || team > 4 {
@@ -245,6 +245,10 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.EggGetUID, store.EggSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.EggGetUID, store.EggSetUID)
 
 		// Build confirmation message before applying changes

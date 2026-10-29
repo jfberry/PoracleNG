@@ -204,6 +204,9 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	if r := overrideLimitReply(ctx, tracked, insert, store.InvasionGetUID, store.InvasionSetUID); r != nil {
+		return r
+	}
 	diff, err := store.ApplyDiff(ctx.Tracking.Invasions, ctx.TargetID, tracked, insert,
 		store.InvasionGetUID, store.InvasionSetUID)
 	if err != nil {

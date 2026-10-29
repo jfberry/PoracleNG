@@ -189,6 +189,13 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 			defaultTemplate = "1"
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		// cleanRow: apply defaults and validate, matching the JS cleanRow function.
 		cleanRow := func(req monsterInsertRequest) (db.MonsterTrackingAPI, error) {
 			if !req.PokemonID.isSet() {
@@ -197,11 +204,7 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 
 			pokemonID := req.PokemonID.intValue(0)
 
-			distance := req.Distance.intValue(0)
-			const maxDistanceDefault = 40000000 // circumference of Earth
-			if distance > maxDistanceDefault {
-				distance = maxDistanceDefault
-			}
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -274,13 +277,6 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 			return row, nil
 		}
 
-		// Pre-fetch override context once so per-row validation doesn't re-query.
-		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
-		if ocMsg != "" {
-			trackingJSONError(c, ocCode, ocMsg)
-			return
-		}
-
 		// Split: rows with uid are explicit updates, without are inserts
 		var insert []db.MonsterTrackingAPI
 		var updates []db.MonsterTrackingAPI
@@ -312,6 +308,10 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.MonsterGetUID, store.MonsterSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.MonsterGetUID, store.MonsterSetUID)
 
 		// Merge: diff-classified updates go into the explicit updates slice

@@ -430,7 +430,7 @@ type v2CreateInput[Req any] struct {
 	// client confine a rule to a fence the user drew themselves. Lifts the
 	// userSelectable filter on override_areas only — an unknown fence name is
 	// still rejected, and the community restriction still applies (#228).
-	Trusted bool `query:"trusted" doc:"Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply."`
+	Trusted bool `query:"trusted" doc:"Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply. Also lifts [tracking] max_distance and max_areas."`
 	DryRun  bool `query:"dry_run" doc:"Validate and classify without writing: returns what would be created/updated/unchanged (created rules have uid 0, updated rules carry previous), with dry_run:true. Nothing is stored, reloaded or pushed. The preview is advisory; a later commit reports what it actually did."`
 	Body    []Req
 }
@@ -446,7 +446,7 @@ type v2PutInput[Req any] struct {
 	// client confine a rule to a fence the user drew themselves. Lifts the
 	// userSelectable filter on override_areas only — an unknown fence name is
 	// still rejected, and the community restriction still applies (#228).
-	Trusted bool `query:"trusted" doc:"Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply."`
+	Trusted bool `query:"trusted" doc:"Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply. Also lifts [tracking] max_distance and max_areas."`
 	DryRun  bool `query:"dry_run" doc:"Validate without writing: same 404/409/422 checks and response as a real PUT, with dry_run:true. Nothing is stored, reloaded or pushed."`
 	Body    Req
 }
@@ -479,6 +479,10 @@ func v2HandleCreate[Req any, T any](deps *TrackingDeps, typ v2TrackingType[Req, 
 	existing, err := typ.diffRows(deps, human.ID, profileNo)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("database error")
+	}
+
+	if msg := overrideLimitMsg(deps, oc, existing, candidates, typ.GetUID, typ.SetUID); msg != "" {
+		return nil, huma.Error422UnprocessableEntity(msg)
 	}
 
 	var diff store.DiffResult[T]
@@ -559,6 +563,12 @@ func v2HandlePut[Req any, T any](deps *TrackingDeps, typ v2TrackingType[Req, T],
 			return v2PutResponse(deps, typ, human, nil, nil, []T{*stored}, in), nil
 		}
 		break
+	}
+
+	// max_areas: the rule may keep (a subset of) the list it already has.
+	if bot.AreaLimitBlocks(deps.Config, oc.limitExempt, bot.OverrideAreasOf(&row), bot.OverrideAreasOf(stored)) {
+		return nil, huma.Error422UnprocessableEntity(fmt.Sprintf(
+			"override_areas has more than the maximum of %d areas", deps.Config.Tracking.MaxAreas))
 	}
 
 	policy := store.RowDiffPolicy[T]{GetUID: typ.GetUID, SetUID: typ.SetUID}

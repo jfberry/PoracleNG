@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -546,6 +548,12 @@ func HandleSetAreas(deps *TrackingDeps) gin.HandlerFunc {
 			newAreas = []string{}
 		}
 
+		if bot.AreaLimitBlocks(deps.Config, bot.LimitExempt(admin, human.Type), newAreas, human.Area) {
+			trackingJSONError(c, http.StatusBadRequest,
+				fmt.Sprintf("more than the maximum of %d areas", deps.Config.Tracking.MaxAreas))
+			return
+		}
+
 		if err := deps.Humans.SetArea(id, human.CurrentProfileNo, newAreas); err != nil {
 			log.Errorf("Humans API: update areas: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -615,6 +623,11 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 
 		if human.Type == "" {
 			human.Type = "discord:user"
+		}
+		if bot.AreaLimitBlocks(deps.Config, bot.LimitExempt(isAdmin(deps, body.ID), human.Type), human.Area, nil) {
+			trackingJSONError(c, http.StatusBadRequest,
+				fmt.Sprintf("more than the maximum of %d areas", deps.Config.Tracking.MaxAreas))
+			return
 		}
 		if body.Enabled != nil && !*body.Enabled {
 			human.Enabled = false

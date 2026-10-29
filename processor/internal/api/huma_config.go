@@ -37,7 +37,8 @@ type poracleWebResponse struct {
 	EverythingFlagPermissions    string           `json:"everythingFlagPermissions" doc:"Permission mode for the !track everything keyword"`
 	GymBattles                   bool             `json:"gymBattles" doc:"Whether gym battle tracking is enabled"`
 	Locale                       string           `json:"locale" doc:"Default server locale"`
-	MaxDistance                  int              `json:"maxDistance" doc:"Maximum allowed tracking distance (m)"`
+	MaxDistance                  int              `json:"maxDistance" doc:"Maximum tracking distance (m) for users (admins and channels/webhooks/groups exempt); 0 = no limit"`
+	MaxAreas                     int              `json:"maxAreas" doc:"Maximum number of areas a user may select per profile or per rule override (admins and channels/webhooks/groups exempt); 0 = no limit"`
 	Prefix                       string           `json:"prefix" doc:"Discord command prefix"`
 	Provider                     string           `json:"provider" doc:"Geocoding provider type: nominatim | photon | google. Empty when no geocoder is configured — do not infer that from providerURL, which google does not use."`
 	ProviderURL                  string           `json:"providerURL" doc:"Geocoding provider URL"`
@@ -386,6 +387,7 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 			Telegram: telegramAdmins,
 		},
 		MaxDistance:               cfg.Tracking.MaxDistance,
+		MaxAreas:                  cfg.Tracking.MaxAreas,
 		DefaultDistance:           cfg.Tracking.DefaultDistance,
 		DefaultEdit:               defaultEdit,
 		EverythingFlagPermissions: cfg.Tracking.EverythingFlagPermissions,

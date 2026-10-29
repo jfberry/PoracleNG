@@ -173,7 +173,7 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 				return
 			}
 			pokemonID := req.PokemonID.intValue(0)
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -215,6 +215,10 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.NestGetUID, store.NestSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.NestGetUID, store.NestSetUID)
 
 		// Build confirmation message before applying changes

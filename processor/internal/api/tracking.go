@@ -254,6 +254,10 @@ type overrideContext struct {
 	// Nil means "could not determine" — no fences loaded — and the check is
 	// skipped rather than rejecting everything.
 	permitted map[string]bool
+	// limitExempt lifts [tracking] max_distance and max_areas: the human is
+	// an admin or not a user (bot.LimitExempt), or a trusted v2 caller has
+	// already authorised the write.
+	limitExempt bool
 }
 
 // normalizeAreaKey keys an area name for permission comparison
@@ -274,7 +278,7 @@ func normalizeAreaKey(s string) string {
 // mirrors what v2_mutes.go already does for area-scoped mutes (#211).
 func newOverrideContext(deps *TrackingDeps, humanID string, trusted bool) (overrideContext, string, int) {
 	if deps.Humans == nil {
-		return overrideContext{}, "", 0
+		return overrideContext{limitExempt: trusted}, "", 0
 	}
 	human, err := deps.Humans.Get(humanID)
 	if err != nil {
@@ -284,6 +288,7 @@ func newOverrideContext(deps *TrackingDeps, humanID string, trusted bool) (overr
 		return overrideContext{}, "user not found", http.StatusNotFound
 	}
 	admin := isAdmin(deps, humanID)
+	exempt := trusted || bot.LimitExempt(admin, human.Type)
 
 	var fences []geofence.Fence
 	switch {
@@ -295,9 +300,9 @@ func newOverrideContext(deps *TrackingDeps, humanID string, trusted bool) (overr
 	case deps.StateMgr != nil:
 		// State not loaded yet: fail closed (empty set rejects every
 		// override_areas value) rather than skipping the check.
-		return overrideContext{human: human, permitted: map[string]bool{}}, "", 0
+		return overrideContext{human: human, permitted: map[string]bool{}, limitExempt: exempt}, "", 0
 	default:
-		return overrideContext{human: human}, "", 0
+		return overrideContext{human: human, limitExempt: exempt}, "", 0
 	}
 	names := bot.PermittedAreas(fences, deps.Config, human, admin, trusted)
 
@@ -305,7 +310,7 @@ func newOverrideContext(deps *TrackingDeps, humanID string, trusted bool) (overr
 	for _, n := range names {
 		permitted[normalizeAreaKey(n)] = true
 	}
-	return overrideContext{human: human, permitted: permitted}, "", 0
+	return overrideContext{human: human, permitted: permitted, limitExempt: exempt}, "", 0
 }
 
 // validateOverrideFields checks the four mutually-exclusive override
@@ -364,6 +369,40 @@ func validateOverrideFields(
 	}
 
 	return "", 0
+}
+
+// overrideLimitMsg applies [tracking] max_areas to a tracking write's
+// override_areas, judged on the diff it is about to apply
+// (bot.OverrideAreaLimitBreached): new rules must be within the limit, an
+// updated rule may only keep a subset of its stored list. Call it before
+// writing, with the rows the write diffs. "" means the write may go ahead.
+func overrideLimitMsg[T any](deps *TrackingDeps, oc overrideContext, existing, candidates []T,
+	getUID func(*T) int64, setUID func(*T, int64)) string {
+	if !bot.OverrideAreaLimitBreached(deps.Config, oc.limitExempt, existing, candidates, getUID, setUID) {
+		return ""
+	}
+	return fmt.Sprintf("override_areas has more than the maximum of %d areas", deps.Config.Tracking.MaxAreas)
+}
+
+// earthCircumference (metres) caps distance when the operator sets no
+// [tracking] max_distance (or the write is exempt) — no radius can usefully
+// exceed it.
+const earthCircumference = 40000000
+
+// clampDistance caps a rule's radius at [tracking] max_distance, or at the
+// earth's circumference when there is no limit or exempt (oc.limitExempt) is
+// set, as the bot's enforceDistance does. Clamped rather than rejected so a
+// stored rule above a since-lowered limit still round-trips through GET →
+// POST/PUT instead of failing the whole body. Used by v1 and v2 tracking
+// writes.
+func clampDistance(deps *TrackingDeps, exempt bool, distance int) int {
+	limit := earthCircumference
+	if deps != nil {
+		if m := bot.MaxDistanceFor(deps.Config, exempt); m > 0 {
+			limit = m
+		}
+	}
+	return min(distance, limit)
 }
 
 // v1NormalizeOverrideAreas is the frozen v1 write form: an empty slice becomes

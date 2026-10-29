@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -139,6 +140,10 @@ func registerV2HumanCreate(api huma.API, deps *TrackingDeps, tag []string, sec [
 		}
 		if human.Type == "" {
 			human.Type = "discord:user"
+		}
+		if bot.AreaLimitBlocks(deps.Config, bot.LimitExempt(isAdmin(deps, b.ID), human.Type), human.Area, nil) {
+			return nil, huma.Error422UnprocessableEntity(fmt.Sprintf(
+				"area has more than the maximum of %d areas", deps.Config.Tracking.MaxAreas))
 		}
 		if b.Enabled != nil && !*b.Enabled {
 			human.Enabled = false
@@ -565,7 +570,7 @@ type v2SetAreasBody struct {
 	// nothing; and when area_security is enabled the community restriction
 	// still applies, so a trusted call cannot hand a user another community's
 	// areas. Only admin lifts that. See #215, #228.
-	Trusted bool `json:"trusted,omitempty" doc:"Set true to select fences that are not userSelectable — for a server-side client that has already authorised the change (e.g. the user drew the fence). Honoured because the caller holds the API secret. Unknown fence names are still rejected."`
+	Trusted bool `json:"trusted,omitempty" doc:"Set true to select fences that are not userSelectable — for a server-side client that has already authorised the change (e.g. the user drew the fence). Honoured because the caller holds the API secret. Unknown fence names are still rejected. Also lifts [tracking] max_areas."`
 }
 
 // v2SetAreasOutput reports the outcome of a set-areas call. v1 answered 200
@@ -596,7 +601,7 @@ func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec
 		Description: "Stores the requested areas as the matching fences' names (lowercased; underscores and spaces are " +
 			"interchangeable in the request), deduped, after matching them against the fences this human may " +
 			"select (userSelectable for non-admins, community-filtered when area_security is enabled). Names that do not match " +
-			"come back in `rejected` rather than being discarded silently. Set `trusted: true` to select non-userSelectable " +
+			"come back in `rejected` rather than being discarded silently. More than [tracking] max_areas areas is refused (422) unless the human is an admin or not a user (channel, webhook, group, thread), or `trusted` is set; a profile already over the limit may be given a subset of what it has. Set `trusted: true` to select non-userSelectable " +
 			"fences on behalf of a user whose client has already authorised the change; unknown names are still rejected. " +
 			"Writes the human's active profile by default; `?profile=` targets another and `?all_profiles=true` replaces every " +
 			"profile's areas with the submitted list (a whole-list replace; to drop one name everywhere use DELETE …/areas?name=). " +
@@ -613,7 +618,8 @@ func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec
 			return nil, huma.Error422UnprocessableEntity("profile and all_profiles are mutually exclusive")
 		}
 
-		allowedSet := settableAreaSet(deps, human, isAdmin(deps, in.ID), in.Body.Trusted)
+		admin := isAdmin(deps, in.ID)
+		allowedSet := settableAreaSet(deps, human, admin, in.Body.Trusted)
 
 		// Resolve each name to its fence's own spelling first, so either
 		// underscore/space spelling of a fence is accepted and the fence name
@@ -642,6 +648,9 @@ func registerV2HumanSetAreas(api huma.API, deps *TrackingDeps, tag []string, sec
 
 		targets, err := v2AreaTargets(deps, human, in.AllProfiles, in.Profile)
 		if err != nil {
+			return nil, err
+		}
+		if err := v2CheckAreaLimit(deps, human, in.Body.Trusted || bot.LimitExempt(admin, human.Type), targets, newAreas); err != nil {
 			return nil, err
 		}
 
@@ -886,6 +895,39 @@ func RegisterV2Humans(humaAPI huma.API, deps *TrackingDeps) {
 	registerV2HumanSetAreas(humaAPI, deps, tag, sec)
 	registerV2HumanRemoveArea(humaAPI, deps, tag, sec)
 	registerV2HumanRenameArea(humaAPI, deps, tag, sec)
+}
+
+// v2CheckAreaLimit refuses (422) a set-areas write that breaks [tracking]
+// max_areas on any target profile. A profile already over the limit may be
+// given a subset of the areas it has: the human's live humans.area for the
+// active profile, the profiles row for any other. exempt (bot.LimitExempt,
+// or trusted) lifts it.
+func v2CheckAreaLimit(deps *TrackingDeps, human *store.Human, exempt bool, targets []int, areas []string) error {
+	if !bot.AreaLimitBlocks(deps.Config, exempt, areas, nil) {
+		return nil
+	}
+	profiles, err := deps.Humans.GetProfiles(human.ID)
+	if err != nil {
+		log.Errorf("v2 humans: list profiles for %s: %s", human.ID, err)
+		return huma.Error500InternalServerError("database error")
+	}
+	for _, no := range targets {
+		var previous []string
+		if no == human.CurrentProfileNo {
+			previous = human.Area
+		} else {
+			for _, p := range profiles {
+				if p.ProfileNo == no {
+					previous = p.Area
+				}
+			}
+		}
+		if bot.AreaLimitBlocks(deps.Config, exempt, areas, previous) {
+			return huma.Error422UnprocessableEntity(fmt.Sprintf(
+				"areas has more than the maximum of %d areas", deps.Config.Tracking.MaxAreas))
+		}
+	}
+	return nil
 }
 
 // v2AreaTargets resolves the profile numbers an area endpoint writes: the

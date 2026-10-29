@@ -115,6 +115,9 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	if r := overrideLimitReply(ctx, tracked, insert, store.LureGetUID, store.LureSetUID); r != nil {
+		return r
+	}
 	diff, err := store.ApplyDiff(ctx.Tracking.Lures, ctx.TargetID, tracked, insert,
 		store.LureGetUID, store.LureSetUID)
 	if err != nil {

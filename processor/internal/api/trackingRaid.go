@@ -173,6 +173,13 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 			defaultTemplate = "1"
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		// Helper to build common fields from a request row
 		buildRaidCommon := func(req raidInsertRequest) (template string, distance int, team int, clean int, exclusive db.IntBool, move int, evolution int, gymID null.String, rsvpChanges int) {
 			template = defaultTemplate
@@ -189,7 +196,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			distance = req.Distance.intValue(0)
+			distance = clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			team = req.Team.intValue(4)
 			if team < 0 || team > 4 {
@@ -210,13 +217,6 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 				rsvpChanges = n
 			}
 
-			return
-		}
-
-		// Pre-fetch override context once so per-row validation doesn't re-query.
-		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
-		if ocMsg != "" {
-			trackingJSONError(c, ocCode, ocMsg)
 			return
 		}
 
@@ -306,6 +306,10 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.RaidGetUID, store.RaidSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.RaidGetUID, store.RaidSetUID)
 
 		// Build confirmation message before applying changes

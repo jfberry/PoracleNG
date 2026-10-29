@@ -225,6 +225,9 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	if r := overrideLimitReply(ctx, tracked, insert, store.RaidGetUID, store.RaidSetUID); r != nil {
+		return r
+	}
 	diff, err := store.ApplyDiff(ctx.Tracking.Raids, ctx.TargetID, tracked, insert,
 		store.RaidGetUID, store.RaidSetUID)
 	if err != nil {

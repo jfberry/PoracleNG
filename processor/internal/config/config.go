@@ -100,6 +100,7 @@ type TrackingConfig struct {
 	EverythingFlagPermissions   string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
 	DefaultDistance             int    `toml:"default_distance"`
 	MaxDistance                 int    `toml:"max_distance"`
+	MaxAreas                    int    `toml:"max_areas"`
 	EnableGymBattle             bool   `toml:"enable_gym_battle"`
 	DefaultUserTrackingLevelCap int    `toml:"default_user_tracking_level_cap"`
 	// PokemonChangeTracking controls whether the encounter tracker fires

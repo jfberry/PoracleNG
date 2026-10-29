@@ -153,6 +153,9 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	// Gym uses a custom diff loop because we need to preserve gym_id from the
 	// existing row (gym-specific tracking is set via scanner DB, not user commands).
+	if r := overrideLimitReply(ctx, tracked, insert, store.GymGetUID, store.GymSetUID); r != nil {
+		return r
+	}
 	diff := store.DiffAndClassify(tracked, insert, store.GymGetUID, store.GymSetUID)
 
 	// Preserve gym_id on updates

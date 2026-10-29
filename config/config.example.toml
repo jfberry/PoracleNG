@@ -577,7 +577,13 @@ shame_channel = ""                       # name and shame stopped/disabled users
 #   "deny"                           - users must track individual pokemon
 everything_flag_permissions = "allow-any"
 default_distance = 0                     # default distance for distance-only tracking (no areas)
-max_distance = 0                         # max tracking circle radius (0 = no limit)
+max_distance = 0                         # max tracking circle radius in metres (0 = no limit)
+# max_areas - most areas a user may select per profile (!area, setAreas), and
+# per rule in area:/override_areas (0 = no limit). Writes over the limit are
+# refused; a list already over it (limit lowered later) can only be kept or
+# shrunk. Both limits apply to users only: admins, and channels, webhooks,
+# groups and threads (which only admins configure), are exempt.
+max_areas = 0
 # enable_gym_battle - allow the "battle_changes" keyword on !gym tracking.
 # Off by default: a gym emits an in-battle webhook whenever it's attacked, so
 # battle tracking can be very chatty. While false, "!gym battle_changes" is

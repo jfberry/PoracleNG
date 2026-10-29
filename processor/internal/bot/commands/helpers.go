@@ -136,9 +136,8 @@ func extractPings(args []string) (pings string, remaining []string) {
 	return strings.Join(pingParts, " "), remaining
 }
 
-// enforceDistance applies default and max distance limits from config.
 // enforceDistance applies the configured default_distance (when the user gave
-// no explicit d:) and clamps to max_distance. areaMode must be true when the
+// no explicit d:) and clamps to max_distance (unless limitExempt). areaMode must be true when the
 // rule uses an area: override: area-mode and distance-mode are mutually
 // exclusive, so default_distance must NOT be injected there — otherwise it both
 // trips the area-vs-distance rejection in parseOverride and (if stored) makes
@@ -148,8 +147,8 @@ func enforceDistance(ctx *bot.CommandContext, distance int, areaMode bool) int {
 	if !areaMode && distance == 0 && ctx.Config.Tracking.DefaultDistance > 0 {
 		distance = ctx.Config.Tracking.DefaultDistance
 	}
-	if ctx.Config.Tracking.MaxDistance > 0 && distance > ctx.Config.Tracking.MaxDistance {
-		distance = ctx.Config.Tracking.MaxDistance
+	if limit := bot.MaxDistanceFor(ctx.Config, limitExempt(ctx)); limit > 0 && distance > limit {
+		distance = limit
 	}
 	return distance
 }
@@ -180,8 +179,8 @@ func trackingWarnings(ctx *bot.CommandContext, distance int) string {
 	}
 
 	// Check max distance was applied
-	if ctx.Config.Tracking.MaxDistance > 0 && distance > 0 && distance >= ctx.Config.Tracking.MaxDistance {
-		warnings = append(warnings, tr.Tf("tracking.warn_max_distance", ctx.Config.Tracking.MaxDistance))
+	if limit := bot.MaxDistanceFor(ctx.Config, limitExempt(ctx)); limit > 0 && distance >= limit {
+		warnings = append(warnings, tr.Tf("tracking.warn_max_distance", limit))
 	}
 
 	if len(warnings) == 0 {
