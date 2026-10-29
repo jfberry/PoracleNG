@@ -99,6 +99,11 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				func(r *db.GymTrackingAPI) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(r)) },
 			)
 		}
+		if parsed.HasKeyword("arg.everything") {
+			// On remove, everything means every rule — including "any
+			// team" (team 4) rules, which the 0-3 expansion would miss.
+			return c.removeGyms(ctx, []int{4})
+		}
 		return c.removeGyms(ctx, teams)
 	}
 

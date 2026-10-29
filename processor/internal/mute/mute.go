@@ -11,9 +11,10 @@
 package mute
 
 import (
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
 
 // Scope values. Constants rather than free-form strings so the matcher,
@@ -159,12 +160,13 @@ func (s *Store) Find(humanID, scopeType, ruleTable, scopeValue string) (Entry, b
 }
 
 // sameScopeValue compares two scope values for identity. Area names are
-// case-insensitive (as in matchScope): !mute area stores the display-cased
-// name while !unmute area arrives lowercased from the tokenizer. Every
-// other scope value is an opaque ID compared exactly.
+// compared by geofence.NormalizeAreaKey (as in matchScope): !mute area
+// stores the canonical fence name (e.g. "north_london") while !unmute area
+// arrives lowercased with underscores turned into spaces by the tokenizer.
+// Every other scope value is an opaque ID compared exactly.
 func sameScopeValue(scopeType, a, b string) bool {
 	if scopeType == ScopeArea {
-		return strings.EqualFold(a, b)
+		return geofence.NormalizeAreaKey(a) == geofence.NormalizeAreaKey(b)
 	}
 	return a == b
 }
@@ -267,8 +269,9 @@ func matchScope(e Entry, ev Event) bool {
 		if e.ScopeValue == "" {
 			return false
 		}
+		key := geofence.NormalizeAreaKey(e.ScopeValue)
 		for _, name := range ev.Area {
-			if strings.EqualFold(name, e.ScopeValue) {
+			if geofence.NormalizeAreaKey(name) == key {
 				return true
 			}
 		}

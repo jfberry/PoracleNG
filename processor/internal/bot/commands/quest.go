@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -11,52 +12,55 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
-// matchItemName tries to match unrecognized args against item names from game data
-// using item_{id} translation keys. Returns the item ID or 0 if no match.
-func (c *QuestCommand) matchItemName(ctx *bot.CommandContext, parsed *bot.ParsedArgs) int {
+// matchItemNames matches the unrecognized args against item names from
+// game data (item_{id} translation keys, in the user's language and
+// English). Every item named becomes a match, so `!quest razz_berry
+// pinap_berry` tracks both; a name may span several tokens ("golden razz
+// berry" typed unquoted), longest span first. Matched tokens are removed
+// from parsed.Unrecognized and anything left over stays there for
+// ReportUnrecognized to flag.
+func (c *QuestCommand) matchItemNames(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []int {
 	if ctx.GameData == nil || len(parsed.Unrecognized) == 0 {
-		return 0
+		return nil
 	}
 
 	tr := ctx.Tr()
 	enTr := ctx.Translations.For("en")
 
-	// Join all unrecognized args into a single string for multi-word item names
-	// e.g. "golden razz berry" from quoted input or separate tokens
-	fullPhrase := strings.ToLower(strings.Join(parsed.Unrecognized, " "))
-
+	names := make(map[string]int)
 	for id := range ctx.GameData.Items {
 		key := gamedata.ItemTranslationKey(id)
-		translatedName := strings.ToLower(tr.T(key))
-		enName := strings.ToLower(enTr.T(key))
-
-		// Skip untranslated keys (returns the key itself)
-		if translatedName == strings.ToLower(key) && enName == strings.ToLower(key) {
-			continue
-		}
-
-		if fullPhrase == translatedName || fullPhrase == enName {
-			return id
-		}
-	}
-
-	// Also try matching individual unrecognized args (single-word items)
-	for _, arg := range parsed.Unrecognized {
-		lower := strings.ToLower(arg)
-		for id := range ctx.GameData.Items {
-			key := gamedata.ItemTranslationKey(id)
-			translatedName := strings.ToLower(tr.T(key))
-			enName := strings.ToLower(enTr.T(key))
-			if translatedName == strings.ToLower(key) && enName == strings.ToLower(key) {
+		for _, name := range []string{strings.ToLower(tr.T(key)), strings.ToLower(enTr.T(key))} {
+			// Skip untranslated keys (T returns the key itself)
+			if name == "" || name == strings.ToLower(key) {
 				continue
 			}
-			if lower == translatedName || lower == enName {
-				return id
-			}
+			names[name] = id
 		}
 	}
 
-	return 0
+	tokens := parsed.Unrecognized
+	var ids []int
+	var rest []string
+	for i := 0; i < len(tokens); {
+		matched := false
+		for j := len(tokens); j > i; j-- {
+			if id, ok := names[strings.ToLower(strings.Join(tokens[i:j], " "))]; ok {
+				if !slices.Contains(ids, id) {
+					ids = append(ids, id)
+				}
+				i = j
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			rest = append(rest, tokens[i])
+			i++
+		}
+	}
+	parsed.Unrecognized = rest
+	return ids
 }
 
 // QuestCommand implements !quest — track quest rewards (pokemon, stardust, pokecoins, items, candy, energy).
@@ -275,12 +279,17 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			}
 		}
 
-		if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
-			// Item quest tracking (reward_type = 2)
-			// Consume matched item tokens from Unrecognized
-			parsed.Unrecognized = nil
+		// Item quest tracking (reward_type = 2), one rule per item named.
+		// Matched tokens are consumed; the rest are reported below.
+		for _, itemID := range c.matchItemNames(ctx, parsed) {
 			insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 2, itemID, 0, amountVal))
 			amountUsed = true
+		}
+
+		// Report leftovers before the "no quest type" reply, so a typo
+		// (`!quest pikchu`) is named rather than reported as no type.
+		if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
+			return []bot.Reply{*warn}
 		}
 
 		if amountSet && !amountUsed && !wantsAllItems && len(insert) > 0 {
@@ -480,15 +489,21 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 		}
 	}
 
-	if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
-		// Item reward (e.g. !quest remove pinap). Consume matched tokens
-		// so the unrecognized-arg checker doesn't also flag them.
-		parsed.Unrecognized = nil
+	// Item rewards (e.g. !quest remove pinap). Matched tokens are consumed
+	// so only genuinely unknown words are left in Unrecognized.
+	for _, itemID := range c.matchItemNames(ctx, parsed) {
 		target(2, itemID, 0)
 	}
 
+	// Anything still unrecognized is refused before removing: a typo
+	// (`!quest remove pikchu`) must never fall through to removing every
+	// quest rule below.
+	if warn := bot.ReportUnrecognized(parsed, ctx.Tr()); warn != nil {
+		return []bot.Reply{*warn}
+	}
+
 	if len(targets) == 0 {
-		// No specific type — remove everything
+		// No reward named (bare `!quest remove`) — remove everything
 		allTypes()
 	}
 

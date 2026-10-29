@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"slices"
 
 	log "github.com/sirupsen/logrus"
 
@@ -78,18 +79,19 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Determine fort_type. Per Golbat webhooks-reference, fort_update
 	// can carry "pokestop", "gym", or "station". The matcher compares
 	// case-insensitively, so storing the lowercase string here matches
-	// whatever Golbat emits.
-	fortType := ""
-	if parsed.HasKeyword("arg.everything") {
-		fortType = "everything"
-	} else if parsed.HasKeyword("arg.pokestop") {
-		fortType = "pokestop"
-	} else if parsed.HasKeyword("arg.gym") {
-		fortType = "gym"
-	} else if parsed.HasKeyword("arg.station") {
-		fortType = "station"
-	} else {
-		fortType = "everything"
+	// whatever Golbat emits. Each type named becomes its own rule
+	// (`!fort pokestop gym` tracks both); none, or everything, is the
+	// single "everything" rule.
+	var fortTypes []string
+	if !parsed.HasKeyword("arg.everything") {
+		for _, ft := range []string{"pokestop", "gym", "station"} {
+			if parsed.HasKeyword("arg." + ft) {
+				fortTypes = append(fortTypes, ft)
+			}
+		}
+	}
+	if len(fortTypes) == 0 {
+		fortTypes = []string{"everything"}
 	}
 
 	// Collect change types from keywords. Stored values must match what
@@ -135,21 +137,24 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				func(r *db.FortTrackingAPI) string { return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(r)) },
 			)
 		}
-		return c.removeForts(ctx, fortType)
+		return c.removeForts(ctx, fortTypes)
 	}
 
-	insert := []db.FortTrackingAPI{{
-		ID:                    ctx.TargetID,
-		ProfileNo:             ctx.ProfileNo,
-		Ping:                  pings,
-		Template:              common.Template,
-		Distance:              common.Distance,
-		FortType:              fortType,
-		IncludeEmpty:          db.IntBool(includeEmpty),
-		ChangeTypes:           changeTypesStr,
-		OverrideLocationLabel: override.LocationLabel,
-		OverrideAreas:         override.Areas,
-	}}
+	insert := make([]db.FortTrackingAPI, 0, len(fortTypes))
+	for _, fortType := range fortTypes {
+		insert = append(insert, db.FortTrackingAPI{
+			ID:                    ctx.TargetID,
+			ProfileNo:             ctx.ProfileNo,
+			Ping:                  pings,
+			Template:              common.Template,
+			Distance:              common.Distance,
+			FortType:              fortType,
+			IncludeEmpty:          db.IntBool(includeEmpty),
+			ChangeTypes:           changeTypesStr,
+			OverrideLocationLabel: override.LocationLabel,
+			OverrideAreas:         override.Areas,
+		})
+	}
 
 	tracked, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
@@ -194,7 +199,9 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: react, Text: message}}
 }
 
-func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortType string) []bot.Reply {
+// removeForts removes the rules of the given fort types; "everything" in
+// the list removes every rule.
+func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortTypes []string) []bot.Reply {
 	tracked, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("fort command: select for remove: %s", err)
@@ -204,7 +211,7 @@ func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortType string) []bo
 	var uids []int64
 	var removed []db.FortTrackingAPI
 	for _, existing := range tracked {
-		if fortType == "everything" || existing.FortType == fortType {
+		if slices.Contains(fortTypes, "everything") || slices.Contains(fortTypes, existing.FortType) {
 			uids = append(uids, existing.UID)
 			removed = append(removed, existing)
 		}

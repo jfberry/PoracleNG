@@ -45,12 +45,10 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	parsed := ctx.ArgMatcher.Match(args, params, ctx.Language)
 
-	// Check for unrecognized args
-	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
-		return []bot.Reply{*warn}
-	}
-
-	// Handle remove — delegate to !untrack logic (strip the "remove" keyword)
+	// Handle remove — delegate to !untrack logic (strip the "remove" keyword).
+	// This runs before the unrecognized-args check: untrack has its own
+	// params (id:N, …) and reports its own unrecognized args, so checking
+	// against !track's params here would wrongly refuse `!track remove id:45`.
 	if parsed.HasKeyword("arg.remove") {
 		untrack := &UntrackCommand{}
 		var remaining []string
@@ -61,6 +59,11 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			}
 		}
 		return untrack.Run(ctx, remaining)
+	}
+
+	// Check for unrecognized args
+	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
+		return []bot.Reply{*warn}
 	}
 
 	// Resolve pokemon list

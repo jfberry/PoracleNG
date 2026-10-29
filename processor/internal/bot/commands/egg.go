@@ -71,6 +71,16 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		)
 	}
 
+	// `remove everything` means every rule, not just the levels game data
+	// lists today (a dropped level, or one set through the API, would
+	// otherwise survive) — so it doesn't go through the level set at all.
+	if parsed.HasKeyword("arg.remove") && parsed.HasKeyword("arg.everything") {
+		if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
+			return []bot.Reply{*warn}
+		}
+		return c.removeEggs(ctx, nil)
+	}
+
 	// Collect levels from multiple sources
 	levelSet := make(map[int]bool)
 
@@ -222,6 +232,8 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: "✅", Text: message}}
 }
 
+// removeEggs removes the rules whose level is in levelSet; a nil levelSet
+// removes every rule.
 func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) []bot.Reply {
 	tr := ctx.Tr()
 	tracked, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
@@ -233,7 +245,7 @@ func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) 
 	var uidsToDelete []int64
 	var removed []db.EggTrackingAPI
 	for _, existing := range tracked {
-		if levelSet[existing.Level] {
+		if levelSet == nil || levelSet[existing.Level] {
 			uidsToDelete = append(uidsToDelete, existing.UID)
 			removed = append(removed, existing)
 		}
