@@ -39,7 +39,7 @@ func translateV2Lure(deps *TrackingDeps, humanID string, profileNo int, oc overr
 		return db.LureTrackingAPI{}, huma.Error422UnprocessableEntity("Unrecognised lure_id value")
 	}
 
-	distance := clampV2Distance(deps, valueOr(req.Distance, wcDistance))
+	distance := clampDistance(deps, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {

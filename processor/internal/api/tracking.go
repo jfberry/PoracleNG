@@ -241,6 +241,23 @@ func (f flexInt) isSet() bool {
 	return f.value != nil
 }
 
+// earthCircumference (metres) caps distance when the operator sets no
+// [tracking] max_distance — no radius can usefully exceed it.
+const earthCircumference = 40000000
+
+// clampDistance caps a rule's radius at [tracking] max_distance (or the
+// earth's circumference when that is 0), as the bot's enforceDistance does.
+// Shared by the v1 and v2 tracking write paths. Clamped rather than rejected
+// so a stored rule above a since-lowered limit still round-trips through
+// GET → POST/PUT instead of failing the whole body.
+func clampDistance(deps *TrackingDeps, distance int) int {
+	limit := earthCircumference
+	if deps != nil && deps.Config != nil && deps.Config.Tracking.MaxDistance > 0 {
+		limit = deps.Config.Tracking.MaxDistance
+	}
+	return min(distance, limit)
+}
+
 // overrideContext holds per-target data pre-fetched once above the per-row
 // validation loop so that batch POSTs of N rules don't issue N×Get queries.
 // Build it with newOverrideContext before the loop, then pass it into

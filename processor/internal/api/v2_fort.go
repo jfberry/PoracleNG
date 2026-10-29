@@ -88,7 +88,7 @@ func translateV2Fort(deps *TrackingDeps, humanID string, profileNo int, oc overr
 		changeTypes = string(b)
 	}
 
-	distance := clampV2Distance(deps, valueOr(req.Distance, wcDistance))
+	distance := clampDistance(deps, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {

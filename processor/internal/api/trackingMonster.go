@@ -197,11 +197,7 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 
 			pokemonID := req.PokemonID.intValue(0)
 
-			distance := req.Distance.intValue(0)
-			const maxDistanceDefault = 40000000 // circumference of Earth
-			if distance > maxDistanceDefault {
-				distance = maxDistanceDefault
-			}
+			distance := clampDistance(deps, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {

@@ -53,7 +53,7 @@ func translateV2Quest(deps *TrackingDeps, humanID string, profileNo int, oc over
 		return db.QuestTrackingAPI{}, huma.Error422UnprocessableEntity("Unrecognised reward_type value")
 	}
 
-	distance := clampV2Distance(deps, valueOr(req.Distance, wcDistance))
+	distance := clampDistance(deps, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {

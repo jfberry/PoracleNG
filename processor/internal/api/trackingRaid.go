@@ -189,7 +189,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			distance = req.Distance.intValue(0)
+			distance = clampDistance(deps, req.Distance.intValue(0))
 
 			team = req.Team.intValue(4)
 			if team < 0 || team > 4 {

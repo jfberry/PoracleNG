@@ -57,7 +57,7 @@ func translateV2Egg(deps *TrackingDeps, humanID string, profileNo int, oc overri
 	team := teamEnum.resolveStored(req.Team)
 	rsvp := rsvpChangesEnum.resolveStored(req.RSVPChanges)
 
-	distance := clampV2Distance(deps, valueOr(req.Distance, wcDistance))
+	distance := clampDistance(deps, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {

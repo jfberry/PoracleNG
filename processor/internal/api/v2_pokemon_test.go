@@ -1070,7 +1070,7 @@ func TestV2Pokemon_EditTrueAccepted(t *testing.T) {
 	}
 }
 
-func TestClampV2Distance(t *testing.T) {
+func TestClampDistance(t *testing.T) {
 	withMax := func(max int) *TrackingDeps {
 		return &TrackingDeps{Config: &config.Config{Tracking: config.TrackingConfig{MaxDistance: max}}}
 	}
@@ -1087,8 +1087,8 @@ func TestClampV2Distance(t *testing.T) {
 		{"nil config caps at earth", &TrackingDeps{}, earthCircumference + 1, earthCircumference},
 	}
 	for _, c := range cases {
-		if got := clampV2Distance(c.deps, c.in); got != c.want {
-			t.Errorf("%s: clampV2Distance(%d) = %d, want %d", c.name, c.in, got, c.want)
+		if got := clampDistance(c.deps, c.in); got != c.want {
+			t.Errorf("%s: clampDistance(%d) = %d, want %d", c.name, c.in, got, c.want)
 		}
 	}
 }

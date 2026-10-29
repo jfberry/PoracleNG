@@ -824,3 +824,40 @@ func TestCreateRaid_CostumeDefaultIsIdempotent(t *testing.T) {
 		}
 	}
 }
+
+// TestCreateRaid_ClampsToMaxDistance verifies the v1 write path caps a rule's
+// radius at [tracking] max_distance, as v2 and the bot commands do.
+func TestCreateRaid_ClampsToMaxDistance(t *testing.T) {
+	mock := store.NewMockHumanStore()
+	mock.AddHuman(&store.Human{ID: "u1", Type: "discord:user", Name: "User", Enabled: true, Language: "en", CurrentProfileNo: 1})
+
+	mockRaids := store.NewMockTrackingStore(store.RaidGetUID, store.RaidSetUID)
+	minGD := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}, Util: &gamedata.UtilData{}}
+
+	cfg := &config.Config{}
+	cfg.Tracking.MaxDistance = 1000
+	deps := &TrackingDeps{
+		Humans:       mock,
+		Tracking:     &store.TrackingStores{Raids: mockRaids},
+		Config:       cfg,
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1", GD: minGD},
+		Translations: i18n.NewBundle(),
+	}
+
+	r := gin.New()
+	r.POST("/api/tracking/raid/:id", HandleCreateRaid(deps))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/raid/u1", strings.NewReader(`{"pokemon_id":25,"distance":5000}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := mockRaids.AllRows()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].Distance != 1000 {
+		t.Fatalf("expected Distance clamped to 1000, got %d", rows[0].Distance)
+	}
+}

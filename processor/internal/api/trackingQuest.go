@@ -185,7 +185,7 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 			}
 
 			reward := req.Reward.intValue(0)
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {

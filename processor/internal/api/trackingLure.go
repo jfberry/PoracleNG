@@ -193,7 +193,7 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 				return
 			}
 
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {

@@ -88,22 +88,6 @@ func valueOr[T any](p *T, def T) T {
 	return *p
 }
 
-// earthCircumference (metres) caps distance when the operator sets no
-// [tracking] max_distance — no radius can usefully exceed it.
-const earthCircumference = 40000000
-
-// clampV2Distance caps a rule's radius at [tracking] max_distance (or the
-// earth's circumference when that is 0), as the bot's enforceDistance does.
-// Clamped rather than rejected so a stored rule above a since-lowered limit
-// still round-trips through GET → POST/PUT instead of failing the whole body.
-func clampV2Distance(deps *TrackingDeps, distance int) int {
-	limit := earthCircumference
-	if deps != nil && deps.Config != nil && deps.Config.Tracking.MaxDistance > 0 {
-		limit = deps.Config.Tracking.MaxDistance
-	}
-	return min(distance, limit)
-}
-
 // packClean collapses the clean/edit/summary booleans into the stored bitmask
 // (bit1=clean, bit2=edit, bit4=summary). See internal/db/clean.go.
 func packClean(clean, edit, summary bool) int {
@@ -125,7 +109,7 @@ func packClean(clean, edit, summary bool) int {
 // bitmask, profile, and validated/normalized override fields.
 // Returns an huma error on override-field violation.
 func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2PokemonRule) (db.MonsterTrackingAPI, error) {
-	distance := clampV2Distance(deps, valueOr(req.Distance, wcDistance))
+	distance := clampDistance(deps, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {
