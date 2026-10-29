@@ -8,6 +8,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -34,12 +35,19 @@ func roundTripCtx(t *testing.T) *bot.CommandContext {
 
 	ctx.GameData.Monsters[gamedata.MonsterKey{ID: 649, Form: 0}] = &gamedata.Monster{PokemonID: 649}
 	ctx.GameData.Monsters[gamedata.MonsterKey{ID: 649, Form: 917}] = &gamedata.Monster{PokemonID: 649, FormID: 917}
+	// Multi-word pokemon and form names, which must stay one token.
+	ctx.GameData.Monsters[gamedata.MonsterKey{ID: 785, Form: 0}] = &gamedata.Monster{PokemonID: 785}
+	ctx.GameData.Monsters[gamedata.MonsterKey{ID: 128, Form: 0}] = &gamedata.Monster{PokemonID: 128}
+	ctx.GameData.Monsters[gamedata.MonsterKey{ID: 128, Form: 2975}] = &gamedata.Monster{PokemonID: 128, FormID: 2975}
 	ctx.GameData.Items = map[int]*gamedata.Item{701: {ItemID: 701}}
 	ctx.Translations.AddTranslator(i18n.NewTranslator("en", map[string]string{
-		"poke_25":  "Pikachu",
-		"poke_649": "Genesect",
-		"form_917": "Burn",
-		"item_701": "Razz Berry",
+		"poke_25":   "Pikachu",
+		"poke_649":  "Genesect",
+		"form_917":  "Burn",
+		"poke_785":  "Tapu Koko",
+		"poke_128":  "Tauros",
+		"form_2975": "Paldea Combat",
+		"item_701":  "Razz Berry",
 	}))
 	resolver := bot.NewPokemonResolver(ctx.GameData, ctx.Translations, []string{"en"}, nil)
 	ctx.Resolver = resolver
@@ -133,6 +141,13 @@ func TestScript_RoundTripAllTypes(t *testing.T) {
 		"!quest all_items amount:2",
 		"!quest razz_berry amount:3 clean",
 		"!maxbattle pikachu clean area:london <@123>",
+		"!track tapu_koko iv:80",
+		`!track tauros "form:paldea combat"`,
+		"!raid tapu_koko",
+		"!nest tapu_koko",
+		"!maxbattle tapu_koko",
+		`!quest "candy:tapu koko"`,
+		`!quest tauros "form:paldea combat"`,
 		"!fort pokestop photo area:london <@123>",
 		"!fort gym new d:100 location:home",
 	})
@@ -154,4 +169,26 @@ func TestScript_RoundTripAllTypes(t *testing.T) {
 	assert.ElementsMatch(t, want.Quests, got.Quests, "quests")
 	assert.ElementsMatch(t, want.Maxbattles, got.Maxbattles, "maxbattles")
 	assert.ElementsMatch(t, want.Forts, got.Forts, "forts")
+}
+
+// TestScript_OverrideNeedsMatchingDistance: the commands only take
+// location: with a distance and area: without one. A row that breaks that
+// (possible through the API) must still script to a line the command
+// accepts, so the override the matcher ignores is left out.
+func TestScript_OverrideNeedsMatchingDistance(t *testing.T) {
+	ctx := roundTripCtx(t)
+	c := &ScriptCommand{}
+	assert.Equal(t, "!lure glacial", c.lureToScript(ctx, "!", &db.LureTrackingAPI{
+		LureID: 502, OverrideLocationLabel: "Home",
+	}), "location: without a distance is dropped")
+	assert.Equal(t, "!lure glacial d:500", c.lureToScript(ctx, "!", &db.LureTrackingAPI{
+		LureID: 502, Distance: 500, OverrideAreas: []string{"london"},
+	}), "area: with a distance is dropped")
+}
+
+// TestScriptToken_StripsEmbeddedQuotes: the tokenizer has no escapes, so a
+// quote inside a quoted token would split it.
+func TestScriptToken_StripsEmbeddedQuotes(t *testing.T) {
+	assert.Equal(t, `"location:my spot"`, scriptToken(`location:my "spot"`))
+	assert.Equal(t, `location:my"spot`, scriptToken(`location:my"spot`), "unquoted tokens keep their quotes")
 }

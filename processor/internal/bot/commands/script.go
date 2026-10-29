@@ -155,14 +155,13 @@ func (c *ScriptCommand) monsterToScript(ctx *bot.CommandContext, prefix string, 
 	if m.PokemonID == 0 {
 		parts = append(parts, "everything")
 	} else {
-		name := c.pokemonName(ctx, m.PokemonID)
-		parts = append(parts, name)
+		parts = append(parts, scriptToken(c.pokemonName(ctx, m.PokemonID)))
 	}
 
 	if m.Form != 0 {
 		formName := c.formName(ctx, m.Form)
 		if formName != "" {
-			parts = append(parts, "form:"+formName)
+			parts = append(parts, scriptToken("form:"+formName))
 		}
 	}
 
@@ -235,7 +234,7 @@ func (c *ScriptCommand) monsterToScript(ctx *bot.CommandContext, prefix string, 
 		parts = append(parts, fmt.Sprintf("d:%d", m.Distance))
 	}
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: m.Template, Clean: m.Clean, Ping: m.Ping,
+		Template: m.Template, Clean: m.Clean, Ping: m.Ping, Distance: m.Distance,
 		Location: m.OverrideLocationLabel, Areas: m.OverrideAreas,
 	}, cleanBit|editBit)...)
 
@@ -247,7 +246,7 @@ func (c *ScriptCommand) raidToScript(ctx *bot.CommandContext, prefix string, r *
 	parts = append(parts, prefix+"raid")
 
 	if r.PokemonID != bot.WildcardID {
-		parts = append(parts, c.pokemonName(ctx, r.PokemonID))
+		parts = append(parts, scriptToken(c.pokemonName(ctx, r.PokemonID)))
 	} else {
 		parts = append(parts, fmt.Sprintf("level:%d", r.Level))
 	}
@@ -267,7 +266,7 @@ func (c *ScriptCommand) raidToScript(ctx *bot.CommandContext, prefix string, r *
 	}
 	parts = append(parts, c.rsvpArg(r.RSVPChanges)...)
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: r.Template, Clean: r.Clean, Ping: r.Ping,
+		Template: r.Template, Clean: r.Clean, Ping: r.Ping, Distance: r.Distance,
 		Location: r.OverrideLocationLabel, Areas: r.OverrideAreas,
 	}, cleanBit|editBit)...)
 
@@ -287,7 +286,7 @@ func (c *ScriptCommand) eggToScript(ctx *bot.CommandContext, prefix string, e *d
 	}
 	parts = append(parts, c.rsvpArg(e.RSVPChanges)...)
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: e.Template, Clean: e.Clean, Ping: e.Ping,
+		Template: e.Template, Clean: e.Clean, Ping: e.Ping, Distance: e.Distance,
 		Location: e.OverrideLocationLabel, Areas: e.OverrideAreas,
 	}, cleanBit|editBit)...)
 	return strings.Join(parts, " ")
@@ -311,7 +310,7 @@ func (c *ScriptCommand) invasionToScript(ctx *bot.CommandContext, prefix string,
 		parts = append(parts, fmt.Sprintf("d:%d", inv.Distance))
 	}
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: inv.Template, Clean: inv.Clean, Ping: inv.Ping,
+		Template: inv.Template, Clean: inv.Clean, Ping: inv.Ping, Distance: inv.Distance,
 		Location: inv.OverrideLocationLabel, Areas: inv.OverrideAreas,
 	}, cleanBit)...)
 	return strings.Join(parts, " ")
@@ -330,7 +329,7 @@ func (c *ScriptCommand) lureToScript(ctx *bot.CommandContext, prefix string, l *
 		parts = append(parts, fmt.Sprintf("d:%d", l.Distance))
 	}
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: l.Template, Clean: l.Clean, Ping: l.Ping,
+		Template: l.Template, Clean: l.Clean, Ping: l.Ping, Distance: l.Distance,
 		Location: l.OverrideLocationLabel, Areas: l.OverrideAreas,
 	}, cleanBit|editBit)...)
 	return strings.Join(parts, " ")
@@ -342,7 +341,7 @@ func (c *ScriptCommand) nestToScript(ctx *bot.CommandContext, prefix string, n *
 	if n.PokemonID == 0 {
 		parts = append(parts, "everything")
 	} else {
-		parts = append(parts, c.pokemonName(ctx, n.PokemonID))
+		parts = append(parts, scriptToken(c.pokemonName(ctx, n.PokemonID)))
 	}
 	if n.MinSpawnAvg > 0 {
 		parts = append(parts, fmt.Sprintf("minspawn:%d", n.MinSpawnAvg))
@@ -351,7 +350,7 @@ func (c *ScriptCommand) nestToScript(ctx *bot.CommandContext, prefix string, n *
 		parts = append(parts, fmt.Sprintf("d:%d", n.Distance))
 	}
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: n.Template, Clean: n.Clean, Ping: n.Ping,
+		Template: n.Template, Clean: n.Clean, Ping: n.Ping, Distance: n.Distance,
 		Location: n.OverrideLocationLabel, Areas: n.OverrideAreas,
 	}, cleanBit)...)
 	return strings.Join(parts, " ")
@@ -376,7 +375,7 @@ func (c *ScriptCommand) gymToScript(ctx *bot.CommandContext, prefix string, g *d
 		parts = append(parts, fmt.Sprintf("d:%d", g.Distance))
 	}
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: g.Template, Clean: g.Clean, Ping: g.Ping,
+		Template: g.Template, Clean: g.Clean, Ping: g.Ping, Distance: g.Distance,
 		Location: g.OverrideLocationLabel, Areas: g.OverrideAreas,
 	}, cleanBit)...)
 	return strings.Join(parts, " ")
@@ -401,16 +400,16 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 		}
 	case 4: // candy
 		if q.Reward > 0 {
-			parts = append(parts, "candy:"+c.pokemonName(ctx, q.Reward))
+			parts = append(parts, scriptToken("candy:"+c.pokemonName(ctx, q.Reward)))
 		} else {
 			parts = append(parts, "candy")
 		}
 	case 7: // pokemon — reward 0 is the "all pokemon" wildcard
 		if q.Reward > 0 {
-			parts = append(parts, c.pokemonName(ctx, q.Reward))
+			parts = append(parts, scriptToken(c.pokemonName(ctx, q.Reward)))
 			if q.Form != 0 {
 				if formName := c.formName(ctx, q.Form); formName != "" {
-					parts = append(parts, "form:"+formName)
+					parts = append(parts, scriptToken("form:"+formName))
 				}
 			}
 		} else {
@@ -418,7 +417,7 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 		}
 	case 12: // energy
 		if q.Reward > 0 {
-			parts = append(parts, "energy:"+c.pokemonName(ctx, q.Reward))
+			parts = append(parts, scriptToken("energy:"+c.pokemonName(ctx, q.Reward)))
 		} else {
 			parts = append(parts, "energy")
 		}
@@ -426,7 +425,7 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 		if q.Reward == 0 {
 			parts = append(parts, "all_items")
 		} else if name := c.itemName(ctx, q.Reward); name != "" {
-			parts = append(parts, name)
+			parts = append(parts, scriptToken(name))
 		} else {
 			parts = append(parts, fmt.Sprintf("reward_type:%d", q.RewardType))
 		}
@@ -446,7 +445,7 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 		parts = append(parts, fmt.Sprintf("d:%d", q.Distance))
 	}
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: q.Template, Clean: q.Clean, Ping: q.Ping,
+		Template: q.Template, Clean: q.Clean, Ping: q.Ping, Distance: q.Distance,
 		Location: q.OverrideLocationLabel, Areas: q.OverrideAreas,
 	}, cleanBit|summaryBit)...)
 	return strings.Join(parts, " ")
@@ -458,10 +457,10 @@ func (c *ScriptCommand) maxbattleToScript(ctx *bot.CommandContext, prefix string
 
 	switch {
 	case mb.PokemonID != bot.WildcardID:
-		parts = append(parts, c.pokemonName(ctx, mb.PokemonID))
+		parts = append(parts, scriptToken(c.pokemonName(ctx, mb.PokemonID)))
 		if mb.Form != 0 {
 			if formName := c.formName(ctx, mb.Form); formName != "" {
-				parts = append(parts, "form:"+formName)
+				parts = append(parts, scriptToken("form:"+formName))
 			}
 		}
 	case mb.Level == 90: // 90 = all levels
@@ -483,7 +482,7 @@ func (c *ScriptCommand) maxbattleToScript(ctx *bot.CommandContext, prefix string
 	}
 	// !maxbattle accepts clean but not edit (maxbattle alerts carry no edit key).
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: mb.Template, Clean: mb.Clean, Ping: mb.Ping,
+		Template: mb.Template, Clean: mb.Clean, Ping: mb.Ping, Distance: mb.Distance,
 		Location: mb.OverrideLocationLabel, Areas: mb.OverrideAreas,
 	}, cleanBit)...)
 	return strings.Join(parts, " ")
@@ -530,7 +529,7 @@ func (c *ScriptCommand) fortToScript(ctx *bot.CommandContext, prefix string, f *
 	}
 	// !fort takes no clean/edit keyword (fort rules have no clean column).
 	parts = append(parts, c.commonSuffix(ctx, ruleSettings{
-		Template: f.Template, Ping: f.Ping,
+		Template: f.Template, Ping: f.Ping, Distance: f.Distance,
 		Location: f.OverrideLocationLabel, Areas: f.OverrideAreas,
 	}, 0)...)
 	return strings.Join(parts, " ")
@@ -562,9 +561,8 @@ func (c *ScriptCommand) formName(ctx *bot.CommandContext, formID int) string {
 	return strings.ToLower(name)
 }
 
-// itemName returns the English item name with spaces as underscores, which
-// the parser turns back into the single phrase !quest matches item names
-// against.
+// itemName returns the lowercased English item name, the phrase !quest
+// matches item names against.
 func (c *ScriptCommand) itemName(ctx *bot.CommandContext, itemID int) string {
 	if ctx.GameData == nil {
 		return ""
@@ -574,7 +572,7 @@ func (c *ScriptCommand) itemName(ctx *bot.CommandContext, itemID int) string {
 	if name == gamedata.ItemTranslationKey(itemID) {
 		return ""
 	}
-	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+	return strings.ToLower(name)
 }
 
 func (c *ScriptCommand) moveName(ctx *bot.CommandContext, moveID int) string {
@@ -621,6 +619,7 @@ type ruleSettings struct {
 	Template string
 	Clean    int
 	Ping     string
+	Distance int      // only to decide which override applies; d: is emitted by the caller
 	Location string   // override_location_label
 	Areas    []string // override_areas
 }
@@ -643,11 +642,18 @@ func (c *ScriptCommand) commonSuffix(ctx *bot.CommandContext, s ruleSettings, cl
 	if clean&summaryBit != 0 {
 		parts = append(parts, "summary")
 	}
-	if s.Location != "" {
+	// The commands only accept location: with a distance and area: without
+	// one. A row written through the API can break that; the matcher then
+	// ignores the override (a distance rule never reads override_areas, an
+	// area rule matches on areas whatever its anchor), so leave it out
+	// rather than emit a line the command rejects.
+	if s.Location != "" && s.Distance > 0 {
 		parts = append(parts, scriptToken("location:"+s.Location))
 	}
-	for _, a := range s.Areas {
-		parts = append(parts, scriptToken("area:"+a))
+	if s.Distance == 0 {
+		for _, a := range s.Areas {
+			parts = append(parts, scriptToken("area:"+a))
+		}
 	}
 	// The stored ping is the space-joined mention tokens extractPings took
 	// from the original command, so it re-parses as the same pings.
@@ -660,10 +666,12 @@ func (c *ScriptCommand) commonSuffix(ctx *bot.CommandContext, s ruleSettings, cl
 // scriptToken quotes a token that contains whitespace or an underscore. The
 // parser keeps a quoted token whole and leaves its underscores alone, where
 // it would otherwise split on the space or turn the underscore into one
-// (which a saved-location label lookup would not match).
+// (which a saved-location label lookup would not match). The tokenizer has
+// no escapes, so a double quote inside a quoted token is dropped, as
+// discordbot's quoteForCommand does.
 func scriptToken(tok string) string {
 	if strings.ContainsAny(tok, " \t_") {
-		return `"` + tok + `"`
+		return `"` + strings.ReplaceAll(tok, `"`, "") + `"`
 	}
 	return tok
 }
