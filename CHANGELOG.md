@@ -220,6 +220,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   profile number a rule sits on, plus the active profile, as v1
   `allProfiles/{id}` did. Such rules carry a `profile_no` that `profiles` does
   not list (#330).
+- **v2 area `?all_profiles=true` covers the same profiles as the snapshot.**
+  `DELETE`/`PATCH /api/v2/humans/{id}/areas` and `POST …/areas` with
+  `all_profiles` built their profile list from `profiles` rows only, so a
+  human with a row for another profile but none for the active one kept the
+  removed or renamed name in `humans.area` and in that profile's
+  `override_areas`, while the snapshot still showed it. They now use the
+  snapshot's set: profiles rows, the active profile, and every profile a rule
+  sits on.
 - **v2 invasion catch-alls keep their gender.** `everything` and `boss` rules
   read back with `gender: null` even when stored as male or female, although
   the matcher applies it, so a read-modify-write widened the rule to both

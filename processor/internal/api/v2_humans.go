@@ -890,9 +890,9 @@ func RegisterV2Humans(humaAPI huma.API, deps *TrackingDeps) {
 
 // v2AreaTargets resolves the profile numbers an area endpoint writes: the
 // current profile by default, ?profile= when given, or every profile with
-// ?all_profiles=true. A human with no profiles rows (e.g. migrated from
-// PoracleJS) falls back to the current profile, so all_profiles still covers
-// humans.area and that profile's override_areas instead of writing nothing.
+// ?all_profiles=true. all_profiles is allProfileNos: profiles rows, the
+// current profile and every profile a rule sits on, so humans.area and the
+// override_areas of rules on a profile with no row are covered too.
 func v2AreaTargets(deps *TrackingDeps, human *store.Human, allProfiles bool, profile int) ([]int, error) {
 	switch {
 	case allProfiles:
@@ -901,12 +901,13 @@ func v2AreaTargets(deps *TrackingDeps, human *store.Human, allProfiles bool, pro
 			log.Errorf("v2 humans: list profiles for %s: %s", human.ID, err)
 			return nil, huma.Error500InternalServerError("database error")
 		}
-		if len(profiles) == 0 {
-			return []int{human.CurrentProfileNo}, nil
-		}
-		targets := make([]int, 0, len(profiles))
-		for _, p := range profiles {
-			targets = append(targets, p.ProfileNo)
+		// The same set the all_profiles snapshot shows, so a profile with
+		// rules but no profiles row (PoracleJS migrations, deleted profiles)
+		// is not skipped (#330).
+		targets, err := allProfileNos(deps, human.ID, human.CurrentProfileNo, profiles)
+		if err != nil {
+			log.Errorf("v2 humans: list rule profiles for %s: %s", human.ID, err)
+			return nil, huma.Error500InternalServerError("database error")
 		}
 		return targets, nil
 	case profile != profileSentinel:

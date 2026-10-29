@@ -92,7 +92,7 @@ func RegisterV2TrackingSnapshot(api huma.API, deps *TrackingDeps) {
 
 		var profileNos []int
 		if in.AllProfiles {
-			profileNos, err = snapshotProfileNos(deps, human, profiles)
+			profileNos, err = allProfileNos(deps, human.ID, human.CurrentProfileNo, profiles)
 			if err != nil {
 				log.Errorf("v2 snapshot: rule profiles %s: %s", human.ID, err)
 				return nil, huma.Error500InternalServerError("database error")
@@ -123,18 +123,19 @@ func RegisterV2TrackingSnapshot(api huma.API, deps *TrackingDeps) {
 	})
 }
 
-// snapshotProfileNos is the profile set all_profiles reads: every profiles
-// row, the active profile, and every profile_no a rule sits on. The last two
+// allProfileNos is the profile set all_profiles means, for the snapshot and
+// the area DELETE/PATCH/set endpoints alike: every profiles row, the active
+// profile, and every profile_no a rule sits on. The last two
 // matter because neither needs a profiles row: a human migrated from
 // PoracleJS often has rules on current_profile_no and no row for it, and a
 // deleted profile can leave rules behind. Those leftovers never fire (matching
 // is scoped to the active profile) but they are still the human's rules (#330).
-func snapshotProfileNos(deps *TrackingDeps, human *store.HumanLite, profiles []store.Profile) ([]int, error) {
-	nos, err := deps.Humans.RuleProfileNos(human.ID)
+func allProfileNos(deps *TrackingDeps, humanID string, currentProfileNo int, profiles []store.Profile) ([]int, error) {
+	nos, err := deps.Humans.RuleProfileNos(humanID)
 	if err != nil {
 		return nil, err
 	}
-	nos = append(nos, human.CurrentProfileNo)
+	nos = append(nos, currentProfileNo)
 	for _, p := range profiles {
 		nos = append(nos, p.ProfileNo)
 	}

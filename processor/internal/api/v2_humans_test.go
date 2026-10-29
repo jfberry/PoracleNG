@@ -1625,6 +1625,34 @@ func TestV2Humans_RemoveArea_AllProfilesNoProfileRows(t *testing.T) {
 	}
 }
 
+// all_profiles targets the same profiles the all_profiles snapshot shows:
+// here the current profile (1) has rules but no profiles row, and profile 2
+// has a row. Building the targets from profiles rows alone skipped profile 1,
+// so its humans.area and override_areas kept the removed name.
+func TestV2Humans_RemoveArea_AllProfilesRowlessCurrentProfile(t *testing.T) {
+	r, humans, _, mons, _ := newV2HumansTestAPIRules(t, nil)
+	h, _ := humans.Get("u1")
+	h.Area = []string{"alpha", "private"}
+	humans.AddHuman(h)
+	humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 2, Area: []string{"beta", "private"}})
+	humans.RuleProfiles = map[string][]int{"u1": {1}}
+	_, _ = mons.Insert(&db.MonsterTrackingAPI{ID: "u1", ProfileNo: 1, OverrideAreas: []string{"private", "alpha"}})
+
+	code, got := removeArea(t, r, "name=private&all_profiles=true")
+	if code != http.StatusOK {
+		t.Fatalf("code=%d", code)
+	}
+	if !slices.Equal(got.RemovedFrom, []int{1, 2}) {
+		t.Errorf("removed_from = %v, want [1 2]", got.RemovedFrom)
+	}
+	if hh, _ := humans.Get("u1"); !slices.Equal(hh.Area, []string{"alpha"}) {
+		t.Errorf("humans.area = %v, want [alpha]", hh.Area)
+	}
+	if o := mons.AllRows()[0].OverrideAreas; !slices.Equal(o, []string{"alpha"}) {
+		t.Errorf("profile 1 override = %v, want [alpha]", o)
+	}
+}
+
 func TestV2Humans_RenameArea_AllProfilesNoProfileRows(t *testing.T) {
 	r, humans, reloads, mons, _ := newV2HumansTestAPIRules(t, nil)
 	h, _ := humans.Get("u1")

@@ -225,7 +225,7 @@ func resolveHuman(deps *TrackingDeps, id string, profile int) (*store.HumanLite,
 //
 // typeName is the tracking-type URL segment (the snapshot's "tracking" map key).
 // When allProfiles is true, the provider reads each of profileNos (see
-// snapshotProfileNos) and each returned rule carries its profile_no.
+// allProfileNos) and each returned rule carries its profile_no.
 type v2SnapshotProvider struct {
 	// TypeName is the "tracking" map key (e.g. "pokemon", "invasion", "incident").
 	TypeName string
