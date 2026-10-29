@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/guregu/null/v6"
@@ -61,14 +62,8 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	parsed := ctx.ArgMatcher.Match(args, eggParams, ctx.Language)
 
-	// `remove id:N` is unambiguous — no level required. Hoist this above the
-	// level-building below so a UID-only removal (e.g. from /untrack egg)
-	// doesn't trip the "no levels" reply.
-	if parsed.HasKeyword("arg.remove") && len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Eggs, parsed.RemoveUIDs,
-			store.EggGetUID,
-			func(r *db.EggTrackingAPI) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(r)) },
-		)
+	if parsed.HasKeyword("arg.remove") {
+		return c.removeEggs(ctx, parsed)
 	}
 
 	// Collect levels from multiple sources
@@ -133,18 +128,6 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Check for unrecognized args
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
-	}
-
-	// Handle remove
-	if parsed.HasKeyword("arg.remove") {
-		if len(parsed.RemoveUIDs) > 0 {
-			tr := ctx.Tr()
-			return removeByUIDs(ctx, ctx.Tracking.Eggs, parsed.RemoveUIDs,
-				store.EggGetUID,
-				func(r *db.EggTrackingAPI) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(r)) },
-			)
-		}
-		return c.removeEggs(ctx, levelSet)
 	}
 
 	// Optional `gym:<id-or-name>` argument pins the rule to a specific
@@ -222,37 +205,23 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: "✅", Text: message}}
 }
 
-func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) []bot.Reply {
+// eggRemoveSpec: egg rules are removed by level.
+var eggRemoveSpec = removeSpec{
+	selectors: []bot.ParamDef{levelParam, raidLevelParam},
+}
+
+func (c *EggCommand) removeEggs(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	if reply := checkRemoveArgs(ctx, parsed, eggRemoveSpec, nil); reply != nil {
+		return []bot.Reply{*reply}
+	}
 	tr := ctx.Tr()
-	tracked, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("egg command: select for remove: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	var uidsToDelete []int64
-	var removed []db.EggTrackingAPI
-	for _, existing := range tracked {
-		if levelSet[existing.Level] {
-			uidsToDelete = append(uidsToDelete, existing.UID)
-			removed = append(removed, existing)
-		}
-	}
-
-	if len(uidsToDelete) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-
-	if err := ctx.Tracking.Eggs.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
-		log.Errorf("egg command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	ctx.TriggerReload()
-
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.EggRowText(tr, eggAPIToTracking(&removed[i])))
-	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	levelRange, hasLevel := parsed.Ranges["level"]
+	return ruleRemover[db.EggTrackingAPI]{
+		store:    ctx.Tracking.Eggs,
+		getUID:   store.EggGetUID,
+		describe: func(r *db.EggTrackingAPI) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(r)) },
+		logName:  "egg",
+	}.run(ctx, parsed, func(r *db.EggTrackingAPI) bool {
+		return slices.Contains(parsed.RaidLevels, r.Level) || (hasLevel && rangeMatches(levelRange, r.Level))
+	}, nil)
 }

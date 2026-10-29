@@ -352,13 +352,14 @@ func TestQuest_RemoveSummary_OnlyTargetsSummaryRules(t *testing.T) {
 // Amount plumbing.)
 func TestQuest_AmountOnCandy(t *testing.T) {
 	ctx := questCtx(t)
-	replies := runQuest(t, ctx, "candy:pikachu amount:5")
+	replies := runQuest(t, ctx, "candy:25 amount:5")
 	require.NotEmpty(t, replies)
 	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
 
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
 	require.Len(t, rows, 1)
 	assert.Equal(t, 4, rows[0].RewardType, "candy reward type")
+	assert.Equal(t, 25, rows[0].Reward, "candy:25 targets pikachu")
 	assert.Equal(t, 5, rows[0].Amount, "amount:5 should persist into Amount column")
 }
 
@@ -403,7 +404,7 @@ func TestQuest_AmountOnItem(t *testing.T) {
 // candy case — both reward types honour q.Amount in the matcher.
 func TestQuest_AmountOnMegaEnergy(t *testing.T) {
 	ctx := questCtx(t)
-	replies := runQuest(t, ctx, "energy:pikachu amount:50")
+	replies := runQuest(t, ctx, "energy:25 amount:50")
 	require.NotEmpty(t, replies)
 	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
 
@@ -630,11 +631,16 @@ func TestQuest_Remove_BareCandyConsumesPokemon(t *testing.T) {
 	assert.ElementsMatch(t, []string{"7:25"}, questKinds(t, ctx))
 }
 
-func TestQuest_Remove_BareRemovesAll(t *testing.T) {
+func TestQuest_Remove_BareRefused(t *testing.T) {
 	ctx := questCtx(t)
 	runQuest(t, ctx, "stardust 25")
 	runQuest(t, ctx, "candy:649")
 
-	runQuest(t, ctx, "remove")
+	replies := runQuest(t, ctx, "remove")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React)
+	assert.Len(t, questKinds(t, ctx), 3, "a bare remove must not remove anything")
+
+	runQuest(t, ctx, "remove everything")
 	assert.Empty(t, questKinds(t, ctx))
 }

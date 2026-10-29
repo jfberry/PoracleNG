@@ -53,6 +53,10 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 	parsed := ctx.ArgMatcher.Match(args, invasionParams, ctx.Language)
 
+	if parsed.HasKeyword("arg.remove") {
+		return c.removeInvasions(ctx, parsed)
+	}
+
 	common, block := parseCommonTrackFields(ctx, parsed, "invasion")
 	if block != nil {
 		return []bot.Reply{*block}
@@ -65,10 +69,137 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 	gender := parsed.Gender
 
-	// Build valid type name set from multiple sources:
-	// 1. Grunt template-derived names (dragon, giovanni, arlo, mixed, etc.)
-	// 2. Translated pokemon type names via poke_type_{id} (user's language + English)
-	// 3. Pokestop event names (kecleon, showcase, gold-stop)
+	validTypes := invasionTypeNames(ctx)
+
+	// Match unrecognized args against valid type/event names
+	var gruntTypes, unknown []string
+	for _, arg := range parsed.Unrecognized {
+		lower := strings.ToLower(arg)
+		if canonical, ok := validTypes[lower]; ok {
+			gruntTypes = append(gruntTypes, canonical)
+		} else {
+			unknown = append(unknown, arg)
+		}
+	}
+
+	// Any token that isn't a known type is an error — for add and remove
+	// alike. Remove in particular must never fall through to "everything"
+	// because of a typo: that would delete every invasion rule.
+	if len(unknown) > 0 {
+		if len(gruntTypes) == 0 {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_invasion_type")}}
+		}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.unrecognized", strings.Join(unknown, ", "))}}
+	}
+
+	// No type given (or the everything keyword) means every type.
+	if parsed.HasKeyword("arg.everything") || len(gruntTypes) == 0 {
+		gruntTypes = []string{"everything"}
+	}
+
+	insert := make([]db.InvasionTrackingAPI, 0, len(gruntTypes))
+	for _, gt := range gruntTypes {
+		insert = append(insert, db.InvasionTrackingAPI{
+			ID:                    ctx.TargetID,
+			ProfileNo:             ctx.ProfileNo,
+			Ping:                  pings,
+			Template:              common.Template,
+			Distance:              common.Distance,
+			Clean:                 common.Clean,
+			Gender:                gender,
+			GruntType:             gt,
+			OverrideLocationLabel: override.LocationLabel,
+			OverrideAreas:         override.Areas,
+		})
+	}
+
+	tracked, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
+	if err != nil {
+		log.Errorf("invasion command: select existing: %s", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+
+	if r := overrideLimitReply(ctx, tracked, insert, store.InvasionGetUID, store.InvasionSetUID); r != nil {
+		return r
+	}
+	diff, err := store.ApplyDiff(ctx.Tracking.Invasions, ctx.TargetID, tracked, insert,
+		store.InvasionGetUID, store.InvasionSetUID)
+	if err != nil {
+		log.Errorf("invasion command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
+		func(i int) string {
+			return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&diff.AlreadyPresent[i]))
+		},
+		func(i int) string {
+			return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&diff.Updates[i]))
+		},
+		func(i int) string {
+			return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&diff.Inserts[i]))
+		},
+	)
+
+	ctx.TriggerReload()
+
+	message += trackingWarnings(ctx, common.Distance)
+
+	if common.TemplateWarn != "" {
+		message += "\n⚠️ " + common.TemplateWarn
+	}
+
+	react := "✅"
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
+		react = "👌"
+	}
+	return []bot.Reply{{React: react, Text: message}}
+}
+
+// invasionRemoveSpec: invasion rules are removed by grunt type (read from
+// the leftover words); a gender narrows the selection.
+var invasionRemoveSpec = removeSpec{
+	filters: []bot.ParamDef{genderParam},
+}
+
+func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	validTypes := invasionTypeNames(ctx)
+	gruntTypes := make(map[string]bool)
+	var named, unknown []string
+	for _, arg := range parsed.Unrecognized {
+		if canonical, ok := validTypes[strings.ToLower(arg)]; ok {
+			gruntTypes[canonical] = true
+			named = append(named, arg)
+		} else {
+			unknown = append(unknown, arg)
+		}
+	}
+	parsed.Unrecognized = unknown
+	if reply := checkRemoveArgs(ctx, parsed, invasionRemoveSpec, named); reply != nil {
+		return []bot.Reply{*reply}
+	}
+
+	tr := ctx.Tr()
+	var keep func(*db.InvasionTrackingAPI) bool
+	if parsed.Gender != 0 {
+		keep = func(r *db.InvasionTrackingAPI) bool { return r.Gender == parsed.Gender }
+	}
+	return ruleRemover[db.InvasionTrackingAPI]{
+		store:  ctx.Tracking.Invasions,
+		getUID: store.InvasionGetUID,
+		describe: func(r *db.InvasionTrackingAPI) string {
+			return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(r))
+		},
+		logName: "invasion",
+	}.run(ctx, parsed, func(r *db.InvasionTrackingAPI) bool { return gruntTypes[r.GruntType] }, keep)
+}
+
+// invasionTypeNames maps every name !invasion accepts for a grunt type or
+// pokestop event to its canonical DB value. Sources:
+// 1. Grunt template-derived names (dragon, giovanni, arlo, mixed, etc.)
+// 2. Translated pokemon type names via poke_type_{id} (user's language + English)
+// 3. Pokestop event names (kecleon, showcase, gold-stop)
+func invasionTypeNames(ctx *bot.CommandContext) map[string]string {
 	validTypes := make(map[string]string) // input name → canonical DB value
 
 	if ctx.GameData != nil {
@@ -151,143 +282,5 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 			}
 		}
 	}
-
-	// Match unrecognized args against valid type/event names
-	var gruntTypes, unknown []string
-	for _, arg := range parsed.Unrecognized {
-		lower := strings.ToLower(arg)
-		if canonical, ok := validTypes[lower]; ok {
-			gruntTypes = append(gruntTypes, canonical)
-		} else {
-			unknown = append(unknown, arg)
-		}
-	}
-
-	// Any token that isn't a known type is an error — for add and remove
-	// alike. Remove in particular must never fall through to "everything"
-	// because of a typo: that would delete every invasion rule.
-	if len(unknown) > 0 {
-		if len(gruntTypes) == 0 {
-			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_invasion_type")}}
-		}
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.unrecognized", strings.Join(unknown, ", "))}}
-	}
-
-	// No type given (or the everything keyword) means every type.
-	if parsed.HasKeyword("arg.everything") || len(gruntTypes) == 0 {
-		gruntTypes = []string{"everything"}
-	}
-
-	if parsed.HasKeyword("arg.remove") {
-		return c.removeInvasions(ctx, parsed, gruntTypes)
-	}
-
-	insert := make([]db.InvasionTrackingAPI, 0, len(gruntTypes))
-	for _, gt := range gruntTypes {
-		insert = append(insert, db.InvasionTrackingAPI{
-			ID:                    ctx.TargetID,
-			ProfileNo:             ctx.ProfileNo,
-			Ping:                  pings,
-			Template:              common.Template,
-			Distance:              common.Distance,
-			Clean:                 common.Clean,
-			Gender:                gender,
-			GruntType:             gt,
-			OverrideLocationLabel: override.LocationLabel,
-			OverrideAreas:         override.Areas,
-		})
-	}
-
-	tracked, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("invasion command: select existing: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	if r := overrideLimitReply(ctx, tracked, insert, store.InvasionGetUID, store.InvasionSetUID); r != nil {
-		return r
-	}
-	diff, err := store.ApplyDiff(ctx.Tracking.Invasions, ctx.TargetID, tracked, insert,
-		store.InvasionGetUID, store.InvasionSetUID)
-	if err != nil {
-		log.Errorf("invasion command: apply diff: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
-		func(i int) string {
-			return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&diff.AlreadyPresent[i]))
-		},
-		func(i int) string {
-			return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&diff.Updates[i]))
-		},
-		func(i int) string {
-			return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&diff.Inserts[i]))
-		},
-	)
-
-	ctx.TriggerReload()
-
-	message += trackingWarnings(ctx, common.Distance)
-
-	if common.TemplateWarn != "" {
-		message += "\n⚠️ " + common.TemplateWarn
-	}
-
-	react := "✅"
-	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
-		react = "👌"
-	}
-	return []bot.Reply{{React: react, Text: message}}
-}
-
-func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, parsed *bot.ParsedArgs, gruntTypes []string) []bot.Reply {
-	if len(parsed.RemoveUIDs) > 0 {
-		tr := ctx.Tr()
-		return removeByUIDs(ctx, ctx.Tracking.Invasions, parsed.RemoveUIDs,
-			store.InvasionGetUID,
-			func(r *db.InvasionTrackingAPI) string {
-				return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(r))
-			},
-		)
-	}
-
-	tracked, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("invasion command: select for remove: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	gtSet := make(map[string]bool)
-	for _, gt := range gruntTypes {
-		gtSet[gt] = true
-	}
-
-	var uids []int64
-	var removed []db.InvasionTrackingAPI
-	for _, existing := range tracked {
-		// A gender narrows the removal to rules with that gender.
-		if parsed.Gender != 0 && existing.Gender != parsed.Gender {
-			continue
-		}
-		// "everything" means remove all
-		if gtSet["everything"] || gtSet[existing.GruntType] {
-			uids = append(uids, existing.UID)
-			removed = append(removed, existing)
-		}
-	}
-	if len(uids) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-	if err := ctx.Tracking.Invasions.DeleteByUIDs(ctx.TargetID, uids); err != nil {
-		log.Errorf("invasion command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-	ctx.TriggerReload()
-	tr := ctx.Tr()
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&removed[i])))
-	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	return validTypes
 }

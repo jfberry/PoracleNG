@@ -353,3 +353,16 @@ func TestCanonicalRuleTable(t *testing.T) {
 		t.Error("bogus accepted")
 	}
 }
+
+// !mute area stores the canonical fence name; !unmute area arrives with
+// underscores turned into spaces by the tokenizer (#347).
+func TestRemoveAreaIgnoresUnderscoreVsSpace(t *testing.T) {
+	s := NewStore()
+	s.Add(Entry{HumanID: "u", ScopeType: ScopeArea, ScopeValue: "north_london"})
+	if !s.Remove("u", ScopeArea, "", "north london") {
+		t.Fatal("Remove(north london) did not remove the north_london area mute")
+	}
+	if n := len(s.List("u")); n != 0 {
+		t.Errorf("entries left = %d, want 0", n)
+	}
+}

@@ -54,6 +54,10 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	parsed := ctx.ArgMatcher.Match(args, gymParams, ctx.Language)
 
+	if parsed.HasKeyword("arg.remove") {
+		return c.removeGyms(ctx, parsed)
+	}
+
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
 	}
@@ -89,17 +93,6 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	} else {
 		// Default: team 4 (any team)
 		teams = append(teams, 4)
-	}
-
-	if parsed.HasKeyword("arg.remove") {
-		if len(parsed.RemoveUIDs) > 0 {
-			tr := ctx.Tr()
-			return removeByUIDs(ctx, ctx.Tracking.Gyms, parsed.RemoveUIDs,
-				store.GymGetUID,
-				func(r *db.GymTrackingAPI) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(r)) },
-			)
-		}
-		return c.removeGyms(ctx, teams)
 	}
 
 	// Optional `gym:<id-or-name>` argument pins the rule to a specific
@@ -213,38 +206,20 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: react, Text: message}}
 }
 
-func (c *GymCommand) removeGyms(ctx *bot.CommandContext, teams []int) []bot.Reply {
-	tracked, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("gym command: select for remove: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
+// gymRemoveSpec: gym rules are removed by team.
+var gymRemoveSpec = removeSpec{
+	selectors: []bot.ParamDef{teamParam},
+}
 
-	teamSet := make(map[int]bool)
-	for _, t := range teams {
-		teamSet[t] = true
+func (c *GymCommand) removeGyms(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	if reply := checkRemoveArgs(ctx, parsed, gymRemoveSpec, nil); reply != nil {
+		return []bot.Reply{*reply}
 	}
-
-	var uids []int64
-	var removed []db.GymTrackingAPI
-	for _, existing := range tracked {
-		if teamSet[existing.Team] || teamSet[4] {
-			uids = append(uids, existing.UID)
-			removed = append(removed, existing)
-		}
-	}
-	if len(uids) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-	if err := ctx.Tracking.Gyms.DeleteByUIDs(ctx.TargetID, uids); err != nil {
-		log.Errorf("gym command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-	ctx.TriggerReload()
 	tr := ctx.Tr()
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.GymRowText(tr, gymAPIToTracking(&removed[i])))
-	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	return ruleRemover[db.GymTrackingAPI]{
+		store:    ctx.Tracking.Gyms,
+		getUID:   store.GymGetUID,
+		describe: func(r *db.GymTrackingAPI) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(r)) },
+		logName:  "gym",
+	}.run(ctx, parsed, func(r *db.GymTrackingAPI) bool { return r.Team == parsed.Team }, nil)
 }

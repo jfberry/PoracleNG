@@ -354,6 +354,10 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 
 	result := NewParsedArgs()
 	consumed := make([]bool, len(tokens))
+	consume := func(i int, param ParamDef) {
+		consumed[i] = true
+		result.Matched = append(result.Matched, MatchedArg{Token: tokens[i], Param: param})
+	}
 
 	// Sort params by priority: prefix patterns first, then keywords, then names last
 	// We process in this order to avoid ambiguity
@@ -367,7 +371,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryMatch(tok, param, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 					break // each param definition matches at most one token (except Pokemon/Type which collect)
 				}
 			}
@@ -382,7 +386,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryPrefixStringList(tok, param.Key, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -392,7 +396,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if tryRemoveUID(tok, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -402,7 +406,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryLureType(tok, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -412,7 +416,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryMatchPokemon(tok, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -422,7 +426,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryMatchType(tok, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}

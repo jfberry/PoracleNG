@@ -146,33 +146,16 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	pokemonID := resolved[0].PokemonID
 	form := resolved[0].Form
 
-	// If a form filter was specified, try to match it
+	// If a form filter was specified, look it up among the species' forms
+	// in game data (as !track form: does). The resolver only ever returns
+	// base forms, so searching its results never matches a form name.
 	if formFilter != "" {
-		matched := false
-		for _, r := range resolved {
-			if r.PokemonID != pokemonID {
-				continue
-			}
-			formName := strings.ToLower(ctx.Tr().T(gamedata.FormTranslationKey(r.Form)))
-			if formName == formFilter {
-				form = r.Form
-				matched = true
-				break
-			}
+		forms := filterByForm(ctx, []bot.ResolvedPokemon{{PokemonID: pokemonID}}, formFilter)
+		if len(forms) == 0 {
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.form_not_found",
+				ctx.EscapeForCode(formFilter), bot.CommandPrefix(ctx))}}
 		}
-		if !matched {
-			// Also try English form names
-			for _, r := range resolved {
-				if r.PokemonID != pokemonID {
-					continue
-				}
-				formName := strings.ToLower(enTr.T(gamedata.FormTranslationKey(r.Form)))
-				if formName == formFilter {
-					form = r.Form
-					break
-				}
-			}
-		}
+		form = forms[0].Form
 	}
 
 	mon := ctx.GameData.Monsters[gamedata.MonsterKey{ID: pokemonID, Form: form}]
