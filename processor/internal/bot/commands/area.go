@@ -105,6 +105,14 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 	communities := humanCommunities(ctx, h)
 	added, notFound, newList := ctx.AreaLogic.AddAreas(currentAreas, communities, args, ctx.IsAdmin)
 
+	if len(added) > 0 && bot.AreaLimitBlocks(ctx.Config, limitExempt(ctx), newList, currentAreas) {
+		parts := []string{tr.Tf("msg.area.too_many", ctx.Config.Tracking.MaxAreas, len(currentAreas), bot.CommandPrefix(ctx))}
+		if len(notFound) > 0 {
+			parts = append(parts, tr.Tf("msg.area.not_found", ctx.EscapeJoin(notFound, ", ")))
+		}
+		return []bot.Reply{{React: "🙅", Text: strings.Join(parts, "\n")}}
+	}
+
 	if len(added) > 0 {
 		setUserAreas(ctx, newList)
 	}

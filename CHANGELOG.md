@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`[tracking] max_areas`** (default `0` = no limit). Caps how many areas a
+  user may hold per profile (`!area add`, v1 `setAreas`, v2 set-areas, and the
+  initial `area` on v1/v2 human create) and per rule (`area:` on tracking
+  commands, `override_areas` on v1 and v2 tracking writes). Over-limit writes
+  are refused (bot reply, v1 400, v2 422), not truncated. A rule or profile
+  already over the limit — because the limit was lowered — may keep or shrink
+  its own list, so GET → PUT/PATCH round trips keep working; its list cannot
+  be copied into a new rule. Exposed as `maxAreas` in
+  `GET /api/config/poracleWeb`.
 - **`exemptFromAreaSecurity` geofence property.** A fence that declares it
   (native or GeoJSON) is outside the community system: area_security never
   filters it out of a user's permitted areas, and reconciliation never prunes
@@ -26,6 +35,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **v2 clear location.** `DELETE /api/v2/humans/{id}/location[?profile=]`
   resets a human's (or profile's) location to unset. Unlike
   `POST …/location {lat:0,lon:0}` it is not refused for area-restricted users.
+- **v1 tracking enforces `[tracking] max_distance`.** v1 tracking POSTs now
+  clamp `distance` like the bot and v2 do; previously v1 stored any radius
+  (pokemon capped only at the earth's circumference).
+- **`[tracking] max_distance` and `max_areas` apply to users only.** Admins,
+  and channels, webhooks, groups and threads (which only admins and delegated
+  admins configure), are exempt on every surface: bot commands (text and
+  slash) and v1/v2 writes. v2 `trusted` requests are exempt too. So a radius
+  an admin gives a channel is no longer clamped by a later API round trip.
 - **v2 tracking enforces `[tracking] max_distance`.** Every v2 tracking type
   now clamps `distance` to the configured maximum, as the bot commands do
   (previously v2 only capped at the earth's circumference). Over-limit values

@@ -228,6 +228,9 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	if r := overrideLimitReply(ctx, tracked, insert, store.MonsterGetUID, store.MonsterSetUID); r != nil {
+		return r
+	}
 	diff, err := store.ApplyDiff(ctx.Tracking.Monsters, ctx.TargetID, tracked, insert,
 		store.MonsterGetUID, store.MonsterSetUID)
 	if err != nil {

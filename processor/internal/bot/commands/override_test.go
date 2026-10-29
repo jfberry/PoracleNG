@@ -128,3 +128,20 @@ func TestParseOverride_DedupesBySpellingKey(t *testing.T) {
 		t.Fatalf("areas = %v, want [gent_centrum london]", got.Areas)
 	}
 }
+
+func TestEnforceDistance_MaxDistance(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+	ctx.Config.Tracking.MaxDistance = 1000
+	if got := enforceDistance(ctx, 5000, false); got != 1000 {
+		t.Errorf("non-admin: got %d, want 1000", got)
+	}
+	ctx.TargetType = bot.TypeDiscordChannel
+	if got := enforceDistance(ctx, 5000, false); got != 5000 {
+		t.Errorf("channel target: got %d, want 5000 (exempt)", got)
+	}
+	ctx.TargetType = bot.TypeDiscordUser
+	ctx.IsAdmin = true
+	if got := enforceDistance(ctx, 5000, false); got != 5000 {
+		t.Errorf("admin: got %d, want 5000 (exempt)", got)
+	}
+}

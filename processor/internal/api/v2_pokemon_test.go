@@ -1070,25 +1070,28 @@ func TestV2Pokemon_EditTrueAccepted(t *testing.T) {
 	}
 }
 
-func TestClampV2Distance(t *testing.T) {
+func TestClampDistance(t *testing.T) {
 	withMax := func(max int) *TrackingDeps {
 		return &TrackingDeps{Config: &config.Config{Tracking: config.TrackingConfig{MaxDistance: max}}}
 	}
 	cases := []struct {
 		name     string
 		deps     *TrackingDeps
+		admin    bool
 		in, want int
 	}{
-		{"no limit configured keeps value", withMax(0), 5000, 5000},
-		{"no limit configured caps at earth", withMax(0), earthCircumference + 1, earthCircumference},
-		{"under limit unchanged", withMax(10000), 9999, 9999},
-		{"over limit clamped", withMax(10000), 25000, 10000},
-		{"area mode untouched", withMax(10000), 0, 0},
-		{"nil config caps at earth", &TrackingDeps{}, earthCircumference + 1, earthCircumference},
+		{"no limit configured keeps value", withMax(0), false, 5000, 5000},
+		{"no limit configured caps at earth", withMax(0), false, earthCircumference + 1, earthCircumference},
+		{"under limit unchanged", withMax(10000), false, 9999, 9999},
+		{"over limit clamped", withMax(10000), false, 25000, 10000},
+		{"area mode untouched", withMax(10000), false, 0, 0},
+		{"nil config caps at earth", &TrackingDeps{}, false, earthCircumference + 1, earthCircumference},
+		{"admin exempt from limit", withMax(10000), true, 25000, 25000},
+		{"admin still capped at earth", withMax(10000), true, earthCircumference + 1, earthCircumference},
 	}
 	for _, c := range cases {
-		if got := clampV2Distance(c.deps, c.in); got != c.want {
-			t.Errorf("%s: clampV2Distance(%d) = %d, want %d", c.name, c.in, got, c.want)
+		if got := clampDistance(c.deps, c.admin, c.in); got != c.want {
+			t.Errorf("%s: clampDistance(%d) = %d, want %d", c.name, c.in, got, c.want)
 		}
 	}
 }

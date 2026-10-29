@@ -12,6 +12,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // HandleGetMaxbattle returns the GET /api/tracking/maxbattle/{id} handler.
@@ -187,7 +188,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -233,7 +234,11 @@ func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 			})
 		}
 
-		// Maxbattle JS: no diff logic, always inserts
+		// Maxbattle JS: no diff logic, always inserts — every row is new.
+		if msg := overrideLimitMsg(deps, oc, nil, insert, store.MaxbattleGetUID, store.MaxbattleSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		var message string
 		if len(insert) > 50 {
 			message = tr.Tf("tracking.bulk_changes",

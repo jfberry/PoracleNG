@@ -176,7 +176,7 @@ func HandleCreateInvasion(deps *TrackingDeps) gin.HandlerFunc {
 				return
 			}
 
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -216,6 +216,10 @@ func HandleCreateInvasion(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.InvasionGetUID, store.InvasionSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.InvasionGetUID, store.InvasionSetUID)
 
 		// Build confirmation message before applying changes

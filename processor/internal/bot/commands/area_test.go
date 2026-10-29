@@ -126,3 +126,47 @@ func TestAreaCommand_NoArgs_ShowsCurrent(t *testing.T) {
 	// Should mention the current area (display name is capitalized)
 	assertTextContains(t, replies, "Downtown")
 }
+
+func TestAreaCommand_AddRefusedOverMaxAreas(t *testing.T) {
+	ctx, mock := areaTestCtx(t)
+	ctx.Config.Tracking.MaxAreas = 2
+	if err := mock.SetArea("user1", ctx.ProfileNo, []string{"downtown", "uptown"}); err != nil {
+		t.Fatal(err)
+	}
+
+	replies := (&AreaCommand{}).Run(ctx, []string{"add", "park"})
+
+	assertReact(t, replies, "🙅")
+	assertTextContains(t, replies, "at most 2 areas")
+	h, _ := mock.Get("user1")
+	if len(h.Area) != 2 {
+		t.Fatalf("areas changed despite the limit: %v", h.Area)
+	}
+}
+
+func TestAreaCommand_AddWithinMaxAreas(t *testing.T) {
+	ctx, mock := areaTestCtx(t)
+	ctx.Config.Tracking.MaxAreas = 2
+
+	replies := (&AreaCommand{}).Run(ctx, []string{"add", "downtown", "uptown"})
+
+	assertReact(t, replies, "✅")
+	h, _ := mock.Get("user1")
+	if len(h.Area) != 2 {
+		t.Fatalf("expected 2 areas, got %v", h.Area)
+	}
+}
+
+func TestAreaCommand_AdminExemptFromMaxAreas(t *testing.T) {
+	ctx, mock := areaTestCtx(t)
+	ctx.Config.Tracking.MaxAreas = 1
+	ctx.IsAdmin = true
+
+	replies := (&AreaCommand{}).Run(ctx, []string{"add", "downtown", "uptown", "park"})
+
+	assertReact(t, replies, "✅")
+	h, _ := mock.Get("user1")
+	if len(h.Area) != 3 {
+		t.Fatalf("admin should be exempt, got %v", h.Area)
+	}
+}

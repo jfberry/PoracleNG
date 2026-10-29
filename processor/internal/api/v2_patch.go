@@ -21,7 +21,7 @@ import (
 // v2PatchSet holds the settings a PATCH may set. Tags and bounds mirror the
 // rule fields of the same names. A nil field is left as stored.
 type v2PatchSet struct {
-	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" doc:"Radius in metres around the anchor location; 0 matches by geofence areas instead. Clamped to the server's [tracking] max_distance."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" doc:"Radius in metres around the anchor location; 0 matches by geofence areas instead. Clamped to the server's [tracking] max_distance unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted."`
 	Clean    *bool   `json:"clean,omitempty" doc:"Auto-delete the alert on expiry (clean bitmask bit 1)."`
 	Edit     *bool   `json:"edit,omitempty" doc:"Edit the alert in place on updates (clean bitmask bit 2). 422 for types that do not support edit (gym, invasion, maxbattle, nest, quest)."`
 	Summary  *bool   `json:"summary,omitempty" doc:"Route into the summary digest (clean bitmask bit 4). Quest only; 422 for other types."`
@@ -42,7 +42,7 @@ type v2PatchInput struct {
 	Profile             int    `query:"profile" default:"-1" doc:"Profile number; defaults to the human's active profile"`
 	IncludeDescriptions bool   `query:"include_descriptions" doc:"Add a human-readable description to each rule in the response"`
 	Silent              bool   `query:"silent" doc:"Apply without sending the confirmation push"`
-	Trusted             bool   `query:"trusted" doc:"Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply."`
+	Trusted             bool   `query:"trusted" doc:"Allow override_areas to name fences that are not userSelectable, for a client that has already authorised the change. Unknown fence names are still rejected; area_security community restrictions still apply. Also lifts [tracking] max_distance and max_areas."`
 	DryRun              bool   `query:"dry_run" doc:"Validate and classify without writing: the same per-rule outcomes, with dry_run:true. Nothing is stored, reloaded or pushed."`
 	Body                v2PatchBody
 }

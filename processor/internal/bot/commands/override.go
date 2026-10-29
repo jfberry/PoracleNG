@@ -112,3 +112,22 @@ func parseOverride(ctx *bot.CommandContext, locationLabel string, areas []string
 
 	return out, nil
 }
+
+// limitExempt reports whether [tracking] max_distance / max_areas are lifted
+// for this command: the sender is an admin, or the target is a channel,
+// webhook, group or thread (destinations only admins configure).
+func limitExempt(ctx *bot.CommandContext) bool {
+	return bot.LimitExempt(ctx.IsAdmin, ctx.TargetType)
+}
+
+// overrideLimitReply refuses a tracking write whose area: list breaks
+// [tracking] max_areas, judged on the diff the write is about to apply (see
+// bot.OverrideAreaLimitBreached). Call it just before store.ApplyDiff with
+// the same rows. Returns nil when the write may go ahead.
+func overrideLimitReply[T any](ctx *bot.CommandContext, tracked, insert []T,
+	getUID func(*T) int64, setUID func(*T, int64)) []bot.Reply {
+	if !bot.OverrideAreaLimitBreached(ctx.Config, limitExempt(ctx), tracked, insert, getUID, setUID) {
+		return nil
+	}
+	return []bot.Reply{{React: "🙅", Text: ctx.Tr().Tf("msg.override.too_many_areas", ctx.Config.Tracking.MaxAreas)}}
+}
