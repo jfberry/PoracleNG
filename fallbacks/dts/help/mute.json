@@ -1,34 +1,36 @@
-[{
-  "id": "mute",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!mute",
-      "description": "Silence alerts for a specific gym, pokemon, area, pokestop, station, or all alerts for a time-bounded window.",
-      "fields": [
-        {
-          "name": "Mute by scope",
-          "value": "`{{prefix}}mute everything [duration:1h]` — silence ALL alerts\n`{{prefix}}mute gym <name-or-id> [duration:1h]` — one gym\n`{{prefix}}mute pokemon <name-or-id> [duration:1h]` — one pokemon species\n`{{prefix}}mute pikachu [duration:1h]` — shorthand (pokemon assumed)\n`{{prefix}}mute area <name> [duration:1h]` — one area\n`{{prefix}}mute pokestop <id> [duration:1h]` — one pokestop (hex ID)\n`{{prefix}}mute station <id> [duration:1h]` — one max-battle station\n\nDuration defaults to 1h if omitted. Accepts `30m`, `2h`, `7d`, etc."
-        },
-        {
-          "name": "Per-type aliases",
-          "value": "Most tracking commands accept `mute` as a first argument and forward to `!mute` with the type filled in:\n`{{prefix}}raid mute gym \"Hilltop Gym\" duration:2h`\n`{{prefix}}gym mute gym \"Hilltop Gym\"`\n`{{prefix}}invasion mute pokestop <id>`\n\nThese are convenience aliases — they behave identically to the full `{{prefix}}mute` form."
-        },
-        {
-          "name": "Unmute",
-          "value": "`{{prefix}}unmute gym <name-or-id>` — remove a gym mute early\n`{{prefix}}unmute pokemon pikachu`\n`{{prefix}}unmute area <name>`\n`{{prefix}}unmute everything` — clear ALL active mutes\n`{{prefix}}unmute all` — same as above"
-        },
-        {
-          "name": "View active mutes",
-          "value": "`{{prefix}}tracked` — lists your active mutes alongside your tracking rules, with time remaining"
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}help start` / `{{prefix}}help stop` — pause or resume all alerts\n`{{prefix}}help tracked` — review all tracking and mutes"
-        }
-      ]
+[
+  {
+    "id": "mute",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!mute",
+        "description": "Silence some alerts for a while without changing your tracking. Mutes end on their own; they are also cleared if the bot restarts.",
+        "fields": [
+          {
+            "name": "Mute",
+            "value": "`{{prefix}}mute pikachu` — one species (wild, raids, nests, max battles); same as `{{prefix}}mute pokemon pikachu`\n`{{prefix}}mute gym Town Hall` — one gym (raids, eggs, gym alerts), by name or id\n`{{prefix}}mute area downtown` — everything in one of your areas\n`{{prefix}}mute pokestop <id>` — one pokestop (quests, incidents, lures, fort changes)\n`{{prefix}}mute station <id>` — one max battle station\n`{{prefix}}mute id:12` — one tracking rule; `{{prefix}}tracked` shows the ids\n`{{prefix}}mute everything` — all alerts"
+          },
+          {
+            "name": "Duration",
+            "value": "Add `duration:` anywhere, e.g. `duration:30m`, `duration:2h`, `duration:1h30m`, `duration:7d`. Default 1 hour."
+          },
+          {
+            "name": "From a tracking command",
+            "value": "`mute` and `unmute` also work after a tracking command:\n`{{prefix}}raid mute gym Town Hall duration:2h`\n`{{prefix}}gym mute Town Hall`\n`{{prefix}}track mute pikachu`\n`{{prefix}}raid mute id:12` — use this form when `{{prefix}}mute id:12` says the id is in more than one type"
+          },
+          {
+            "name": "Unmute",
+            "value": "`{{prefix}}unmute pikachu`\n`{{prefix}}unmute gym Town Hall`\n`{{prefix}}unmute area downtown`\n`{{prefix}}unmute pokestop <id>` / `station <id>`\n`{{prefix}}unmute id:12`\n`{{prefix}}unmute all` — clear every mute (`{{prefix}}unmute everything` does the same)"
+          },
+          {
+            "name": "See your mutes",
+            "value": "`{{prefix}}tracked` lists active mutes and the time left."
+          }
+        ]
+      }
     }
   }
-}]
+]

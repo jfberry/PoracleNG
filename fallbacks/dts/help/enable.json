@@ -1,22 +1,28 @@
-[{
-  "id": "enable",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!enable (admin)",
-      "description": "Re-enable a user that's been disabled (rate-limit auto-disable, admin disable, or lost role).",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}enable user:<discord_id>`\n`{{prefix}}enable user:12345 user:67890` — multiple"
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}disable` — disable a user\n`{{prefix}}userlist` — list registered users\n`{{prefix}}help broadcast` — send a message to all users"
-        }
-      ]
+[
+  {
+    "id": "enable",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!enable (admin)",
+        "description": "Turn a disabled user, channel or webhook back on — whether it was disabled by `{{prefix}}disable`, for losing a role, or for going over the alert limit.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}enable <id>` — by ID\n{{#if isDiscord}}`{{prefix}}enable @user` — by mention\n{{/if}}`{{prefix}}enable <id> <id>` — several at once\n`{{prefix}}enable mywebhook` — a webhook, by name\n\nGive bare IDs: `{{prefix}}enable user:<id>` doesn't work. IDs that aren't registered are listed in the reply."
+          },
+          {
+            "name": "What it does",
+            "value": "Clears the disable, turns alerts back on (as `{{prefix}}start` would), and resets the delivery-failure count and rate-limit ban history. Tracking is unchanged."
+          },
+          {
+            "name": "Related",
+            "value": "`{{prefix}}help disable` — disable a user\n`{{prefix}}help userlist` — find IDs and see who is disabled"
+          }
+        ]
+      }
     }
   }
-}]
+]

@@ -1,30 +1,32 @@
-[{
-  "id": "area",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!area",
-      "description": "Manage which geofence areas you receive alerts for. Areas are shapes your admin has configured — neighbourhoods, zones, routes.",
-      "fields": [
-        {
-          "name": "View",
-          "value": "`{{prefix}}area list` — list every area configured by the admin that you're allowed to use\n`{{prefix}}area` — show your currently selected areas"
-        },
-        {
-          "name": "Add and remove",
-          "value": "`{{prefix}}area add north_london` — receive alerts from this area\n`{{prefix}}area add north south east` — add multiple\n`{{prefix}}area remove north`\n`{{prefix}}area clear` — remove all your areas"
-        },
-        {
-          "name": "Interaction with `d:` (distance)",
-          "value": "If your tracking rule has `d:<metres>` set, it uses your `{{prefix}}location` + distance circle instead of areas. If your rule has no `d:` filter, it uses your selected areas."
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}location` — set a point for distance-based tracking\n`{{prefix}}community` — area-security community membership"
-        }
-      ]
+[
+  {
+    "id": "area",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!area",
+        "description": "Choose which areas you get alerts from. Tracking rules without a `d:` distance only alert inside your selected areas. Areas belong to the profile you are on.",
+        "fields": [
+          {
+            "name": "See areas",
+            "value": "`{{prefix}}area` — the areas you have selected\n`{{prefix}}area list` — every area you can choose (🟢 = selected)\n`{{prefix}}area show` — a map of each of your areas, or name some: `{{prefix}}area show north`\n`{{prefix}}area show d500` — a map of a 500 m circle around your location\n`{{prefix}}area overview` — all your areas on one map, or name some\nMaps only appear if the server has a map service."
+          },
+          {
+            "name": "Add and remove",
+            "value": "`{{prefix}}area add north south` — add one or more areas\n`{{prefix}}area north south` — same as `add`\n`{{prefix}}area remove north` — remove one or more\n\nNames are not case-sensitive. For a name with spaces, use underscores or quotes: `{{prefix}}area add north_london` or `{{prefix}}area add \"north london\"`. There is no remove-all: remove each area by name. Your admin may limit how many areas you can select."
+          },
+          {
+            "name": "Areas or distance",
+            "value": "A rule with `d:<metres>` alerts within that distance of your location and ignores your areas. A rule without `d:` uses your selected areas.\nTo limit one rule to particular areas, add `area:` to it: `{{prefix}}track pikachu area:north,south`."
+          },
+          {
+            "name": "Related",
+            "value": "`{{prefix}}help location` — set your location for `d:` rules\n`{{prefix}}help profile` — each profile has its own areas{{#if userIsAdmin}}\n`{{prefix}}help community` — area-security communities{{/if}}"
+          }
+        ]
+      }
     }
   }
-}]
+]

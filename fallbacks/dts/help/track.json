@@ -6,35 +6,35 @@
   "template": {
     "embed": {
       "title": "!track",
-      "description": "Alerts for specific pokemon spawns. The most flexible command — supports IV, CP, level, stat, PVP, form, size, gender, distance, and area filters.",
+      "description": "Alerts for wild pokemon spawns. Name one or more pokemon (or `everything`), then add filters to narrow them down. `{{prefix}}tracked` lists your rules.",
       "fields": [
         {
-          "name": "Basic usage",
-          "value": "`{{prefix}}track pikachu`\n`{{prefix}}track pikachu charmander squirtle bulbasaur d:500`\n`{{prefix}}track everything iv:100 d:1000` — every 100% spawn within 1km"
+          "name": "Choosing pokemon",
+          "value": "`{{prefix}}track pikachu`\n`{{prefix}}track dratini dragonair dragonite iv:90` — several at once\n`{{prefix}}track dratini+ iv:90` — a trailing `+` adds its evolutions\n`{{prefix}}track everything iv:100` — every 100% spawn\n`{{prefix}}track everything dragon iv:90` — every Dragon type (type names are bare words)\n`{{prefix}}track everything gen:1 iv:100` — Kanto only\n\n`everything` needs at least one filter, and your server may not allow it."
         },
         {
-          "name": "IV / CP / level (ranges are preferred over min/max)",
-          "value": "`iv:90-100` — between 90% and 100% IV\n`cp:1500-2500` — between 1500 and 2500 CP\n`level:25-35` — only level 25 to 35\n`atk:13-15 def:13-15 sta:13-15` — individual IV ranges\n\n*Tip: always prefer `iv:90-100` over `miniv:90 maxiv:100`. Both work, the range form reads better and is easier to edit later.*"
+          "name": "IV, CP, level and stats",
+          "value": "`iv:90-100` — IV range (`iv:90` = 90 or more)\n`cp:1500-2500` — CP range\n`level:30-35` — level range\n`atk:15 def:15 sta:15` — individual IVs (ranges work too: `atk:13-15`)\n`miniv:`, `maxiv:`, `mincp:`, `maxcp:`, `maxlevel:` also work\n\nThese only match pokemon that have been scanned for IVs."
+        },
+        {
+          "name": "Gender, form, costume, size, rarity, time",
+          "value": "`male` / `female` / `genderless`\n`form:alola` — a form by name, e.g. `{{prefix}}track vulpix form:alola` (`{{prefix}}info vulpix forms` lists them)\n`costume:holiday` — a costume by name; `costume:0` means no costume (`{{prefix}}info pikachu costumes`)\n`size:xxl` or `size:xxs-xs` — xxs, xs, m, xl, xxl\n`rarity:rare` or `rarity:rare-unseen` — common, uncommon, rare, very_rare, ultra_rare, unseen\n`t:600` — at least 600 seconds left before it despawns"
         },
         {
           "name": "PVP ranks",
-          "value": "`great:1-10` — Great league rank 1-10\n`ultra:1-10` — Ultra league rank 1-10\n`little:1-10` — Little league rank 1-10\n\nCombine multiple leagues in one command:\n`{{prefix}}track pikachu great:1-10 ultra:1-10`\n\n`greatcp:1400` sets a minimum league CP floor (often used together with `great:1-10`)."
+          "value": "`great:1-10` / `ultra:1-10` / `little:1-10` — league rank range (`great10` = top 10)\n`greatcp:1450` / `ultracp:2400` / `littlecp:480` — minimum CP for that league (the server sets a floor)\n`greathigh:5` / `ultrahigh:` / `littlehigh:` — best rank only\n`cap:50` — rank at one level cap (must be a cap your server uses)\n`mega`, `mega:x`, `mega:y` — rank its mega evolution\n\nSeveral leagues make one rule each: `{{prefix}}track azumarill great:1-10 ultra:1-10`. Some servers restrict PVP tracking."
         },
         {
-          "name": "Forms",
-          "value": "`form:alolan`, `form:galarian`, `form:hisuian`, `form:paldean`\n`form:shadow`, `form:purified` — team rocket shadows\n`form:santa`, `form:halloween`, etc. — costumed forms\n\nExample: `{{prefix}}track pidgey form:alolan`"
+          "name": "Where",
+          "value": "`d:1000` — within 1000 m of your location (`{{prefix}}location`)\n`d:500 location:home` — measure from a saved location instead (`{{prefix}}help location`)\n`area:city_centre` — only in these areas instead of your `{{prefix}}area` list (comma-separate several)\n\nWith neither `d:` nor `area:`, alerts come from your areas. `area:` can't be combined with `d:` or `location:`."
         },
         {
-          "name": "Distance and area",
-          "value": "`d:1000` — within 1000 metres of your `!location`\n`area:sw_london` — only inside a specific geofence area (see `{{prefix}}help area`)\n\nIf you set neither, alerts come from every area you've added via `{{prefix}}area`."
+          "name": "Message options",
+          "value": "`clean` — delete the alert when the pokemon despawns\n`edit` — update the alert in place if the pokemon changes soon after (e.g. its IVs are scanned)\n`template:2` — use a different alert layout (`{{prefix}}info templates`)\n`individually` — with `everything`, save one rule per pokemon instead of a single rule{{#if userIsAdmin}}{{#if isDiscord}}\nAdmins: mention users or roles (@name) when tracking for a channel to ping them in each alert{{/if}}{{/if}}"
         },
         {
-          "name": "Message flags",
-          "value": "`clean` — auto-delete the alert when the pokemon despawns\n`edit` — keep one message and edit it in place as the pokemon's data changes\n`template:2` — use a specific DTS template (see `{{prefix}}info templates`)"
-        },
-        {
-          "name": "Remove tracking",
-          "value": "`{{prefix}}untrack pikachu` — remove all pikachu tracking\n`{{prefix}}track remove pikachu` — same as above\n`{{prefix}}untrack id:45` — remove one specific entry by ID (see `{{prefix}}tracked`)"
+          "name": "Remove and mute",
+          "value": "`{{prefix}}untrack pikachu` — remove all your pikachu rules (`{{prefix}}track remove pikachu` is the same)\n`{{prefix}}untrack id:45` — remove one pokemon rule by the id shown in `{{prefix}}tracked`\n`{{prefix}}track mute pikachu duration:2h` — pause pikachu alerts without deleting rules\n`{{prefix}}track mute id:45` — pause one rule (`{{prefix}}help mute`)"
         },
         {
           "name": "Full manual",

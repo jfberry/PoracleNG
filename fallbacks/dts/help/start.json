@@ -1,22 +1,28 @@
-[{
-  "id": "start",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!start",
-      "description": "Resume alert delivery after you've paused it with `{{prefix}}stop`.",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}start` — re-enable alerts. Your tracking rules are preserved while alerts are paused, so this immediately resumes the alerts you had before."
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}stop` — pause alerts without losing your tracking rules\n`{{prefix}}poracle` — full registration (new users)"
-        }
-      ]
+[
+  {
+    "id": "start",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!start",
+        "description": "Resume alerts after `{{prefix}}stop`.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}start` — turn alerts back on. Your tracking was kept while alerts were off.\n\nIf the bot stopped your alerts because you went over the alert limit, `{{prefix}}start` turns them back on too. If the bot disabled your account instead, see `{{prefix}}help poracle`."
+          },
+          {
+            "name": "{{#if userIsAdmin}}Admins{{/if}}",
+            "value": "{{#if userIsAdmin}}`{{prefix}}start user:<id>` — resume alerts for another user. In a registered channel, `{{prefix}}start` resumes the channel.{{/if}}"
+          },
+          {
+            "name": "Related",
+            "value": "`{{prefix}}stop` — pause alerts\n`{{prefix}}help poracle` — registering"
+          }
+        ]
+      }
     }
   }
-}]
+]

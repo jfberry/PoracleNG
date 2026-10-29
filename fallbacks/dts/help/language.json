@@ -1,22 +1,24 @@
-[{
-  "id": "language",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!language",
-      "description": "Change the language the bot uses for responses and alert content.",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}language` — show the current setting and list available languages\n`{{prefix}}language en` — set to English\n`{{prefix}}language de` — set to German\n`{{prefix}}language zh-cn` — set to Simplified Chinese\n\nAvailable languages depend on what the operator has enabled; `{{prefix}}language` with no argument lists them."
-        },
-        {
-          "name": "What changes",
-          "value": "- Pokemon, move, type, item, form, and team names in alerts\n- Bot reply text (help, errors, confirmations)\n- The command keywords themselves don't change — `{{prefix}}track` is always `{{prefix}}track`, regardless of your language setting."
-        }
-      ]
+[
+  {
+    "id": "language",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!language",
+        "description": "Change the language the bot uses for its replies and your alerts.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}language` — show your language and the ones available\n`{{prefix}}language de` — set it by code\n`{{prefix}}language deutsch` — or by name, as shown in the list\n\nWhich languages are available is up to your admin."
+          },
+          {
+            "name": "What changes",
+            "value": "• Pokemon, form, move, type, item and weather names in alerts\n• Bot replies, help and error messages\n• Alert layouts, if your admin has made language-specific ones\n\nThe setting applies to your whole account, not one profile. English command words always work, as do the translated command words of the languages this server offers."
+          }
+        ]
+      }
     }
   }
-}]
+]

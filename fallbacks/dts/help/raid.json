@@ -6,39 +6,35 @@
   "template": {
     "embed": {
       "title": "!raid",
-      "description": "Alerts for raid bosses at gyms. Track by pokemon name, raid level, or both.",
+      "description": "Alerts for hatched raid bosses at gyms. Track by boss, by raid level, or every level. For eggs before they hatch, see `{{prefix}}help egg`.",
       "fields": [
         {
-          "name": "By pokemon",
-          "value": "`{{prefix}}raid tyranitar`\n`{{prefix}}raid tyranitar metagross salamence d:1000` — any of these, within 1km"
+          "name": "By boss",
+          "value": "`{{prefix}}raid tyranitar`\n`{{prefix}}raid tyranitar metagross salamence d:1000` — any of these, within 1 km\n`{{prefix}}raid giratina form:origin_forme` — one form (`{{prefix}}info giratina forms`)\n`{{prefix}}raid pikachu costume:holiday` — one costume; `costume:0` means no costume"
         },
         {
           "name": "By level",
-          "value": "`{{prefix}}raid level:5` — all 5-star raids\n`{{prefix}}raid legendary` — alias for level:5\n`{{prefix}}raid mega` — level:6\n`{{prefix}}raid elite` — elite raids\n`{{prefix}}raid shadow` — shadow raids (level:15)\n`{{prefix}}raid ultra beast` — level:8\n`{{prefix}}raid primal` — level:10"
+          "value": "`{{prefix}}raid level:5` — all level 5 raids\n`{{prefix}}raid level:1-3` — a range of levels\n`{{prefix}}raid everything` — every level\nLevel names: `legendary` (5), `mega` (6), `mega_legendary` (7), `ultra_beast` (8), `elite` (9), `primal` (10), `shadow` (11-15), `shadow_legendary` (15)\n\nUse one level name per command; for more, use separate commands or a pipe: `{{prefix}}raid legendary | mega`"
         },
         {
-          "name": "Team and gym filters",
-          "value": "`team:instinct` / `team:valor` / `team:mystic` / `team:harmony`\n`ex` — EX raid eligible gyms only\n`gym:gymname` — a specific gym by name\n\nExample: `{{prefix}}raid level:5 team:valor d:1500`"
+          "name": "Filters",
+          "value": "`valor` / `mystic` / `instinct` / `harmony` (or `red` / `blue` / `yellow` / `gray`) — team holding the gym\n`ex` — EX-eligible gyms only\n`move:meteor_mash` — only bosses with this move\n`\"gym:Town Hall\"` — one gym by name or id (quote names with spaces)\n\nExample: `{{prefix}}raid level:5 valor d:1500`"
         },
         {
-          "name": "Move filter",
-          "value": "`move:meteor_mash` — only if the boss has this move (use underscores for multi-word move names)"
+          "name": "RSVP updates",
+          "value": "By default you get one alert per raid.\n`rsvp` — also alert again when its RSVP counts change\n`rsvp_only` — only alert when the raid has RSVPs\n`no_rsvp` — the default (one alert, no RSVP updates)"
         },
         {
-          "name": "RSVP",
-          "value": "`rsvp` — include raid RSVP updates in the alert\n`rsvp_only` — only send RSVP change updates, not the initial spawn"
+          "name": "Where",
+          "value": "`d:1500` — within 1500 m of your location\n`d:500 location:home` — measure from a saved location (`{{prefix}}help location`)\n`area:city_centre` — only in these areas instead of your `{{prefix}}area` list"
         },
         {
-          "name": "Distance and area",
-          "value": "`d:1500` — within 1500m of your location\n`area:city_centre` — only in a specific area"
+          "name": "Message options",
+          "value": "`clean` — delete the alert when the raid ends\n`edit` — keep one message and edit it as RSVP counts change\n`template:2` — use a different alert layout (`{{prefix}}info templates`){{#if userIsAdmin}}{{#if isDiscord}}\nAdmins: mention users or roles (@name) when tracking for a channel to ping them in each alert{{/if}}{{/if}}"
         },
         {
-          "name": "Message flags",
-          "value": "`clean` — auto-delete when the raid ends\n`edit` — single message, edited in place as RSVP counts change\n`ping` — @-mention you"
-        },
-        {
-          "name": "Remove",
-          "value": "`{{prefix}}raid remove tyranitar`\n`{{prefix}}raid remove level:5`\n`{{prefix}}raid remove everything`\n`{{prefix}}untrack id:12` — remove by UID from `{{prefix}}tracked`"
+          "name": "Remove and mute",
+          "value": "`{{prefix}}raid remove tyranitar`\n`{{prefix}}raid remove level:5` (or `remove legendary`)\n`{{prefix}}raid remove everything`\n`{{prefix}}raid remove id:12` — one rule by the id shown in `{{prefix}}tracked`\n`{{prefix}}raid mute id:12 duration:2h` — pause one rule without deleting it (`{{prefix}}help mute`)"
         },
         {
           "name": "Full manual",
