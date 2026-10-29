@@ -411,6 +411,8 @@
   "msg.costume_not_found": "Kostüm `{0}` nicht erkannt. Verwende `{1}info kostüme` um verfügbare Kostüme zu sehen.",
   "msg.no_costume": "kein Kostüm",
   "msg.nothing_to_remove": "Nichts zu entfernen",
+  "msg.remove.name_what": "Say what to remove, or use `{0}` to remove all of them",
+  "msg.remove.not_used": "Not used when removing: {0}",
   "msg.no_levels": "Keine Level angegeben",
   "msg.no_egg_levels": "Fehler: Kein Raid-Ei-Level angegeben.",
   "msg.no_raid_target": "Fehler: Kein gültiger Raid-Boss oder gültiges Raid-Level angegeben.",
