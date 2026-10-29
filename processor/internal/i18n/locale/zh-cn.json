@@ -411,6 +411,8 @@
   "msg.costume_not_found": "Costume `{0}` not recognised. Use `{1}info costumes` to see available costumes.",
   "msg.no_costume": "no costume",
   "msg.nothing_to_remove": "没有可移除的内容",
+  "msg.remove.name_what": "Say what to remove, or use `{0}` to remove all of them",
+  "msg.remove.not_used": "Not used when removing: {0}",
   "msg.no_levels": "未指定等级",
   "msg.no_egg_levels": "未指定蛋等级",
   "msg.no_raid_target": "未指定团战等级或宝可梦",
