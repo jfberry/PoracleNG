@@ -141,14 +141,16 @@ func (ts *TelegramSender) WaitForRateLimit(target string) {}
 
 // telegramMessage holds the parsed fields from a Telegram job message.
 type telegramMessage struct {
-	Content        string `json:"content"`
-	Sticker        string `json:"sticker"`
-	Photo          string `json:"photo"`
-	SendOrder      any    `json:"send_order"`
-	ParseMode      string `json:"parse_mode"`
-	WebpagePreview bool   `json:"webpage_preview"`
-	Location       bool   `json:"location"`
-	Venue          *venue `json:"venue"`
+	Content             string `json:"content"`
+	Sticker             string `json:"sticker"`
+	Photo               string `json:"photo"`
+	Caption             *bool  `json:"caption"`
+	DisableNotification *bool  `json:"disable_notification"`
+	SendOrder           any    `json:"send_order"`
+	ParseMode           string `json:"parse_mode"`
+	WebpagePreview      bool   `json:"webpage_preview"`
+	Location            bool   `json:"location"`
+	Venue               *venue `json:"venue"`
 }
 
 type venue struct {
@@ -233,7 +235,12 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			if msg.Photo == "" {
 				continue
 			}
-			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo, job.ReplyToID, job.LogReference)
+			disableNotification := true
+			if msg.DisableNotification != nil {
+				disableNotification = *msg.DisableNotification
+			}
+			includeCaption := msg.Caption != nil && *msg.Caption
+			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo, msg.Content, includeCaption, parseMode, disableNotification, job.ReplyToID, job.LogReference)
 
 		case "text":
 			if msg.Content == "" {
@@ -505,11 +512,15 @@ func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicI
 }
 
 // sendPhoto sends a photo by URL.
-func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL, replyToID, logRef string) (int, error) {
+func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL, content string, includeCaption bool, parseMode string, disableNotification bool, replyToID, logRef string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"photo":                photoURL,
-		"disable_notification": true,
+		"disable_notification": disableNotification,
+	}
+	if includeCaption {
+		body["caption"] = content
+		body["parse_mode"] = parseMode
 	}
 	applyTopic(body, topicID)
 	applyReplyTo(body, replyToID)

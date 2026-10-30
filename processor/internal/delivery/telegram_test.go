@@ -144,6 +144,105 @@ func TestTelegramSendOrder(t *testing.T) {
 	}
 }
 
+func TestTelegramSendPhotoCaptionAndNotification(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(12)
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{
+		"photo":"https://example.com/photo.png",
+		"caption":true,
+		"content":"Photo caption",
+		"parse_mode":"HTML",
+		"disable_notification":false,
+		"send_order":["photo"]
+	}`)
+	job := &Job{Target: "999", Type: "telegram:user", Message: msg}
+
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c := *calls
+	if len(c) != 1 || c[0].Method != "sendPhoto" {
+		t.Fatalf("expected one sendPhoto call, got %#v", c)
+	}
+	if c[0].Body["caption"] != "Photo caption" {
+		t.Errorf("expected caption, got %v", c[0].Body["caption"])
+	}
+	if c[0].Body["parse_mode"] != "HTML" {
+		t.Errorf("expected caption parse_mode HTML, got %v", c[0].Body["parse_mode"])
+	}
+	if c[0].Body["disable_notification"] != false {
+		t.Errorf("expected disable_notification false, got %v", c[0].Body["disable_notification"])
+	}
+}
+
+func TestTelegramSendPhotoCaptionDisabledOrUnset(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  string
+	}{
+		{
+			name: "false",
+			msg:  `{"photo":"https://example.com/photo.png","caption":false,"content":"Do not send this","send_order":["photo"]}`,
+		},
+		{
+			name: "unset",
+			msg:  `{"photo":"https://example.com/photo.png","content":"Do not send this","send_order":["photo"]}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+				return okResponse(14)
+			})
+			defer server.Close()
+
+			job := &Job{Target: "999", Type: "telegram:user", Message: json.RawMessage(tc.msg)}
+			if _, err := sender.Send(context.Background(), job); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			c := *calls
+			if len(c) != 1 || c[0].Method != "sendPhoto" {
+				t.Fatalf("expected one sendPhoto call, got %#v", c)
+			}
+			if _, ok := c[0].Body["caption"]; ok {
+				t.Errorf("expected caption to be omitted, got %v", c[0].Body["caption"])
+			}
+			if _, ok := c[0].Body["parse_mode"]; ok {
+				t.Errorf("expected parse_mode to be omitted without caption, got %v", c[0].Body["parse_mode"])
+			}
+		})
+	}
+}
+
+func TestTelegramSendPhotoDefaultsToDisabledNotification(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(13)
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{"photo":"https://example.com/photo.png","send_order":["photo"]}`)
+	job := &Job{Target: "999", Type: "telegram:user", Message: msg}
+
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c := *calls
+	if len(c) != 1 || c[0].Method != "sendPhoto" {
+		t.Fatalf("expected one sendPhoto call, got %#v", c)
+	}
+	if c[0].Body["disable_notification"] != true {
+		t.Errorf("expected disable_notification true by default, got %v", c[0].Body["disable_notification"])
+	}
+	if _, ok := c[0].Body["caption"]; ok {
+		t.Error("expected empty caption to be omitted")
+	}
+}
+
 func TestTelegramSendDefaultOrder(t *testing.T) {
 	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return okResponse(10)

@@ -1242,7 +1242,27 @@ Each `enrichedActivePokemons` / `activePokemons` entry:
 Raw webhook fields (`change_type`, `edit_types`) are also available.
 
 **Not yet implemented:** `tth`, `disappearTime`, `resetDate`, `resetTime` timing fields are not set for fort updates.
+---
 
+### Telegram photo captions
+
+Telegram templates can set `"caption": true` to send the template's `content` as the photo caption. If `caption` is omitted or `false`, no caption is sent with the photo. The caption uses the template's `parse_mode`. `disable_notification` controls whether the photo notification is silent; it defaults to `true` when omitted, preserving the existing behavior.
+
+```json
+{
+  "type": "monster",
+  "platform": "telegram",
+  "id": "1",
+  "template": {
+    "photo": "{{{staticMap}}}",
+    "content": "{{fullName}}",
+    "caption": true,
+    "parse_mode": "HTML",
+    "disable_notification": false,
+    "send_order": ["photo"]
+  }
+}
+```
 ---
 
 ## Handlebars Helpers
