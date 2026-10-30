@@ -27,6 +27,8 @@ func TestRenderedMessageIsEmpty(t *testing.T) {
 		{"components present", `{"components":[{"type":1}]}`, false},
 		{"telegram sticker", `{"sticker":"CAAD123","content":""}`, false},
 		{"telegram photo", `{"photo":"https://example.com/x.png"}`, false},
+		{"telegram photo object", `{"photo":{"url":"https://example.com/x.png","caption":"c"}}`, false},
+		{"telegram photo object without url", `{"photo":{"url":"","caption":"c"}}`, true},
 		{"telegram location true", `{"location":true,"content":""}`, false},
 		{"telegram venue", `{"venue":{"title":"a","address":"b"},"content":""}`, false},
 	}

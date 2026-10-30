@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -141,14 +142,37 @@ func (ts *TelegramSender) WaitForRateLimit(target string) {}
 
 // telegramMessage holds the parsed fields from a Telegram job message.
 type telegramMessage struct {
-	Content        string `json:"content"`
-	Sticker        string `json:"sticker"`
-	Photo          string `json:"photo"`
-	SendOrder      any    `json:"send_order"`
-	ParseMode      string `json:"parse_mode"`
-	WebpagePreview bool   `json:"webpage_preview"`
-	Location       bool   `json:"location"`
-	Venue          *venue `json:"venue"`
+	Content        string        `json:"content"`
+	Sticker        string        `json:"sticker"`
+	Photo          telegramPhoto `json:"photo"`
+	SendOrder      any           `json:"send_order"`
+	ParseMode      string        `json:"parse_mode"`
+	WebpagePreview bool          `json:"webpage_preview"`
+	Location       bool          `json:"location"`
+	Venue          *venue        `json:"venue"`
+}
+
+// telegramPhoto is the photo step. Templates give either a bare URL
+// ("photo": "https://…") or, like venue, a nested object that can carry a
+// caption: "photo": {"url": "https://…", "caption": "…"}.
+type telegramPhoto struct {
+	URL     string `json:"url"`
+	Caption string `json:"caption"`
+}
+
+func (p *telegramPhoto) UnmarshalJSON(data []byte) error {
+	var url string
+	if err := json.Unmarshal(data, &url); err == nil {
+		*p = telegramPhoto{URL: url}
+		return nil
+	}
+	type plain telegramPhoto
+	var obj plain
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	*p = telegramPhoto(obj)
+	return nil
 }
 
 type venue struct {
@@ -197,7 +221,7 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	sanitizeTelegramMessage(&msg)
 
 	logref.Debugf(job.LogReference, "[telegram] Send to %s: location=%v lat=%.6f lon=%.6f content_len=%d sticker=%q photo=%q send_order=%v",
-		job.Target, msg.Location, job.Lat, job.Lon, len(msg.Content), msg.Sticker, msg.Photo, msg.SendOrder)
+		job.Target, msg.Location, job.Lat, job.Lon, len(msg.Content), msg.Sticker, msg.Photo.URL, msg.SendOrder)
 
 	parseMode := normalizeTelegramParseMode(msg.ParseMode)
 	sendOrder := parseSendOrder(msg.SendOrder)
@@ -230,10 +254,15 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			msgID, err = ts.sendSticker(ctx, chatID, topicID, msg.Sticker, job.ReplyToID, job.LogReference)
 
 		case "photo":
-			if msg.Photo == "" {
+			if msg.Photo.URL == "" {
 				continue
 			}
-			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo, job.ReplyToID, job.LogReference)
+			// A bare photo stays silent. A captioned photo carries the alert
+			// itself, so it notifies — unless a text message is also sent,
+			// in which case that text is the notifying message.
+			sendsText := msg.Content != "" && slices.Contains(sendOrder, "text")
+			silent := msg.Photo.Caption == "" || sendsText
+			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo.URL, msg.Photo.Caption, parseMode, silent, job.ReplyToID, job.LogReference)
 
 		case "text":
 			if msg.Content == "" {
@@ -378,14 +407,43 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 		return fmt.Errorf("invalid telegram sentID: %s", sentID)
 	}
 
-	// editMessageText doesn't take message_thread_id (Telegram resolves
-	// the topic from the message_id), so strip the topic segment if
+	// Edit calls don't take message_thread_id (Telegram resolves the
+	// topic from the message_id), so strip the topic segment if
 	// the chatID is composite.
 	bareChat, _ := splitTopicTarget(chatID)
 
-	// Find the text message ID for editing
-	messageID, ok := msgMap["text"]
-	if !ok {
+	var editMsg struct {
+		Content   string        `json:"content"`
+		ParseMode string        `json:"parse_mode"`
+		Photo     telegramPhoto `json:"photo"`
+	}
+	if err := json.Unmarshal(message, &editMsg); err != nil {
+		return fmt.Errorf("parsing edit message: %w", err)
+	}
+
+	parseMode := normalizeTelegramParseMode(editMsg.ParseMode)
+	caption := sanitizeTelegramText(editMsg.Photo.Caption, maxTelegramCaption)
+
+	// A captioned photo is updated with editMessageCaption. When no text
+	// message was sent alongside it, the caption is the whole alert and
+	// there is nothing else to edit.
+	photoID, hasPhoto := msgMap["photo"]
+	messageID, hasText := msgMap["text"]
+	if hasPhoto && caption != "" {
+		if err := ts.editMessage(ctx, "editMessageCaption", map[string]any{
+			"chat_id":    bareChat,
+			"message_id": photoID,
+			"caption":    caption,
+			"parse_mode": parseMode,
+		}); err != nil {
+			return err
+		}
+		if !hasText {
+			return nil
+		}
+	}
+
+	if !hasText {
 		// Fallback: use the first (or only) message ID
 		for _, id := range msgMap {
 			messageID = id
@@ -393,25 +451,19 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 		}
 	}
 
-	var editMsg struct {
-		Content   string `json:"content"`
-		ParseMode string `json:"parse_mode"`
-	}
-	if err := json.Unmarshal(message, &editMsg); err != nil {
-		return fmt.Errorf("parsing edit message: %w", err)
-	}
-
-	parseMode := normalizeTelegramParseMode(editMsg.ParseMode)
-
-	body := map[string]any{
+	return ts.editMessage(ctx, "editMessageText", map[string]any{
 		"chat_id":                  bareChat,
 		"message_id":               messageID,
 		"text":                     editMsg.Content,
 		"parse_mode":               parseMode,
 		"disable_web_page_preview": true,
-	}
+	})
+}
+
+// editMessage posts an edit call (editMessageText / editMessageCaption).
+func (ts *TelegramSender) editMessage(ctx context.Context, method string, body map[string]any) error {
 	// Edits also bypass callWithRetry; give them the same 429 backoff.
-	respBody, status, err := ts.doPostWithRetry(ctx, "editMessageText", body, "edit")
+	respBody, status, err := ts.doPostWithRetry(ctx, method, body, "edit")
 	if err != nil {
 		return err
 	}
@@ -429,7 +481,7 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 			return nil
 		}
 	}
-	return fmt.Errorf("telegram editMessageText returned status %d", status)
+	return fmt.Errorf("telegram %s returned status %d", method, status)
 }
 
 // applyTopic adds message_thread_id to a request body when the target
@@ -504,12 +556,16 @@ func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicI
 	return ts.callWithRetry(ctx, "sendSticker", body, logRef)
 }
 
-// sendPhoto sends a photo by URL.
-func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL, replyToID, logRef string) (int, error) {
+// sendPhoto sends a photo by URL, with an optional caption.
+func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL, caption, parseMode string, disableNotification bool, replyToID, logRef string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"photo":                photoURL,
-		"disable_notification": true,
+		"disable_notification": disableNotification,
+	}
+	if caption != "" {
+		body["caption"] = caption
+		body["parse_mode"] = parseMode
 	}
 	applyTopic(body, topicID)
 	applyReplyTo(body, replyToID)
@@ -806,7 +862,7 @@ func parseSendOrder(raw any) []string {
 
 // Telegram message limits — see https://core.telegram.org/bots/api#sendmessage
 const (
-	maxTelegramText    = 4096 // text messages, captions are 1024 but we don't enforce that here
+	maxTelegramText    = 4096 // text messages
 	maxTelegramCaption = 1024
 )
 
@@ -821,7 +877,7 @@ var nullLiteralRegex = regexp.MustCompile(`(^|\s)(null|undefined|<nil>)(\s|$)`)
 // sanitizeTelegramMessage strips known footguns from a Telegram message in
 // place. Rules:
 //
-//   - Truncate text content to 4096 chars (Telegram limit)
+//   - Truncate text content to 4096 chars and photo captions to 1024 (Telegram limits)
 //   - Strip empty markdown links [text]() or [](url) which cause parse errors
 //   - Strip "null"/"undefined"/"<nil>" string literals (DTS rendering bugs)
 //   - Drop sticker/photo URLs that are empty/whitespace/null literals
@@ -829,7 +885,8 @@ var nullLiteralRegex = regexp.MustCompile(`(^|\s)(null|undefined|<nil>)(\s|$)`)
 func sanitizeTelegramMessage(msg *telegramMessage) {
 	msg.Content = sanitizeTelegramText(msg.Content, maxTelegramText)
 	msg.Sticker = stripBlankURL(msg.Sticker)
-	msg.Photo = stripBlankURL(msg.Photo)
+	msg.Photo.URL = stripBlankURL(msg.Photo.URL)
+	msg.Photo.Caption = sanitizeTelegramText(msg.Photo.Caption, maxTelegramCaption)
 }
 
 // sanitizeTelegramText cleans up a single text body. Returns the cleaned
