@@ -434,6 +434,7 @@ type MonsterTrackingAPI struct {
 	PVPRankingMinCP       int      `db:"pvp_ranking_min_cp"      json:"pvp_ranking_min_cp"`
 	PVPRankingCap         int      `db:"pvp_ranking_cap"         json:"pvp_ranking_cap"`
 	PVPRankingEvolution   int      `db:"pvp_ranking_evolution"   json:"pvp_ranking_evolution"`
+	Personal              int      `db:"personal"                json:"personal"`
 	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
 	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
 	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:"" areakey:"true"`
@@ -475,7 +476,7 @@ func SelectMonstersByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Monster
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
-		        pvp_ranking_min_cp, pvp_ranking_cap, pvp_ranking_evolution,
+		        pvp_ranking_min_cp, pvp_ranking_cap, pvp_ranking_evolution, personal,
 		        COALESCE(override_location_label, '') AS override_location_label,
 		        COALESCE(override_areas, '') AS override_areas
 		 FROM monsters WHERE id = ? AND profile_no = ?`, id, profileNo)
@@ -497,16 +498,16 @@ func InsertMonster(db *sqlx.DB, m *MonsterTrackingAPI) (int64, error) {
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
-		        pvp_ranking_min_cp, pvp_ranking_cap, pvp_ranking_evolution,
+		        pvp_ranking_min_cp, pvp_ranking_cap, pvp_ranking_evolution, personal,
 		        override_location_label, override_areas)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.ProfileNo, m.Ping, m.Clean, m.Distance, m.Template,
 		m.PokemonID, m.Form, m.Costume, m.MinIV, m.MaxIV, m.MinCP, m.MaxCP, m.MinLevel, m.MaxLevel,
 		m.ATK, m.DEF, m.STA, m.MaxATK, m.MaxDEF, m.MaxSTA,
 		m.Gender, m.MinWeight, m.MaxWeight, m.MinTime,
 		m.Rarity, m.MaxRarity, m.Size, m.MaxSize,
 		m.PVPRankingLeague, m.PVPRankingBest, m.PVPRankingWorst,
-		m.PVPRankingMinCP, m.PVPRankingCap, m.PVPRankingEvolution,
+		m.PVPRankingMinCP, m.PVPRankingCap, m.PVPRankingEvolution, m.Personal,
 		nullIfEmpty(m.OverrideLocationLabel), marshalOverrideAreas(m.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert monster: %w", err)
@@ -527,7 +528,7 @@ func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 		        gender=?, min_weight=?, max_weight=?, min_time=?,
 		        rarity=?, max_rarity=?, size=?, max_size=?,
 		        pvp_ranking_league=?, pvp_ranking_best=?, pvp_ranking_worst=?,
-		        pvp_ranking_min_cp=?, pvp_ranking_cap=?, pvp_ranking_evolution=?,
+		        pvp_ranking_min_cp=?, pvp_ranking_cap=?, pvp_ranking_evolution=?, personal=?,
 		        override_location_label=?, override_areas=?
 		 WHERE uid = ?`,
 		m.Ping, m.Clean, m.Distance, m.Template,
@@ -536,7 +537,7 @@ func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 		m.Gender, m.MinWeight, m.MaxWeight, m.MinTime,
 		m.Rarity, m.MaxRarity, m.Size, m.MaxSize,
 		m.PVPRankingLeague, m.PVPRankingBest, m.PVPRankingWorst,
-		m.PVPRankingMinCP, m.PVPRankingCap, m.PVPRankingEvolution,
+		m.PVPRankingMinCP, m.PVPRankingCap, m.PVPRankingEvolution, m.Personal,
 		nullIfEmpty(m.OverrideLocationLabel), marshalOverrideAreas(m.OverrideAreas),
 		m.UID)
 	if err != nil {
@@ -802,7 +803,7 @@ func SelectMonstersByID(db *sqlx.DB, id string) ([]MonsterTrackingAPI, error) {
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
-		        pvp_ranking_min_cp, pvp_ranking_cap, pvp_ranking_evolution,
+		        pvp_ranking_min_cp, pvp_ranking_cap, pvp_ranking_evolution, personal,
 		        COALESCE(override_location_label, '') AS override_location_label,
 		        COALESCE(override_areas, '') AS override_areas
 		 FROM monsters WHERE id = ?`, id)

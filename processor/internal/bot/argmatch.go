@@ -324,7 +324,7 @@ var knownPrefixKeys = []string{
 var knownKeywordKeys = []string{
 	"arg.remove", "arg.everything", "arg.individually",
 	"arg.all_pokemon", "arg.all_items",
-	"arg.clean", "arg.edit", "arg.summary", "arg.shiny", "arg.ex",
+	"arg.clean", "arg.edit", "arg.summary", "arg.shiny", "arg.personalshiny", "arg.personalbackground", "arg.ex",
 	"arg.rsvp", "arg.no_rsvp", "arg.rsvp_only",
 	"arg.gmax", "arg.mega",
 	"arg.pokestop", "arg.gym", "arg.station", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.name", "arg.description", "arg.include_empty",

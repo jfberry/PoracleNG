@@ -140,6 +140,7 @@ type monsterInsertRequest struct {
 	PVPRankingMinCP       flexInt  `json:"pvp_ranking_min_cp"`
 	PVPRankingCap         flexInt  `json:"pvp_ranking_cap"`
 	PVPRankingEvolution   flexInt  `json:"pvp_ranking_evolution"`
+	Personal              flexInt  `json:"personal"`
 	OverrideLocationLabel string   `json:"override_location_label"`
 	OverrideAreas         []string `json:"override_areas"`
 }
@@ -268,6 +269,7 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 				PVPRankingMinCP:     req.PVPRankingMinCP.intValue(0),
 				PVPRankingCap:       req.PVPRankingCap.intValue(0),
 				PVPRankingEvolution: req.PVPRankingEvolution.intValue(0),
+				Personal:            req.Personal.intValue(0) & db.PersonalKnownMask,
 			}
 
 			if req.UID.isSet() {
@@ -280,6 +282,7 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 		// Split: rows with uid are explicit updates, without are inserts
 		var insert []db.MonsterTrackingAPI
 		var updates []db.MonsterTrackingAPI
+		keepPersonal := map[int64]bool{}
 
 		for _, req := range insertReqs {
 			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
@@ -294,6 +297,9 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 			row.OverrideLocationLabel = req.OverrideLocationLabel
 			row.OverrideAreas = v1NormalizeOverrideAreas(req.OverrideAreas)
 			if req.UID.isSet() {
+				if !req.Personal.isSet() {
+					keepPersonal[row.UID] = true
+				}
 				updates = append(updates, row)
 			} else {
 				insert = append(insert, row)
@@ -312,6 +318,11 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 			trackingJSONError(c, http.StatusBadRequest, msg)
 			return
 		}
+
+		// v1 clients that predate personal shiny re-send rules without
+		// "personal"; keep the stored bits rather than silently clearing them.
+		keepStoredPersonal(updates, keepPersonal, tracked)
+
 		diff := store.DiffAndClassify(tracked, insert, store.MonsterGetUID, store.MonsterSetUID)
 
 		// Merge: diff-classified updates go into the explicit updates slice
@@ -492,6 +503,7 @@ func toMonsterTracking(api *db.MonsterTrackingAPI) *db.MonsterTracking {
 		MinTime:          api.MinTime,
 		Rarity:           api.Rarity,
 		MaxRarity:        api.MaxRarity,
+		Personal:         api.Personal,
 		Size:             api.Size,
 		MaxSize:          api.MaxSize,
 		PVPRankingLeague: api.PVPRankingLeague,
@@ -499,5 +511,23 @@ func toMonsterTracking(api *db.MonsterTrackingAPI) *db.MonsterTracking {
 		PVPRankingWorst:  api.PVPRankingWorst,
 		PVPRankingMinCP:  api.PVPRankingMinCP,
 		PVPRankingCap:    api.PVPRankingCap,
+	}
+}
+
+// keepStoredPersonal restores the stored personal bits on explicit-uid updates
+// whose request omitted "personal" (keep[uid]), so pre-personal v1 clients
+// re-sending a rule do not silently clear the bits.
+func keepStoredPersonal(updates []db.MonsterTrackingAPI, keep map[int64]bool, tracked []db.MonsterTrackingAPI) {
+	if len(keep) == 0 {
+		return
+	}
+	stored := make(map[int64]int, len(tracked))
+	for i := range tracked {
+		stored[tracked[i].UID] = tracked[i].Personal
+	}
+	for i := range updates {
+		if p, ok := stored[updates[i].UID]; ok && keep[updates[i].UID] {
+			updates[i].Personal = p
+		}
 	}
 }

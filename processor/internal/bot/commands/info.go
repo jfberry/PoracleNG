@@ -11,6 +11,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
@@ -393,6 +394,15 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		if len(prevChain) > 0 {
 			sb.WriteByte('\n')
 			sb.WriteString(tr.Tf("msg.info.evolves_from", strings.Join(prevChain, " <- ")) + "\n")
+		}
+	}
+
+	// Expected shiny rate from the [shiny_rates] feed (base, and at the
+	// user's location when an override applies there).
+	if ctx.ShinyRates.Loaded() {
+		if line := c.expectedShinyLine(ctx, pokemonID, form); line != "" {
+			sb.WriteByte('\n')
+			sb.WriteString(line + "\n")
 		}
 	}
 
@@ -896,15 +906,34 @@ func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
 }
 
 func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
-	if ctx.Stats == nil {
-		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("msg.info.shiny_unavailable")}}
+	tr := ctx.Tr()
+
+	// Variants the feed currently lists above the 1/512 base (events).
+	var boosted strings.Builder
+	if ctx.ShinyRates.Loaded() {
+		lat, lon, _ := c.userLocation(ctx)
+		if list := ctx.ShinyRates.Boosted(lat, lon); len(list) > 0 {
+			boosted.WriteString(ctx.Bold(tr.T("msg.info.shiny_boosted_header")) + "\n")
+			for _, v := range list {
+				name := tr.T(gamedata.PokemonTranslationKey(v.PokemonID))
+				if v.Form != 0 && v.Form != ctx.GameData.DefaultForm(v.PokemonID) {
+					name += " (" + gamedata.FormName(tr, v.Form) + ")"
+				}
+				fmt.Fprintf(&boosted, "%s: 1:%d\n", ctx.EscapeForReply(name), v.OneIn)
+			}
+			boosted.WriteString("\n")
+		}
 	}
 
-	tr := ctx.Tr()
-	stats := ctx.Stats.ExportShinyStats()
+	var stats map[int]tracker.ShinyStats
+	if ctx.Stats != nil {
+		stats = ctx.Stats.ExportShinyStats()
+	}
 	if len(stats) == 0 {
-		return []bot.Reply{{Text: tr.T("msg.info.shiny_unavailable")}}
+		if boosted.Len() == 0 {
+			return []bot.Reply{{Text: tr.T("msg.info.shiny_unavailable")}}
+		}
+		return bot.SplitTextReply(strings.TrimRight(boosted.String(), "\n"))
 	}
 
 	// Sort by pokemon ID
@@ -919,6 +948,7 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
 
 	var sb strings.Builder
+	sb.WriteString(boosted.String())
 	sb.WriteString(ctx.Bold(tr.T("msg.info.shiny_header")) + "\n\n")
 
 	for _, e := range entries {
@@ -927,6 +957,40 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	return bot.SplitTextReply(sb.String())
+}
+
+// expectedShinyLine is the feed-derived expected shiny rate for a species
+// form (form 0 resolves through the species' default/NORMAL form), with the
+// local rate when an override applies at the user's location. Empty when the
+// feed does not list the species.
+func (c *InfoCommand) expectedShinyLine(ctx *bot.CommandContext, pokemonID, form int) string {
+	tr := ctx.Tr()
+	defaultForm := ctx.GameData.DefaultForm(pokemonID)
+	supported, base, known := ctx.ShinyRates.BaseShinyVariantForm(pokemonID, form, defaultForm, 0)
+	if !known {
+		return ""
+	}
+	if !supported || base <= 0 {
+		return ctx.Bold(tr.T("msg.info.shiny_not_released"))
+	}
+	if lat, lon, ok := c.userLocation(ctx); ok {
+		if s, local, _ := ctx.ShinyRates.ShinyVariantForm(pokemonID, form, defaultForm, 0, lat, lon); s && local > 0 && local != base {
+			return ctx.Bold(tr.Tf("msg.info.shiny_expected_local", personalshiny.OneIn(base), personalshiny.OneIn(local)))
+		}
+	}
+	return ctx.Bold(tr.Tf("msg.info.shiny_expected", personalshiny.OneIn(base)))
+}
+
+// userLocation is the target's default location, if set.
+func (c *InfoCommand) userLocation(ctx *bot.CommandContext) (float64, float64, bool) {
+	if !ctx.HasLocation || ctx.Humans == nil {
+		return 0, 0, false
+	}
+	h, err := ctx.Humans.Get(ctx.TargetID)
+	if err != nil || h == nil || (h.Latitude == 0 && h.Longitude == 0) {
+		return 0, 0, false
+	}
+	return h.Latitude, h.Longitude, true
 }
 
 func (c *InfoCommand) rarityStats(ctx *bot.CommandContext) []bot.Reply {

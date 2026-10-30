@@ -847,3 +847,13 @@ func TestRowText_DefaultEditByType(t *testing.T) {
 		t.Errorf("grunt invasion: got %s", got)
 	}
 }
+
+func TestMonsterRowTextPersonal(t *testing.T) {
+	g := testGenerator(t)
+	tr := g.Translations.For("en")
+	m := &db.MonsterTracking{PokemonID: 25, MinIV: -1, MaxIV: 100, MaxCP: 9000, MaxLevel: 55, MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxSize: 5, MaxRarity: 6, Costume: 9000, Personal: db.PersonalShiny | db.PersonalBackground}
+	s := g.MonsterRowText(tr, m)
+	if !strings.Contains(s, "personal shiny") || !strings.Contains(s, "personal background") {
+		t.Fatalf("row text = %q", s)
+	}
+}

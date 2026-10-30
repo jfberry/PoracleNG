@@ -43,6 +43,7 @@ func monsterAPIToTracking(a *db.MonsterTrackingAPI) *db.MonsterTracking {
 		PVPRankingMinCP:       a.PVPRankingMinCP,
 		PVPRankingCap:         a.PVPRankingCap,
 		PVPRankingEvolution:   a.PVPRankingEvolution,
+		Personal:              a.Personal,
 		OverrideLocationLabel: a.OverrideLocationLabel,
 		OverrideAreas:         a.OverrideAreas,
 	}
