@@ -740,6 +740,9 @@ type GeocodingConfig struct {
 	GeocodingKey []string `toml:"geocoding_key"` // google API keys
 	CacheDetail  int      `toml:"cache_detail"`  // decimal places for cache key rounding (default 3)
 	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
+	// LocalLanguage is the language of the provider's native place names;
+	// lookups in it are sent without a language (provider default).
+	LocalLanguage string `toml:"local_language"`
 	// IntersectionUsers is a pool of GeoNames usernames for nearest-street-
 	// intersection lookups (the {{intersection}} DTS field). Empty disables
 	// the feature. Results share the reverse-geocode pogreb cache.

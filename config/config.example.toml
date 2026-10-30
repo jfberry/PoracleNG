@@ -451,6 +451,12 @@ provider_url = ""                               # nominatim or photon URL, e.g. 
 # "{{{formattedAddress}}}" for the country-idiomatic string, or build your
 # own template like "{{{streetName}}} {{streetNumber}}, {{{city}}}".
 forward_only = false                     # when true, disable reverse geocoding lookup
+# local_language - language of the local place names in your area (e.g. "pl").
+#   Lookups in this language are sent without a language parameter, so the
+#   provider returns its native names. Set it with Photon prebuilt indexes,
+#   which only accept default/en/de/fr and answer HTTP 400 ({{addr}} = Unknown)
+#   for anything else, e.g. a [general] locale of "pl".
+local_language = ""
 cache_detail = 3                         # decimal places of lon/lat for caching (3 or 4 for 100x more detail)
 # intersection_users - list of GeoNames usernames (https://www.geonames.org)
 #   used to populate the {{intersection}} DTS field with the nearest street
