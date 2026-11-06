@@ -31,10 +31,20 @@ type localCellData struct {
 	lastSeen             int64 // unix seconds of the last write; drives eviction
 }
 
-// controllerCellData holds weather data from weather webhooks.
+// controllerCellData holds per-cell weather by hour.
+//
+// Observed and forecast weather are kept apart on purpose (#356). hourWeather
+// is what the game reported (weather webhooks and boosted-pokemon inference),
+// and it is the only baseline change detection may compare against.
+// forecastWeather is AccuWeather's prediction; it only fills gaps for display
+// (GetWeatherForecast, ExportCellWeather). When the two shared one map, a
+// forecast that disagreed with the game became the "previous" weather and the
+// next observation raised a weather-change alert for a change that never
+// happened.
 type controllerCellData struct {
 	lastCurrentWeatherCheck int64
-	hourWeather             map[int64]int // hourTimestamp -> condition
+	hourWeather             map[int64]int // hourTimestamp -> observed condition
+	forecastWeather         map[int64]int // hourTimestamp -> forecast condition
 	lastSeen                int64         // unix seconds of the last write; drives eviction
 }
 
@@ -211,6 +221,11 @@ func (wt *WeatherTracker) evict(now int64) {
 				delete(cd.hourWeather, ts)
 			}
 		}
+		for ts := range cd.forecastWeather {
+			if ts < oldestHour {
+				delete(cd.forecastWeather, ts)
+			}
+		}
 	}
 
 	for cellID, ld := range wt.localData {
@@ -280,7 +295,10 @@ func GetWeatherCellID(lat, lon float64) string {
 func (wt *WeatherTracker) touchController(cellID string) *controllerCellData {
 	cd, ok := wt.controllerData[cellID]
 	if !ok {
-		cd = &controllerCellData{hourWeather: make(map[int64]int)}
+		cd = &controllerCellData{
+			hourWeather:     make(map[int64]int),
+			forecastWeather: make(map[int64]int),
+		}
 		wt.controllerData[cellID] = cd
 	}
 	cd.lastSeen = wt.nowFunc().Unix()
@@ -371,6 +389,8 @@ type WeatherForecast struct {
 }
 
 // GetWeatherForecast returns the current and next hour weather for a cell.
+// Each hour uses the game's observed weather when there is one and falls back
+// to the AccuWeather forecast otherwise.
 func (wt *WeatherTracker) GetWeatherForecast(cellID string) WeatherForecast {
 	wt.mu.RLock()
 	defer wt.mu.RUnlock()
@@ -385,8 +405,8 @@ func (wt *WeatherTracker) GetWeatherForecast(cellID string) WeatherForecast {
 	ld := wt.localData[cellID]
 
 	if cd != nil {
-		current = cd.hourWeather[currentHour]
-		next = cd.hourWeather[nextHour]
+		current = cd.weatherAt(currentHour)
+		next = cd.weatherAt(nextHour)
 	}
 	// Local inference overrides current hour
 	if ld != nil && ld.currentHourTimestamp == currentHour {
@@ -413,6 +433,12 @@ func (wt *WeatherTracker) ExportCellWeather(cellID string) map[int64]int {
 	result := make(map[int64]int)
 
 	if cd := wt.controllerData[cellID]; cd != nil {
+		// Forecast first, then observed on top: the game's report wins.
+		for ts, condition := range cd.forecastWeather {
+			if ts >= currentHour-3600 {
+				result[ts] = condition
+			}
+		}
 		for ts, condition := range cd.hourWeather {
 			if ts >= currentHour-3600 {
 				result[ts] = condition
@@ -427,16 +453,27 @@ func (wt *WeatherTracker) ExportCellWeather(cellID string) map[int64]int {
 	return result
 }
 
-// SetHourWeather stores a weather condition for a specific hour in a cell.
-// Used by AccuWeatherClient to store forecast data.
+// weatherAt returns the observed weather for an hour, or the forecast when
+// the game has not reported that hour. For display only: change detection
+// must read hourWeather directly so a forecast never becomes its baseline.
+func (cd *controllerCellData) weatherAt(hourTimestamp int64) int {
+	if w, ok := cd.hourWeather[hourTimestamp]; ok {
+		return w
+	}
+	return cd.forecastWeather[hourTimestamp]
+}
+
+// SetHourWeather stores an AccuWeather forecast condition for a specific hour
+// in a cell. It never touches observed weather (see controllerCellData).
 func (wt *WeatherTracker) SetHourWeather(cellID string, hourTimestamp int64, condition int) {
 	wt.mu.Lock()
 	defer wt.mu.Unlock()
 
-	wt.touchController(cellID).hourWeather[hourTimestamp] = condition
+	wt.touchController(cellID).forecastWeather[hourTimestamp] = condition
 }
 
-// hasHourWeather checks if weather data exists for a specific hour in a cell.
+// hasHourWeather checks if observed or forecast weather exists for a specific
+// hour in a cell.
 func (wt *WeatherTracker) hasHourWeather(cellID string, hourTimestamp int64) bool {
 	wt.mu.RLock()
 	defer wt.mu.RUnlock()
@@ -445,7 +482,10 @@ func (wt *WeatherTracker) hasHourWeather(cellID string, hourTimestamp int64) boo
 	if cd == nil {
 		return false
 	}
-	_, ok := cd.hourWeather[hourTimestamp]
+	if _, ok := cd.hourWeather[hourTimestamp]; ok {
+		return true
+	}
+	_, ok := cd.forecastWeather[hourTimestamp]
 	return ok
 }
 
@@ -548,7 +588,8 @@ func (wt *WeatherTracker) CheckWeatherOnMonster(cellID string, lat, lon float64,
 	}
 }
 
-// hourCount returns how many hourly entries a cell holds.
+// hourCount returns how many hourly entries (observed plus forecast) a cell
+// holds.
 func (wt *WeatherTracker) hourCount(cellID string) int {
 	wt.mu.RLock()
 	defer wt.mu.RUnlock()
@@ -556,7 +597,7 @@ func (wt *WeatherTracker) hourCount(cellID string) int {
 	if cd == nil {
 		return 0
 	}
-	return len(cd.hourWeather)
+	return len(cd.hourWeather) + len(cd.forecastWeather)
 }
 
 // hasCell reports whether any state is held for a cell.
