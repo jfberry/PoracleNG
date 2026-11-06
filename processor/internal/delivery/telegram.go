@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -241,6 +242,8 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	var allMsgIDs []int
 	var sentSteps []string
 	var sentAny bool
+	var lastErr error
+	sendsText := msg.Content != "" && slices.Contains(sendOrder, "text")
 
 	for i, step := range sendOrder {
 		var msgID int
@@ -260,7 +263,6 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			// A bare photo stays silent. A captioned photo carries the alert
 			// itself, so it notifies — unless a text message is also sent,
 			// in which case that text is the notifying message.
-			sendsText := msg.Content != "" && slices.Contains(sendOrder, "text")
 			silent := msg.Photo.Caption == "" || sendsText
 			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo.URL, msg.Photo.Caption, parseMode, silent, job.ReplyToID, job.LogReference)
 
@@ -289,7 +291,29 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 		}
 
 		if err != nil {
-			return nil, err
+			// Sticker and photo are decorative: a broken image URL (e.g. a
+			// uicons repo missing that form) must not suppress the actual
+			// alert text. Skip the step and carry on unless the error is
+			// permanent (bot blocked/removed), which would fail every step.
+			var permErr *PermanentError
+			if (step == "sticker" || step == "photo") && !errors.As(err, &permErr) {
+				lastErr = err
+				// A captioned photo with no separate text message *is* the
+				// alert: deliver the caption as text rather than dropping it.
+				if step == "photo" && msg.Photo.Caption != "" && !sendsText {
+					logref.Warnf(job.LogReference, "telegram: photo failed for %s, sending caption as text instead: %v", job.Target, err)
+					msgID, err = ts.sendMessage(ctx, chatID, topicID, msg.Photo.Caption, parseMode, msg.WebpagePreview, job.ReplyToID, job.LogReference)
+					if err != nil {
+						return nil, err
+					}
+					step = "text"
+				} else {
+					logref.Warnf(job.LogReference, "telegram: %s failed for %s, continuing without it: %v", step, job.Target, err)
+					continue
+				}
+			} else {
+				return nil, err
+			}
 		}
 		allMsgIDs = append(allMsgIDs, msgID)
 		sentSteps = append(sentSteps, step)
@@ -297,6 +321,9 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	}
 
 	if !sentAny {
+		if lastErr != nil {
+			return nil, lastErr
+		}
 		return nil, fmt.Errorf("telegram: no content to send")
 	}
 
@@ -413,9 +440,10 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 	bareChat, _ := splitTopicTarget(chatID)
 
 	var editMsg struct {
-		Content   string        `json:"content"`
-		ParseMode string        `json:"parse_mode"`
-		Photo     telegramPhoto `json:"photo"`
+		Content        string        `json:"content"`
+		ParseMode      string        `json:"parse_mode"`
+		WebpagePreview bool          `json:"webpage_preview"`
+		Photo          telegramPhoto `json:"photo"`
 	}
 	if err := json.Unmarshal(message, &editMsg); err != nil {
 		return fmt.Errorf("parsing edit message: %w", err)
@@ -451,12 +479,22 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 		}
 	}
 
+	// When a captioned photo failed to send, the caption went out as the
+	// text message — keep editing it from the caption.
+	text := editMsg.Content
+	if text == "" && !hasPhoto {
+		text = editMsg.Photo.Caption
+	}
+
+	// Mirror the send path's link-preview setting: templates commonly embed
+	// the static map as a hidden link ("[ ](staticMapURL)") and rely on the
+	// preview to display it, so forcing previews off on edit strips the map.
 	return ts.editMessage(ctx, "editMessageText", map[string]any{
 		"chat_id":                  bareChat,
 		"message_id":               messageID,
-		"text":                     editMsg.Content,
+		"text":                     sanitizeTelegramText(text, maxTelegramText),
 		"parse_mode":               parseMode,
-		"disable_web_page_preview": true,
+		"disable_web_page_preview": !editMsg.WebpagePreview,
 	})
 }
 
@@ -703,6 +741,12 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 			case <-time.After(time.Until(backoffUntil)):
 			}
 			continue
+		}
+
+		// Other 4xx responses (bad sticker URL, malformed markup, ...) are
+		// deterministic — retrying just delays the rest of the alert.
+		if status >= 400 && status < 500 {
+			return 0, fmt.Errorf("telegram %s returned status %d: %s", method, status, respBody)
 		}
 
 		if attempt < maxRetries {
