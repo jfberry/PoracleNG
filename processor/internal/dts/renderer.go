@@ -903,6 +903,11 @@ func renderedMessageIsEmpty(raw json.RawMessage) bool {
 	if s, ok := m["photo"].(string); ok && s != "" {
 		return false
 	}
+	if p, ok := m["photo"].(map[string]any); ok {
+		if s, ok := p["url"].(string); ok && s != "" {
+			return false
+		}
+	}
 	if b, ok := m["location"].(bool); ok && b {
 		return false
 	}
