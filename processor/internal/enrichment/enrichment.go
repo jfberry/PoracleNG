@@ -350,9 +350,12 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = append(common, typeFields...)
 		pregenKeys = keys
 	case "nest":
-		typeFields := []string{"pokemon_id", "form", "pokemonSpawnAvg"}
+		typeFields := []string{"pokemon_id", "form", "pokemonSpawnAvg",
+			"map_latitude", "map_longitude", "zoom"}
 		keys = append(common, typeFields...)
-		pregenKeys = keys
+		// Pregen adds poly_path (nested polygon array, not suitable for a URL);
+		// without it the templates just omit the nest outline.
+		pregenKeys = append(append([]string{}, keys...), "poly_path")
 	case "weather":
 		typeFields := []string{"gameplay_condition", "coords"}
 		keys = append(common, typeFields...)
