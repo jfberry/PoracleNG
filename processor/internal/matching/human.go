@@ -17,6 +17,19 @@ func ValidateHumans(
 	strictAreasEnabled bool,
 	humans map[string]*db.Human,
 ) []webhook.MatchedUser {
+	return validateHumans(monsterList, monsterLat, monsterLon, matchedAreaNames, strictAreasEnabled, humans, nil)
+}
+
+// validateHumans is ValidateHumans with a final per-rule gate, asked only for
+// rules whose human passed every other check (nil allows every rule).
+func validateHumans(
+	monsterList []*db.MonsterTracking,
+	monsterLat, monsterLon float64,
+	matchedAreaNames map[string]bool,
+	strictAreasEnabled bool,
+	humans map[string]*db.Human,
+	allow func(*db.MonsterTracking) bool,
+) []webhook.MatchedUser {
 	if len(monsterList) == 0 {
 		return nil
 	}
@@ -73,6 +86,12 @@ func ValidateHumans(
 			continue
 		}
 
+		// Reconciliation updates these flags when a user loses or regains
+		// feature access. Gate stored rules too, regardless of how created.
+		if monster.Personal != 0 && human.BlockedAlertsSet["personal"] {
+			continue
+		}
+
 		anchorLat, anchorLon, effectiveAreas := resolveOverride(monster.OverrideLocationLabel, monster.OverrideAreas, human)
 
 		// Lazy haversine: compute once when first needed, cache for reuse.
@@ -102,6 +121,9 @@ func ValidateHumans(
 			if !areaOverlap(human.AreaRestriction, areas) {
 				continue
 			}
+		}
+		if allow != nil && !allow(monster) {
+			continue
 		}
 
 		// Reuse cached haversine (or compute now for area-based users).

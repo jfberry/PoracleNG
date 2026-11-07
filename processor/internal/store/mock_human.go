@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -263,6 +264,16 @@ func (m *MockHumanStore) Update(id string, fields map[string]any) error {
 	if h, ok := m.humans[id]; ok {
 		for k, v := range fields {
 			switch k {
+			case "blocked_alerts":
+				if v == nil {
+					h.BlockedAlerts = nil
+				} else if vs, ok := v.(string); ok {
+					var blocked []string
+					if err := json.Unmarshal([]byte(vs), &blocked); err != nil {
+						return err
+					}
+					h.BlockedAlerts = blocked
+				}
 			case "enabled":
 				if vi, ok := v.(int); ok {
 					h.Enabled = vi != 0

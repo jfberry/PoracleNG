@@ -74,14 +74,8 @@ func Load(manager *Manager, database *sqlx.DB, scheduleStore store.SummarySchedu
 		return fmt.Errorf("load database: %w", err)
 	}
 
-	locs, err := db.LoadUserLocations(database)
-	if err != nil {
-		return fmt.Errorf("load user locations: %w", err)
-	}
-	for id, h := range data.Humans {
-		if m, ok := locs[id]; ok {
-			h.Locations = m
-		}
+	if err := attachHumanExtras(database, data.Humans); err != nil {
+		return err
 	}
 
 	schedules := loadSummarySchedules(scheduleStore)
@@ -141,14 +135,8 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, scheduleStore store.
 		return fmt.Errorf("load database: %w", err)
 	}
 
-	locs, err := db.LoadUserLocations(database)
-	if err != nil {
-		return fmt.Errorf("load user locations: %w", err)
-	}
-	for id, h := range data.Humans {
-		if m, ok := locs[id]; ok {
-			h.Locations = m
-		}
+	if err := attachHumanExtras(database, data.Humans); err != nil {
+		return err
 	}
 
 	schedules := loadSummarySchedules(scheduleStore)
@@ -223,4 +211,34 @@ func recordStateMetrics(s *State) {
 	metrics.StateTrackingRules.WithLabelValues("fort").Set(float64(len(s.Forts)))
 	metrics.StateTrackingRules.WithLabelValues(metrics.TypeMaxbattle).Set(float64(len(s.Maxbattles)))
 	metrics.StateGeofences.Set(float64(len(s.Fences)))
+}
+
+// attachHumanExtras loads per-human side tables (saved locations, linked
+// game accounts) onto the freshly loaded humans.
+func attachHumanExtras(database *sqlx.DB, humans map[string]*db.Human) error {
+	locs, err := db.LoadUserLocations(database)
+	if err != nil {
+		return fmt.Errorf("load user locations: %w", err)
+	}
+	for id, h := range humans {
+		if m, ok := locs[id]; ok {
+			h.Locations = m
+		}
+	}
+	accounts, err := db.LoadPlayerAccounts(database)
+	if err != nil {
+		return fmt.Errorf("load player accounts: %w", err)
+	}
+	applyAccounts(humans, accounts)
+	return nil
+}
+
+// applyAccounts sets each human's linked accounts. Accounts of humans not in
+// the map (disabled or deleted) are ignored.
+func applyAccounts(humans map[string]*db.Human, accounts map[string][]db.PlayerAccount) {
+	for id, list := range accounts {
+		if h := humans[id]; h != nil {
+			h.Accounts = list
+		}
+	}
 }

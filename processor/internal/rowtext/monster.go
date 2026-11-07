@@ -103,6 +103,13 @@ func (g *Generator) MonsterRowText(tr *i18n.Translator, monster *db.MonsterTrack
 		s += " | " + tr.Tf("tracking.size_fmt", minSizeName, maxSizeName)
 	}
 
+	if db.IsPersonalShiny(monster.Personal) {
+		s += " | " + tr.T("tracking.personal_shiny")
+	}
+	if db.IsPersonalBackground(monster.Personal) {
+		s += " | " + tr.T("tracking.personal_background")
+	}
+
 	if monster.Rarity > 0 || monster.MaxRarity < 6 {
 		minRarityName := tr.T(fmt.Sprintf("rarity_%d", minRarity))
 		maxRarityName := tr.T(fmt.Sprintf("rarity_%d", monster.MaxRarity))

@@ -14,6 +14,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/mute"
+	"github.com/pokemon/poracleng/processor/internal/personalshiny"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -88,7 +89,11 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		// Match (against the new state — `processed` was built from the
 		// just-parsed webhook, so this set is correct for both initial
 		// sightings and change events).
-		matched, matchedAreas := ps.pokemonMatcher.Match(processed, ps.stateMgr.Get())
+		snap := ps.stateMgr.Get()
+		if snap != nil {
+			processed.Personal = personalshiny.NewChecker(ps.shinyRates.Evaluate(&pokemon), snap.Humans)
+		}
+		matched, matchedAreas := ps.pokemonMatcher.Match(processed, snap)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokemonID: pokemon.PokemonID})
@@ -204,7 +209,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		enrichStart := time.Now()
 		allRecipients := slices.Concat(matched, priorOnlyUsers)
-		mode := ps.tileMode("monster", allRecipients, pokemon.EncounterID)
+		// Users the pokemon is personally shiny for get a static map of their
+		// own with the shiny sprite, the base tile is only for the others.
+		shinyUsers, otherMatched := splitPersonalShiny(matched, processed.Personal)
+		mode := ps.tileMode("monster", slices.Concat(otherMatched, priorOnlyUsers), pokemon.EncounterID)
 		baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
 
 		var perLang map[string]map[string]any
@@ -221,6 +229,15 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		var perUser map[string]map[string]any
 		if ps.enricher.PVPDisplay != nil && perLang != nil && len(matched) > 0 {
 			perUser = ps.enricher.PokemonPerUser(perLang, matched)
+		}
+		// Like per-user PVP, prior-only recipients (priorOnlyUsers) deliberately get no personal fields.
+		perUser = enrichment.AnnotatePersonal(perUser, matched, processed.Personal)
+		ps.enricher.PersonalShinyIcons(perUser, &pokemon)
+		var shiny *shinyAlert
+		if len(shinyUsers) > 0 {
+			enrichment, pending := ps.enricher.PersonalShinyTile(baseEnrichment, &pokemon,
+				ps.tileMode("monster", shinyUsers, pokemon.EncounterID))
+			shiny = &shinyAlert{users: shinyUsers, enrichment: enrichment, tilePending: pending}
 		}
 		metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
 
@@ -248,6 +265,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				perUser:        perUser,
 				webhookFields:  webhookFields,
 				tilePending:    tilePending,
+				shiny:          shiny,
 				isEncountered:  processed.Encountered,
 			})
 			return
@@ -255,7 +273,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		// ReplyKey is set so enabling the flag later threads onto this send.
 		editKey, editMaxAge := ps.pokemonEditFields(pokemon.EncounterID)
-		ps.renderCh <- RenderJob{
+		job := RenderJob{
 			AlertType:         "pokemon",
 			IsPokemon:         true,
 			IsEncountered:     processed.Encountered,
@@ -271,8 +289,70 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			EditKey:           editKey,
 			EditMaxAge:        editMaxAge,
 		}
+		if shiny == nil {
+			ps.renderCh <- job
+			return
+		}
+		if len(otherMatched) > 0 {
+			job.MatchedUsers = otherMatched
+			ps.renderCh <- job
+		}
+		ps.renderCh <- shiny.job(ps, job, shinyUsers)
 	}()
 	return nil
+}
+
+// shinyAlert is the part of a pokemon alert for the users the pokemon is
+// personally shiny for: they share an enrichment copy whose static map shows
+// the shiny sprite, resolved by a tile gate of its own.
+type shinyAlert struct {
+	users       []webhook.MatchedUser
+	enrichment  map[string]any
+	tilePending *staticmap.TilePending
+	gate        *tileGate
+}
+
+// job returns template for users with the shiny enrichment and tile gate; the
+// gate is started on first use and shared by every job of the alert.
+func (s *shinyAlert) job(ps *ProcessorService, template RenderJob, users []webhook.MatchedUser) RenderJob {
+	if s.gate == nil {
+		s.gate = ps.newTileGate(s.tilePending)
+	}
+	template.MatchedUsers = users
+	template.Enrichment = s.enrichment
+	template.TileGate = s.gate
+	return template
+}
+
+// splitPersonalShiny separates the matched users the pokemon is personally
+// shiny for (see enrichment.AnnotatePersonal) from the others.
+func splitPersonalShiny(matched []webhook.MatchedUser, c *personalshiny.Checker) (shiny, others []webhook.MatchedUser) {
+	if !c.Evaluated() {
+		return nil, matched
+	}
+	for _, u := range matched {
+		if res, linked := c.Result(u.ID); linked && len(res.Shiny) > 0 {
+			shiny = append(shiny, u)
+		} else {
+			others = append(others, u)
+		}
+	}
+	return shiny, others
+}
+
+// withoutUsers returns users minus the ones in remove.
+func withoutUsers(users, remove []webhook.MatchedUser) []webhook.MatchedUser {
+	skip := make(map[string]struct{}, len(remove))
+	for _, u := range remove {
+		skip[u.ID] = struct{}{}
+	}
+	var rest []webhook.MatchedUser
+	for _, u := range users {
+		if _, ok := skip[u.ID]; !ok {
+			rest = append(rest, u)
+		}
+	}
+	return rest
 }
 
 // pokemonDispatchInput bundles inputs to dispatchPokemonAlert. All
@@ -289,6 +369,7 @@ type pokemonDispatchInput struct {
 	perUser        map[string]map[string]any
 	webhookFields  map[string]any
 	tilePending    *staticmap.TilePending
+	shiny          *shinyAlert // nil when the pokemon is nobody's personal shiny
 	isEncountered  bool
 }
 
@@ -312,51 +393,58 @@ func (ps *ProcessorService) pokemonEditFields(encounterID string) (string, time.
 // before any render worker reads it.
 func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	editKey, editMaxAge := ps.pokemonEditFields(in.encounterID)
+	// Every job below starts from this template and only sets what differs
+	// (users, tile gate, change fields, the personal-shiny enrichment), so a
+	// field added here reaches every bucket.
+	template := RenderJob{
+		AlertType:         "pokemon",
+		IsPokemon:         true,
+		IsEncountered:     in.isEncountered,
+		Enrichment:        in.enrichment,
+		PerLangEnrichment: in.perLang,
+		PerUserEnrichment: in.perUser,
+		WebhookFields:     in.webhookFields,
+		MatchedAreas:      in.matchedAreas,
+		LogReference:      in.encounterID,
+		ReplyKey:          in.encounterID,
+		EditKey:           editKey,
+		EditMaxAge:        editMaxAge,
+	}
+
 	if ps.dispatcher == nil {
 		if len(in.matched) == 0 {
 			return
 		}
-		ps.renderCh <- RenderJob{
-			AlertType:         "pokemon",
-			IsPokemon:         true,
-			IsEncountered:     in.isEncountered,
-			Enrichment:        in.enrichment,
-			PerLangEnrichment: in.perLang,
-			PerUserEnrichment: in.perUser,
-			WebhookFields:     in.webhookFields,
-			MatchedUsers:      in.matched,
-			MatchedAreas:      in.matchedAreas,
-			TileGate:          ps.newTileGate(in.tilePending),
-			LogReference:      in.encounterID,
-			ReplyKey:          in.encounterID,
-			EditKey:           editKey,
-			EditMaxAge:        editMaxAge,
+		job := template
+		job.MatchedUsers = in.matched
+		job.TileGate = ps.newTileGate(in.tilePending)
+		if in.shiny == nil {
+			ps.renderCh <- job
+			return
 		}
+		if others := withoutUsers(in.matched, in.shiny.users); len(others) > 0 {
+			job.MatchedUsers = others
+			ps.renderCh <- job
+		}
+		ps.renderCh <- in.shiny.job(ps, job, in.shiny.users)
 		return
 	}
 
-	gate := ps.newTileGate(in.tilePending)
+	template.TileGate = ps.newTileGate(in.tilePending)
 
-	// Bucket 1: matched users → `monster`, grouped by language.
-	if len(in.matched) > 0 {
-		for _, users := range groupByLanguage(in.matched, ps.cfg.General.Locale) {
-			ps.renderCh <- RenderJob{
-				AlertType:         "pokemon",
-				IsPokemon:         true,
-				IsEncountered:     in.isEncountered,
-				Enrichment:        in.enrichment,
-				PerLangEnrichment: in.perLang,
-				PerUserEnrichment: in.perUser,
-				WebhookFields:     in.webhookFields,
-				MatchedUsers:      users,
-				MatchedAreas:      in.matchedAreas,
-				TileGate:          gate,
-				LogReference:      in.encounterID,
-				ReplyKey:          in.encounterID,
-				EditKey:           editKey,
-				EditMaxAge:        editMaxAge,
-			}
+	// Bucket 1: matched users → `monster`, grouped by language. Users the
+	// pokemon is personally shiny for go out separately with their own map.
+	matched := in.matched
+	if in.shiny != nil {
+		matched = withoutUsers(matched, in.shiny.users)
+		for _, users := range groupByLanguage(in.shiny.users, ps.cfg.General.Locale) {
+			ps.renderCh <- in.shiny.job(ps, template, users)
 		}
+	}
+	for _, users := range groupByLanguage(matched, ps.cfg.General.Locale) {
+		job := template
+		job.MatchedUsers = users
+		ps.renderCh <- job
 	}
 
 	// Bucket 2: prior-only users → `monsterChanged`, grouped by language.
@@ -382,25 +470,13 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 			if perLangOriginal != nil {
 				orig = perLangOriginal[lang]
 			}
-			ps.renderCh <- RenderJob{
-				AlertType:         "pokemon",
-				IsPokemon:         true,
-				IsChange:          true,
-				IsEncountered:     in.isEncountered,
-				Enrichment:        in.enrichment,
-				PerLangEnrichment: ps.perLangWithChangeFields(in.perLang, lang, bucket),
-				PerUserEnrichment: in.perUser,
-				WebhookFields:     in.webhookFields,
-				MatchedUsers:      users,
-				MatchedAreas:      in.matchedAreas,
-				TileGate:          gate,
-				LogReference:      in.encounterID,
-				ReplyKey:          in.encounterID,
-				EditKey:           editKey,
-				EditMaxAge:        editMaxAge,
-				OriginalView:      orig,
-				ChangeType:        in.change.Type.String(),
-			}
+			job := template
+			job.IsChange = true
+			job.PerLangEnrichment = ps.perLangWithChangeFields(in.perLang, lang, bucket)
+			job.MatchedUsers = users
+			job.OriginalView = orig
+			job.ChangeType = in.change.Type.String()
+			ps.renderCh <- job
 		}
 	}
 }

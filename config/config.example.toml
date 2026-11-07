@@ -354,13 +354,19 @@ thread_keep_alive_interval_hours = 24
 #     poracle_admin (!poracle-admin)
 #   Feature keys (restrict a feature inside a command):
 #     pvp         - using PVP filters in !track
+#     personal    - using personalshiny or personalbackground in !track
 #     specificgym - tracking a specific gym in !gym
+#   These tracking features also stop delivering from existing rules when
+#   reconciliation detects lost access, and resume when access is restored.
+#   Enable discord.check_role; changes reach alerts on the next state reload.
+#   !tracked marks affected rules with an inactive warning.
 #   Any other name (area, location, profile, tracked, ...) is NOT gateable
 #   here and is silently ignored.
 # [discord.command_security]
 # raid = ["role_id_1", "user_id_2"]
 # poracle_admin = ["role_id_1"]
 # pvp = ["role_id_1"]
+# personal = ["role_id_1"]
 
 # ---- Discord slash commands (optional, additive surface) ----
 #
@@ -771,3 +777,20 @@ enabled = false
 # path                = "config/.cache/snapshots"   # relative to BaseDir
 # max_age_days        = 7                           # safety-sweep grace period
 # sweep_interval_mins = 60                          # background sweep cadence
+
+# ---- Personal shiny / backgrounds ----
+# Shiny-rate feed in the same format Golbat's [shiny_rates] uses
+# (GET <url>/v1/rates?compact=1). When set, users with linked game accounts
+# can track pokemon that are shiny (or have the event background) for their
+# own accounts (`!track ... personalshiny` / `personalbackground`), and the
+# feed drives shinyPossible / shinyRate. Empty = off; shiny fields use
+# Poracle's observed stats as before.
+[shiny_rates]
+url = ""
+token = ""                               # optional bearer token
+#max_bytes = 16777216                    # largest feed response accepted (default 16 MiB)
+
+# Who may link game accounts (!account / API). Player IDs cannot be
+# verified, so by default only admins (or a trusted API client) can link.
+[player_accounts]
+self_service = false

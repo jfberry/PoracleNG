@@ -47,21 +47,20 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	// Split args by "|" to get groups
-	var groups [][]string
-	current := make([]string, 0)
-	for _, arg := range args {
-		if arg == "|" {
-			if len(current) > 0 {
-				groups = append(groups, current)
-			}
-			current = make([]string, 0)
-		} else {
-			current = append(current, arg)
-		}
+	// Split args by "|" to get groups. The verbatim args (original case,
+	// underscores kept) are split the same way so each sub-command gets its
+	// own; when they don't line up with args (or are absent), verbatimGroups
+	// is nil and sub-commands fall back to their normalised args.
+	groups := splitPipeGroups(args)
+	verbatimGroups := splitPipeGroups(ctx.VerbatimArgs)
+	if len(verbatimGroups) != len(groups) {
+		verbatimGroups = nil
 	}
-	if len(current) > 0 {
-		groups = append(groups, current)
+	for i := range verbatimGroups {
+		if len(verbatimGroups[i]) != len(groups[i]) {
+			verbatimGroups = nil
+			break
+		}
 	}
 
 	// Need at least target group + one command group.
@@ -92,6 +91,9 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Try by name (webhooks, channels, groups)
 		// This needs a name-based search that HumanStore doesn't expose yet,
 		// so we fall back to direct DB for now.
+		if ctx.DB == nil {
+			continue
+		}
 		var byName []struct {
 			ID   string `db:"id"`
 			Name string `db:"name"`
@@ -132,13 +134,17 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			Text: fmt.Sprintf(">>> Executing as %s / %s%s", target.Type, target.Name, idDisplay),
 		})
 
-		for _, cmdGroup := range commandGroups {
+		for gi, cmdGroup := range commandGroups {
 			if len(cmdGroup) == 0 {
 				continue
 			}
 
 			cmdName := cmdGroup[0]
 			cmdArgs := cmdGroup[1:]
+			cmdVerbatim := cmdArgs
+			if verbatimGroups != nil {
+				cmdVerbatim = verbatimGroups[gi+1][1:]
+			}
 
 			allReplies = append(allReplies, bot.Reply{
 				Text: fmt.Sprintf(">> %s", strings.Join(cmdGroup, " ")),
@@ -159,6 +165,7 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			targetCtx.TargetID = target.ID
 			targetCtx.TargetName = target.Name
 			targetCtx.TargetType = target.Type
+			targetCtx.VerbatimArgs = cmdVerbatim
 
 			// Look up target's profile and language
 			if targetHuman, err := ctx.Humans.Get(target.ID); err == nil && targetHuman != nil {
@@ -175,4 +182,24 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	allReplies = append(allReplies, bot.Reply{React: "✅"})
 	return allReplies
+}
+
+// splitPipeGroups splits args at "|" tokens, dropping empty groups.
+func splitPipeGroups(args []string) [][]string {
+	var groups [][]string
+	current := make([]string, 0)
+	for _, arg := range args {
+		if arg == "|" {
+			if len(current) > 0 {
+				groups = append(groups, current)
+			}
+			current = make([]string, 0)
+		} else {
+			current = append(current, arg)
+		}
+	}
+	if len(current) > 0 {
+		groups = append(groups, current)
+	}
+	return groups
 }

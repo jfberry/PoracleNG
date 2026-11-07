@@ -107,11 +107,14 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID, pokestopURL string, rewar
 	// Shiny possible and base stats for pokemon rewards
 	if len(rewardData.Monsters) > 0 {
 		m["isShiny"] = rewardData.Monsters[0].Shiny
-		if e.ShinyProvider != nil {
-			rate := e.ShinyProvider.GetShinyRate(rewardData.Monsters[0].PokemonID)
-			m["shinyPossible"] = rate > 0
-			if rate > 0 {
-				m["shinyStats"] = int(math.Round(rate))
+		if sf := e.shinyFacts(rewardData.Monsters[0].PokemonID, rewardData.Monsters[0].FormID, 0, lat, lon); sf.answered {
+			m["shinyPossible"] = sf.possible
+			if sf.observed > 0 {
+				m["shinyStats"] = int(math.Round(sf.observed))
+			}
+			if sf.oneIn > 0 {
+				m["shinyRate"] = sf.oneIn
+				m["shinyRateBoosted"] = sf.boosted
 			}
 		}
 		// Base stats for pokemon reward (used by calculateCp Handlebars helper)

@@ -94,6 +94,36 @@
     },
     {
       "type": 3,
+      "name": "personal_shiny",
+      "description": "Only when shiny for one of your linked game accounts",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "name": "personal_background",
+      "description": "Only when it has the event background for one of your linked accounts",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
       "name": "template",
       "description": "DTS template name",
       "channel_types": null,

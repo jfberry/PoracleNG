@@ -240,3 +240,61 @@ func TestBuildTarget_BareNamePrefixRequiresExistingTarget(t *testing.T) {
 		t.Error("name:missing: expected webhook-not-found error")
 	}
 }
+
+func TestBuildTargetStrictKeepsUserPrefixedArgs(t *testing.T) {
+	ctx := newTargetCtx(t, true, false)
+	_, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "username123", "namesake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rest) != 3 || rest[1] != "username123" || rest[2] != "namesake" {
+		t.Fatalf("strict target ate args: %q", rest)
+	}
+	// user: needs a numeric ID; anything else is an ordinary value.
+	if _, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "user:abc"}); err != nil || len(rest) != 2 || rest[1] != "user:abc" {
+		t.Fatalf("user:abc rest = %q, err = %v", rest, err)
+	}
+	// Non-account commands keep the legacy behaviour.
+	if _, rest, _ := BuildTargetFor(ctx, "cmd.track", []string{"pikachu"}); len(rest) != 1 {
+		t.Fatalf("track args = %q", rest)
+	}
+}
+
+func TestStripTargetTokens(t *testing.T) {
+	got := StripTargetTokens([]string{"add", "User:123", "Abc_Def", "NAME:hook", "username1"})
+	if len(got) != 3 || got[0] != "add" || got[1] != "Abc_Def" || got[2] != "username1" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestBuildTargetFor_AccountAdminUserOverride(t *testing.T) {
+	ctx := newTargetCtx(t, true, true)
+	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
+		ID: "123456", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
+	})
+	target, rest, err := BuildTargetFor(ctx, "cmd.account", []string{"add", "username_9", "user:123456"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if target == nil || target.ID != "123456" {
+		t.Fatalf("expected override target 123456, got %+v", target)
+	}
+	if len(rest) != 2 || rest[1] != "username_9" {
+		t.Fatalf("rest = %v", rest)
+	}
+}
+
+func TestBuildTargetFor_AccountNonAdminUserOverrideRejected(t *testing.T) {
+	ctx := newTargetCtx(t, true, false)
+	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
+		ID: "123456", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
+	})
+	_, _, errFor := BuildTargetFor(ctx, "cmd.account", []string{"add", "x", "user:123456"})
+	_, _, errPlain := BuildTarget(ctx, []string{"user:123456"})
+	if errFor == nil || errPlain == nil {
+		t.Fatalf("expected rejection, got %v / %v", errFor, errPlain)
+	}
+	if errFor.Error() != errPlain.Error() {
+		t.Fatalf("BuildTargetFor err %q differs from BuildTarget err %q", errFor, errPlain)
+	}
+}

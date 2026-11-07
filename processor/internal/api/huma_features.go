@@ -435,7 +435,7 @@ func RegisterCommand(api huma.API, deps *bot.BotDeps) {
 			ctx.Fences = fences
 
 			// Handle target override (user<id>, name<webhook>)
-			target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
+			target, remainingArgs, err := bot.BuildTargetFor(ctx, cmd.CommandKey, cmd.Args)
 			if err != nil {
 				log.Debugf("command: target resolution failed: %v", err)
 				allReplies = append(allReplies, bot.Reply{React: "🙅", Text: bot.LocalizeTargetError(tr, err)})
@@ -453,6 +453,7 @@ func RegisterCommand(api huma.API, deps *bot.BotDeps) {
 				ctx.HasArea = target.HasArea
 			}
 
+			ctx.VerbatimArgs = cmd.VerbatimArgs
 			replies := bot.RunLocked(handler, ctx, remainingArgs)
 			// Apply maintenance suffix so callers see the paused-delivery
 			// warning, matching discordbot/bot.go and telegrambot/bot.go.

@@ -58,14 +58,17 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	}
 
 	// Shiny rate and shiny possible
-	if e.ShinyProvider != nil {
-		rate := e.ShinyProvider.GetShinyRate(pokemon.PokemonID)
-		if rate > 0 {
-			m["shinyStats"] = int(math.Round(rate))
-			m["shinyPossible"] = true
+	if sf := e.shinyFacts(pokemon.PokemonID, pokemon.Form, pokemon.Costume, pokemon.Latitude, pokemon.Longitude); sf.answered {
+		if sf.observed > 0 {
+			m["shinyStats"] = int(math.Round(sf.observed))
+		}
+		m["shinyPossible"] = sf.possible
+		if sf.possible {
 			m["shinyPossibleEmojiKey"] = "shiny"
-		} else {
-			m["shinyPossible"] = false
+		}
+		if sf.oneIn > 0 {
+			m["shinyRate"] = sf.oneIn
+			m["shinyRateBoosted"] = sf.boosted
 		}
 	}
 
@@ -188,11 +191,19 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	e.addLocationFields(m, pokemon.Latitude, pokemon.Longitude)
 
 	// Static map tile
+	pending := e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, monsterTileFields(pokemon), tileMode, pokemon.EncounterID)
+
+	e.setFallbackImg(m, e.FallbackImgURL)
+	return m, pending
+}
+
+// monsterTileFields are the webhook fields of the monster static map payload.
+func monsterTileFields(pokemon *webhook.PokemonWebhook) map[string]any {
 	weather := pokemon.BoostedWeather
 	if weather == 0 {
 		weather = pokemon.Weather
 	}
-	pending := e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, map[string]any{
+	return map[string]any{
 		"pokemon_id":         pokemon.PokemonID,
 		"display_pokemon_id": pokemon.DisplayPokemonID,
 		"pokemonId":          pokemon.PokemonID,
@@ -202,10 +213,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"confirmedTime":      pokemon.DisappearTimeVerified || pokemon.Verified,
 		"weather":            weather,
 		"seen_type":          pokemon.SeenType,
-	}, tileMode, pokemon.EncounterID)
-
-	e.setFallbackImg(m, e.FallbackImgURL)
-	return m, pending
+	}
 }
 
 // enrichPokemonGameData adds game data enrichment fields that are universal

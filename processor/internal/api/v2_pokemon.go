@@ -69,12 +69,14 @@ type v2PokemonRule struct {
 	PVPRankingEvolution *int `json:"pvp_ranking_evolution,omitempty" minimum:"0" maximum:"3" nullable:"true" doc:"Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0)."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
-	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
-	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
-	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
-	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false."`
-	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
+	Distance           *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
+	Template           *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping               *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
+	Clean              *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
+	Edit               *bool   `json:"edit,omitempty" nullable:"true" doc:"Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false."`
+	Summary            *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
+	PersonalShiny      *bool   `json:"personal_shiny,omitempty" nullable:"true" doc:"Only alert when the pokemon is shiny for one of the human's linked game accounts (personal bitmask bit 1). Needs the server's [shiny_rates] feed; matches nothing until it loads or while the human has no linked accounts. Omit for false. Returned as null when false."`
+	PersonalBackground *bool   `json:"personal_background,omitempty" nullable:"true" doc:"Only alert when the pokemon has the special (event) background for one of the human's linked accounts (personal bitmask bit 2). Same requirements as personal_shiny; when both are set both must hold. Omit for false. Returned as null when false."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
 	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). At most [tracking] max_areas names unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted (a rule already stored over it may keep or shrink its own list). Omit for none. Returned as null when unset."`
@@ -153,6 +155,7 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 		PVPRankingMinCP:       valueOr(req.PVPRankingMinCP, wcPokemonPVPMinCP),
 		PVPRankingCap:         valueOr(req.PVPRankingCap, wcPokemonPVPCap),
 		PVPRankingEvolution:   valueOr(req.PVPRankingEvolution, wcPokemonPVPEvolution),
+		Personal:              db.PackPersonal(valueOr(req.PersonalShiny, false), valueOr(req.PersonalBackground, false)),
 		Clean:                 packClean(valueOr(req.Clean, false), valueOr(req.Edit, false), valueOr(req.Summary, false)),
 		OverrideLocationLabel: overrideLabel,
 		OverrideAreas:         canonicalOverrideAreas(deps, req.OverrideAreas),
@@ -204,6 +207,8 @@ func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
+		PersonalShiny:         ptrUnless(db.IsPersonalShiny(row.Personal), false),
+		PersonalBackground:    ptrUnless(db.IsPersonalBackground(row.Personal), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),
 	}

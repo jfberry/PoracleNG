@@ -72,6 +72,8 @@ curl http://localhost:3030/health
 {"status": "healthy"}
 ```
 
+The real response also carries `version` and a static `capabilities` map for feature detection (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`, and `personalShiny` — true when personal shiny/background tracking and linked accounts are available).
+
 ### GET /metrics
 
 Prometheus metrics endpoint.
@@ -250,6 +252,7 @@ Force a state reload (same as POST /api/reload).
 | `distance` | int | 0 | Distance in metres (0 = use area) |
 | `template` | string | config default | DTS template name |
 | `clean` | bool | false | Auto-delete message after TTH |
+| `personal` | int | 0 | Personal-alert bitmask: `1` = only when shiny for one of the user's linked accounts, `2` = only when the special background applies to a linked account. Unknown bits are dropped. **Omitted on a by-uid update ⇒ the stored value is kept** (pre-personal clients don't clear it). `personal` is part of rule identity: a create without `uid` whose `personal` differs from an otherwise identical existing rule adds a separate rule rather than updating that one. Needs `[shiny_rates]`; see [Linked accounts](#linked-accounts-v2). |
 
 #### Pokemon change template (`monsterChanged`)
 
@@ -582,6 +585,16 @@ Remove a Discord role from a user.
 Get the user's delegated administration permissions (channels, webhooks, user tracking).
 
 ---
+
+## Linked accounts (v2)
+
+Personal shiny/background tracking rolls per game account. Accounts are managed on the strict `/api/v2` surface; see the [v1 → v2 migration guide](docs/v1-to-v2-migration-guide.md) and `/docs` for the full contract. Essentials:
+
+- `GET|POST /api/v2/humans/{id}/accounts` (POST body `{"player_id","label"?}` returns `201 {"account":{player_id,label,created_at}}`); `PUT|DELETE /api/v2/humans/{id}/accounts/{player_id}` (PUT body `{"label"}`, empty clears) return `{"status":"ok"}`.
+- `player_id` is 1-256 ASCII letters or digits, case-sensitive (anything else is a 422 on POST). Max 50 accounts per human; `label` is `null` when unset, unique per human (case-insensitive), max 64 chars.
+- Status codes: `201` created; `404` unknown human (GET/POST) or `"account not found"` (PUT/DELETE, including an unknown human); `409` player ID or label already linked; `422` invalid or over a limit.
+- The v2 full snapshot carries an `accounts` array; v2 pokemon rules take `personal_shiny` / `personal_background` (booleans, `null` when false, full-replace on PUT).
+- `[player_accounts] self_service` gates only the chat commands, not the API.
 
 ## Profile Management
 

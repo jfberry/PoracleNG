@@ -96,6 +96,13 @@ type Capabilities struct {
 	// "name" field with optional "language". Editors use it to decide whether
 	// to fetch maps for live preview.
 	CustomMaps bool `json:"customMaps"`
+
+	// PersonalShiny reports per-player shiny/background tracking: the
+	// monsters personal bits (v1 `personal`, v2 personal_shiny /
+	// personal_background), /api/v2/humans/{id}/accounts, and the
+	// personal* DTS fields. Static: whether the feed is configured is a
+	// runtime matter (rules simply never match without it).
+	PersonalShiny bool `json:"personalShiny"`
 }
 
 // HandleHealth returns a Gin handler that responds with a small health
@@ -127,5 +134,6 @@ func BuildCapabilities() Capabilities {
 		DerivedDtsTypes:      true,
 		Costume:              true,
 		CustomMaps:           true,
+		PersonalShiny:        true,
 	}
 }

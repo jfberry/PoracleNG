@@ -40,6 +40,7 @@ type Human struct {
 	BlockedAlerts    string
 	BlockedAlertsSet map[string]bool          // parsed from BlockedAlerts JSON
 	Locations        map[string]*UserLocation // lowercased label → location; nil if user has none
+	Accounts         []PlayerAccount          // linked game accounts, oldest first; nil if none
 }
 
 // SetBlockedAlerts sets both the raw BlockedAlerts string and the parsed BlockedAlertsSet.
