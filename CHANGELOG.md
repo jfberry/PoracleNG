@@ -250,6 +250,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the matcher applies it, so a read-modify-write widened the rule to both
   genders. Reads now return the gender, and `gender` is accepted with every
   mode except `grunt_id` (#330).
+- **AccuWeather forecasts no longer cause false weather-change alerts.** With
+  `[weather] enable_forecast = true`, forecast hours were stored alongside the
+  weather the game reported, so a forecast that disagreed with the game became
+  the baseline for change detection: the next weather webhook, and then
+  boosted-pokemon inference, each alerted a change that never happened. A
+  forecast fetch could also overwrite the current hour, making `gameWeatherId`
+  show the forecast. Forecasts are now kept separately and only fill hours the
+  game hasn't reported, for the next-hour prediction and `GET /api/weather`
+  (#356).
 
 ### Deprecated
 
