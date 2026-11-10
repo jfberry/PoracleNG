@@ -86,11 +86,22 @@ var sunFields = []FieldDef{
 	{Name: "duskTime", Type: "bool", Description: "It is dusk at the alert location", Category: "time"},
 }
 
+// perUserLocationFields are measured from the recipient's location to the
+// alert. Every alert type with a single location (the same set as
+// mapLinkFields); non-pokemon templates that use them render once per user.
+var perUserLocationFields = []FieldDef{
+	{Name: "distance", Type: "int", Description: "Distance from the user's location to the alert, in metres", Category: "location"},
+	{Name: "bearing", Type: "int", Description: "Bearing from the user's location, in degrees", Category: "location"},
+	{Name: "bearingEmoji", Type: "string", Description: "Directional arrow emoji for bearing", Category: "location"},
+	{Name: "userTrackDistance", Type: "int", Description: "The matched rule's distance threshold in metres (0 = area-based rule); for pokemon, the largest across matching rules", Category: "location"},
+}
+
 // alertFields composes the common groups for a regular alert type.
 func alertFields(mapLinks, tth, sun bool, typeFields ...[]FieldDef) []FieldDef {
 	out := append([]FieldDef{}, commonFields...)
 	if mapLinks {
 		out = append(out, mapLinkFields...)
+		out = append(out, perUserLocationFields...)
 	}
 	if tth {
 		out = append(out, tthFields...)
@@ -116,11 +127,6 @@ var monsterFields = []FieldDef{
 	{Name: "nameEng", Type: "string", Description: "English pokemon name", Category: "identity"},
 	{Name: "fullNameEng", Type: "string", Description: "English name + form", Category: "identity"},
 	{Name: "formNameEng", Type: "string", Description: "English form name", Category: "identity"},
-	// Per-user location (pokemon alerts only — other types have no per-user layer)
-	{Name: "distance", Type: "int", Description: "Distance from the user's location to the pokemon, in metres", Category: "location"},
-	{Name: "bearing", Type: "int", Description: "Bearing from the user's location, in degrees", Category: "location"},
-	{Name: "bearingEmoji", Type: "string", Description: "Directional arrow emoji for bearing", Category: "location"},
-	{Name: "userTrackDistance", Type: "int", Description: "The matched rule's distance threshold in metres (0 = area-based rule); largest across matching rules", Category: "location"},
 	// Stats
 	{Name: "iv", Type: "number", Description: "IV percentage (0-100)", Category: "stats", Preferred: true},
 	{Name: "atk", Type: "int", Description: "Attack IV (0-15)", Category: "stats", Preferred: true},
