@@ -1,8 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-
 	"github.com/jmoiron/sqlx"
 )
 
@@ -72,6 +70,13 @@ func BuildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 
 	for i := range monsters {
 		m := &monsters[i]
+		// pvp_ranking_worst 0 is not a rank: it is a legacy "no upper limit",
+		// as the bot reads it on input and the v2 API reports it (null). Left
+		// as 0, the matcher's rank > worst check would drop every rank and the
+		// rule would never fire.
+		if m.PVPRankingWorst == 0 {
+			m.PVPRankingWorst = 4096
+		}
 		if m.PVPRankingLeague != 0 {
 			if m.PokemonID != 0 {
 				idx.PVPSpecific[m.PVPRankingLeague] = append(idx.PVPSpecific[m.PVPRankingLeague], m)
@@ -106,9 +111,7 @@ func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
 	}
 
 	for i := range monsters {
-		if monsters[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(monsters[i].OverrideAreasRaw), &monsters[i].OverrideAreas)
-		}
+		monsters[i].OverrideAreas = loadOverrideKeys(monsters[i].OverrideAreasRaw)
 	}
 
 	return BuildMonsterIndexFromRules(monsters), nil

@@ -67,6 +67,11 @@ func propertyMuteValueLabel(ctx *bot.CommandContext, e mute.Entry) string {
 	switch e.ScopeType {
 	case mute.ScopeEverything:
 		return ""
+	case mute.ScopeTracking:
+		if e.RuleTable == "" {
+			return e.ScopeValue // legacy untyped entry; matches nothing
+		}
+		return ctx.Tr().Tf("msg.mute.rule_label", e.RuleTable, e.ScopeValue)
 	case mute.ScopePokemon:
 		if ctx.GameData == nil || ctx.Translations == nil {
 			return e.ScopeValue

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -351,13 +352,14 @@ func TestQuest_RemoveSummary_OnlyTargetsSummaryRules(t *testing.T) {
 // Amount plumbing.)
 func TestQuest_AmountOnCandy(t *testing.T) {
 	ctx := questCtx(t)
-	replies := runQuest(t, ctx, "candy:pikachu amount:5")
+	replies := runQuest(t, ctx, "candy:25 amount:5")
 	require.NotEmpty(t, replies)
 	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
 
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
 	require.Len(t, rows, 1)
 	assert.Equal(t, 4, rows[0].RewardType, "candy reward type")
+	assert.Equal(t, 25, rows[0].Reward, "candy:25 targets pikachu")
 	assert.Equal(t, 5, rows[0].Amount, "amount:5 should persist into Amount column")
 }
 
@@ -402,7 +404,7 @@ func TestQuest_AmountOnItem(t *testing.T) {
 // candy case — both reward types honour q.Amount in the matcher.
 func TestQuest_AmountOnMegaEnergy(t *testing.T) {
 	ctx := questCtx(t)
-	replies := runQuest(t, ctx, "energy:pikachu amount:50")
+	replies := runQuest(t, ctx, "energy:25 amount:50")
 	require.NotEmpty(t, replies)
 	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
 
@@ -530,4 +532,115 @@ func TestQuest_AcceptsAreaOverride(t *testing.T) {
 	rules, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
 	require.Len(t, rules, 1)
 	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+}
+
+func questRewardTypes(t *testing.T, ctx *bot.CommandContext) map[int][]int {
+	t.Helper()
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	out := map[int][]int{}
+	for _, r := range rows {
+		out[r.RewardType] = append(out[r.RewardType], r.Reward)
+	}
+	return out
+}
+
+// Every reward named in one command becomes a rule, as in PoracleJS. The
+// branches used to be an if/else-if chain, so `!quest stardust 25` kept
+// only the stardust rule and dropped pikachu without a word (#277).
+func TestQuest_MultipleRewards(t *testing.T) {
+	ctx := questCtx(t)
+	replies := runQuest(t, ctx, "stardust 25 pokecoins")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	got := questRewardTypes(t, ctx)
+	assert.Equal(t, []int{0}, got[3], "stardust rule")
+	assert.Equal(t, []int{25}, got[7], "pikachu rule")
+	assert.Equal(t, []int{0}, got[8], "pokecoin rule")
+}
+
+// A bare energy/candy keyword takes the named pokemon as its target; that
+// pokemon must not also become a pokemon reward.
+func TestQuest_BareEnergyAndCandyConsumePokemon(t *testing.T) {
+	ctx := questCtx(t)
+	runQuest(t, ctx, "energy candy 25")
+	got := questRewardTypes(t, ctx)
+	assert.Equal(t, []int{25}, got[12], "energy pikachu")
+	assert.Equal(t, []int{25}, got[4], "candy pikachu")
+	assert.Empty(t, got[7], "no plain pikachu reward")
+}
+
+// amount:N still errors when pokemon is the only reward, but applies to
+// the other rewards when there are some.
+func TestQuest_AmountWithPokemonAndStardust(t *testing.T) {
+	ctx := questCtx(t)
+	replies := runQuest(t, ctx, "25 amount:5")
+	assert.Equal(t, "🙅", replies[0].React, "pokemon-only with amount")
+
+	runQuest(t, ctx, "25 stardust amount:500")
+	got := questRewardTypes(t, ctx)
+	assert.Equal(t, []int{500}, got[3], "stardust min 500")
+	assert.Equal(t, []int{25}, got[7], "pikachu rule")
+}
+
+// questKinds returns "rewardType:reward" for each remaining rule.
+func questKinds(t *testing.T, ctx *bot.CommandContext) []string {
+	t.Helper()
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	var out []string
+	for _, r := range rows {
+		out = append(out, strconv.Itoa(r.RewardType)+":"+strconv.Itoa(r.Reward))
+	}
+	return out
+}
+
+// #312: remove mirrors add — every reward kind named is removed.
+func TestQuest_Remove_EveryRewardKindNamed(t *testing.T) {
+	ctx := questCtx(t)
+	runQuest(t, ctx, "stardust 25")
+	runQuest(t, ctx, "candy:649")
+	require.ElementsMatch(t, []string{"3:0", "7:25", "4:649"}, questKinds(t, ctx))
+
+	replies := runQuest(t, ctx, "remove stardust 25")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+	assert.ElementsMatch(t, []string{"4:649"}, questKinds(t, ctx))
+}
+
+func TestQuest_Remove_MixedKinds(t *testing.T) {
+	ctx := questCtx(t)
+	runQuest(t, ctx, "stardust")
+	runQuest(t, ctx, "pokecoins")
+	runQuest(t, ctx, "energy:25")
+	runQuest(t, ctx, "649")
+	require.ElementsMatch(t, []string{"3:0", "8:0", "12:25", "7:649"}, questKinds(t, ctx))
+
+	runQuest(t, ctx, "remove energy:25 pokecoins 649")
+	assert.ElementsMatch(t, []string{"3:0"}, questKinds(t, ctx))
+}
+
+// A bare candy/energy keyword consumes the named pokemon, as on add, so the
+// pokemon-encounter rule for that species is left alone.
+func TestQuest_Remove_BareCandyConsumesPokemon(t *testing.T) {
+	ctx := questCtx(t)
+	runQuest(t, ctx, "candy 25")
+	runQuest(t, ctx, "25")
+	require.ElementsMatch(t, []string{"4:25", "7:25"}, questKinds(t, ctx))
+
+	runQuest(t, ctx, "remove candy 25")
+	assert.ElementsMatch(t, []string{"7:25"}, questKinds(t, ctx))
+}
+
+func TestQuest_Remove_BareRefused(t *testing.T) {
+	ctx := questCtx(t)
+	runQuest(t, ctx, "stardust 25")
+	runQuest(t, ctx, "candy:649")
+
+	replies := runQuest(t, ctx, "remove")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React)
+	assert.Len(t, questKinds(t, ctx), 3, "a bare remove must not remove anything")
+
+	runQuest(t, ctx, "remove everything")
+	assert.Empty(t, questKinds(t, ctx))
 }

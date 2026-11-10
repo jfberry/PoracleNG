@@ -1,8 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-
 	"github.com/jmoiron/sqlx"
 )
 
@@ -42,9 +40,7 @@ func LoadQuests(db *sqlx.DB) ([]*QuestTracking, error) {
 
 	result := make([]*QuestTracking, len(quests))
 	for i := range quests {
-		if quests[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(quests[i].OverrideAreasRaw), &quests[i].OverrideAreas)
-		}
+		quests[i].OverrideAreas = loadOverrideKeys(quests[i].OverrideAreasRaw)
 		result[i] = &quests[i]
 	}
 	return result, nil

@@ -160,7 +160,7 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Pre-fetch override context once so per-row validation doesn't re-query.
-		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
 		if ocMsg != "" {
 			trackingJSONError(c, ocCode, ocMsg)
 			return
@@ -173,7 +173,7 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 				return
 			}
 			pokemonID := req.PokemonID.intValue(0)
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -204,7 +204,7 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 				MinSpawnAvg:           minSpawnAvg,
 				Form:                  form,
 				OverrideLocationLabel: req.OverrideLocationLabel,
-				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+				OverrideAreas:         v1NormalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 
@@ -215,6 +215,10 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.NestGetUID, store.NestSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.NestGetUID, store.NestSetUID)
 
 		// Build confirmation message before applying changes

@@ -37,15 +37,19 @@ source of truth. Design rationale: [`v2-api-design.md`](v2-api-design.md).
 | `GET /api/tracking/{type}/{id}` | `GET /api/v2/humans/{id}/tracking/{type}` | `?profile=` defaults to the active profile. Returns `{rules:[…]}` |
 | `POST /api/tracking/{type}/{id}` | `POST /api/v2/humans/{id}/tracking/{type}` | Body is an **array** of rules. Returns `{created, updated, unchanged}` |
 | — | `GET /api/v2/humans/{id}/tracking/{type}/{uid}` | NEW — fetch one rule |
-| — | `PUT /api/v2/humans/{id}/tracking/{type}/{uid}` | NEW — full replace (omitted fields reset to defaults; no PATCH) |
+| — | `PUT /api/v2/humans/{id}/tracking/{type}/{uid}` | NEW — full replace (omitted fields reset to defaults); the rule keeps its `uid`. `409` if the edit would duplicate or near-duplicate another rule |
+| — | `PATCH /api/v2/humans/{id}/tracking/{type}` | NEW — bulk-set `distance`, `clean`, `edit`, `summary` (quest), `template`, `ping` on `uids`; per-rule `updated` / `unchanged` / `refused` |
 | `DELETE /api/tracking/{type}/{id}/byUid/{uid}` | `DELETE /api/v2/humans/{id}/tracking/{type}/{uid}` | Returns `{deleted:[…]}` |
-| `POST /api/tracking/{type}/{id}/delete` (body `[uids]`) | `DELETE /api/v2/humans/{id}/tracking/{type}?uid=1,2,3` | Bulk delete via query |
+| `POST /api/tracking/{type}/{id}/delete` (body `[uids]`) | `DELETE /api/v2/humans/{id}/tracking/{type}?uid=1,2,3` | Bulk delete via query, or body `{"uids":[…]}` (not both) |
 | `GET /api/tracking/all/{id}` | `GET /api/v2/humans/{id}/tracking` | Full snapshot: `{human, tracking:{<type>:[…]}, profiles, locations, summaries}` |
 | `GET /api/tracking/allProfiles/{id}` | `GET /api/v2/humans/{id}/tracking?all_profiles=true` | |
 | `GET /api/tracking/pokemon/refresh` | `GET`/`POST /api/reload` | Reload alias; the documented reload endpoint |
 
 Item operations are scoped by `(human, uid)` exactly like v1's `byUid` — you cannot touch a uid
 that doesn't belong to the addressed human.
+
+Every tracking mutation also accepts `?dry_run=true` (same validation, nothing written; created
+rules have `uid` 0, response has `"dry_run": true`), and rules in `updated` carry `previous`.
 
 ## Endpoint mapping — humans
 
@@ -58,14 +62,18 @@ that doesn't belong to the addressed human.
 | `POST /api/humans/{id}/stop` | `POST /api/v2/humans/{id}/disable` | No body |
 | `POST /api/humans/{id}/adminDisabled` | `POST /api/v2/humans/{id}/admin-disable` | Body `{disabled: bool}` |
 | `POST /api/humans/{id}/language` | `POST /api/v2/humans/{id}/language` | Body `{language: string}`, validated against available locales |
-| `POST /api/humans/{id}/setLocation/{lat}/{lon}` | `POST /api/v2/humans/{id}/location` | Body `{lat, lon}` floats |
-| `GET /api/humans/{id}/checkLocation/{lat}/{lon}` | `GET /api/v2/humans/{id}/check-location?lat=&lon=` | |
+| `POST /api/humans/{id}/setLocation/{lat}/{lon}` | `POST /api/v2/humans/{id}/location` | Body `{latitude, longitude}` floats |
+| — | `DELETE /api/v2/humans/{id}/location` | **NEW** — clear the location (`?profile=` as for set). Not subject to the area-restriction check |
+| `GET /api/humans/{id}/checkLocation/{lat}/{lon}` | `GET /api/v2/humans/{id}/check-location?latitude=&longitude=` | |
 | `POST /api/humans/{id}/setAreas` | `POST /api/v2/humans/{id}/areas` | Body `{areas: []string}` |
+| — | `DELETE /api/v2/humans/{id}/areas?name=` | **NEW** — remove one area name from the human, profile(s) and every rule's `override_areas`. Returns `broadened` rules. `?profile=`, `?all_profiles=`, `?dry_run=` |
+| — | `PATCH /api/v2/humans/{id}/areas?from=&to=` | **NEW** — rename one area name everywhere; `to` must be permitted (`422`). `?dry_run=` |
+| — | `GET/POST/DELETE /api/v2/humans/{id}/mutes` | **NEW** — in-memory alert mutes. `scope=tracking` requires `tracking_type` (the rule's table); delete via `?scope=&tracking_type=&value=` |
 | `POST /api/humans/{id}/switchProfile/{n}` | `POST /api/v2/humans/{id}/profile` | Body `{profile_no: int}` |
 | `GET /api/humans/{id}/locations` | `GET /api/v2/humans/{id}/locations` | |
 | `GET /api/humans/{id}/locations/{label}` | `GET /api/v2/humans/{id}/locations/{label}` | |
-| `POST /api/humans/{id}/locations/add` | `POST /api/v2/humans/{id}/locations` | Body `{label, lat, lon}` |
-| — | `PUT /api/v2/humans/{id}/locations/{label}` | **NEW** — update coords (v1 forced delete + re-add). Body `{lat, lon}` |
+| `POST /api/humans/{id}/locations/add` | `POST /api/v2/humans/{id}/locations` | Body `{label, latitude, longitude}` |
+| — | `PUT /api/v2/humans/{id}/locations/{label}` | **NEW** — update coords (v1 forced delete + re-add). Body `{latitude, longitude}` |
 | `POST /api/humans/{id}/locations/{label}/delete` | `DELETE /api/v2/humans/{id}/locations/{label}` | `409` if referenced by a rule's `override_location_label` |
 | `GET /api/humans/{id}/roles` | `GET /api/v2/humans/{id}/roles` | |
 | `POST /api/humans/{id}/roles/add/{roleId}` | `POST /api/v2/humans/{id}/roles/{roleId}` | |
@@ -114,6 +122,10 @@ Game-master dictionary IDs stay **integers** (`pokemon_id`, `form`, `move`, `rew
 
 ### Sentinels → omit / null
 
+**`null` means unconstrained.** A v2 client never needs to know how that is stored, and the stored representation may change without notice. Read `null`, write `null` (or omit the field); a GET followed by a PUT or POST of any stored rule is `unchanged`. Do not convert `null` back into a number.
+
+The table below is internal and for v1 readers only: it explains what the v1 API and the database hold. It is not part of the v2 contract.
+
 Stop sending these v1 magic values; omit the field instead (and expect `null` on read):
 
 | v1 sentinel | meant | v2 request |
@@ -132,18 +144,25 @@ is **not** a sentinel to avoid.
 
 ### Type-specific changes
 
-- **invasion** — v2 requires **exactly one** targeting mode per rule: `type_id` (int poke-type,
-  optional `gender`) | `grunt_id` (int exact character) | `everything: true` | `boss: true`. The
-  facade translates down to the same stored grunt-type names v1 wrote.
+- **`ping`** — optional string on every type; null when empty.
+- **invasion** — v2 requires **exactly one** targeting mode per rule: `grunt_type` | `type_id` (int poke-type) | `grunt_id` (int exact character) | `everything: true` |
+  `boss: true`, with optional `gender` on any mode except `grunt_id`. The facade translates down
+  to the same stored grunt-type names v1 wrote; reads return `grunt_type` and `gender`.
 - **incident (NEW)** — pokestop events (e.g. Showcases) split out of invasion into their own type,
   keyed by the game's `display_type` int. Not available on v1.
+- **`distance`** — clamped to the server's `[tracking] max_distance` on every type, as v1 now does too,
+  unless the human is an admin or not a user (channel, webhook, group, thread), or the request is `trusted`. Read the limit from `GET /api/config/poracleWeb` (`maxDistance`) to warn users first.
+  A stored rule above a since-lowered limit is reported as `updated` (rewritten at the limit) when posted back.
+- **`override_areas` / set-areas** — at most `[tracking] max_areas` names (`maxAreas` in `GET /api/config/poracleWeb`;
+  0 = no limit), else 422. Same exemptions as `distance`. A rule or profile already over the limit may keep
+  or shrink its own list, but that list cannot be copied into a new rule.
 - **fort** — `include_empty` now defaults to **`true`** when omitted (v1 defaulted false).
 - **quest** — `reward_type` (proto int: `2`=item, `3`=stardust, `4`=candy, `7`=pokemon,
-  `12`=mega_energy) is required; `reward`, `amount`, `form`, `shiny` optional.
+  `8`=pokecoins, `12`=mega_energy) is required; `reward`, `amount`, `form`, `shiny` optional.
 - **pokemon** — `pvp_ranking_evolution` (int mega/temp-evolution discriminator: `0` base, `1` Mega,
   `2` Mega X, `3` Mega Y) is new on v2.
 - **`active_hours`** (profile PATCH and `POST /api/summaries/{id}/{alertType}`) — now a validated
-  typed array of `{day 0–6, hours 0–23, mins 0–59, optional step/end_hours/end_mins}` entries,
+  typed array of `{day 1–7 (ISO: 1=Monday … 7=Sunday), hours 0–23, mins 0–59, optional step/end_hours/end_mins}` entries,
   strict ints, no cross-midnight ranges. v1's freeform JSON passthrough is gone.
 
 ### Response shapes

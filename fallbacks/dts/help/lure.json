@@ -1,34 +1,36 @@
-[{
-  "id": "lure",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!lure",
-      "description": "Alerts for lure modules active at pokestops.",
-      "fields": [
-        {
-          "name": "Lure types",
-          "value": "`{{prefix}}lure glacial` — Glacial Lure (ice/water)\n`{{prefix}}lure mossy` — Mossy Lure (bug/grass/poison)\n`{{prefix}}lure magnetic` — Magnetic Lure (electric/rock/steel)\n`{{prefix}}lure rainy` — Rainy Lure (psychic-exclusive spawns in the rain)\n`{{prefix}}lure sparkly` — Sparkly Lure\n`{{prefix}}lure normal` — standard Lure Module\n`{{prefix}}lure everything` — any lure"
-        },
-        {
-          "name": "Distance and area",
-          "value": "`d:500`\n`area:city_centre`"
-        },
-        {
-          "name": "Message flags",
-          "value": "`clean` — auto-delete when the lure expires\n`edit` — single message edited in place\n`ping`"
-        },
-        {
-          "name": "Remove",
-          "value": "`{{prefix}}lure remove mossy`\n`{{prefix}}lure remove everything`\n`{{prefix}}untrack id:<N>`"
-        },
-        {
-          "name": "Full manual",
-          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
-        }
-      ]
+[
+  {
+    "id": "lure",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!lure",
+        "description": "Alerts for lure modules placed at pokestops.",
+        "fields": [
+          {
+            "name": "Lure types",
+            "value": "`{{prefix}}lure normal` — standard Lure Module\n`{{prefix}}lure glacial`\n`{{prefix}}lure mossy`\n`{{prefix}}lure magnetic`\n`{{prefix}}lure rainy`\n`{{prefix}}lure golden` (also `sparkly`)\n`{{prefix}}lure mossy glacial` — several types, one rule each\n`{{prefix}}lure everything` — any lure"
+          },
+          {
+            "name": "Where",
+            "value": "With neither `d:` nor `area:`, your `{{prefix}}area` list is used (unless your admin set a default distance).\n`d:500` — within that many metres of your location\n`location:home d:500` — measured from a saved location (`{{prefix}}help location`)\n`area:city_centre` — only these areas instead of your list; several: `area:north,south`. Can't be combined with `d:`"
+          },
+          {
+            "name": "Options",
+            "value": "`clean` — delete the alert when the lure ends\n`edit` — update the alert in place instead of sending a new one\n`template:2` — use another alert layout your admin has set up{{#if isDiscord}}\n@mention users or roles in the command to ping them with each alert.{{/if}}"
+          },
+          {
+            "name": "Remove",
+            "value": "`{{prefix}}lure remove mossy`\n`{{prefix}}lure remove everything`\n`{{prefix}}lure remove id:12` — one rule; `{{prefix}}tracked` shows the ids"
+          },
+          {
+            "name": "Full manual",
+            "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+          }
+        ]
+      }
     }
   }
-}]
+]

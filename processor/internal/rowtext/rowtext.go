@@ -21,16 +21,28 @@ type Generator struct {
 	Translations        *i18n.Bundle
 	DefaultTemplateName string
 	Scanner             scanner.Scanner
+	// DefaultEdit reports whether an alert type is in [tracking]
+	// default_edit, so rules without the edit bit are labelled as editing
+	// by default. Nil means no defaults.
+	DefaultEdit func(alertType string) bool
+}
+
+func (g *Generator) defaultEdit(alertType string) bool {
+	return g.DefaultEdit != nil && g.DefaultEdit(alertType)
 }
 
 // standardText appends template, clean, edit, and summary indicators.
-func standardText(tr *i18n.Translator, template, defaultTemplate string, clean int) string {
+// defaultEdit labels a rule without the edit bit whose alert type edits by
+// default ([tracking] default_edit).
+func standardText(tr *i18n.Translator, template, defaultTemplate string, clean int, defaultEdit bool) string {
 	var text string
 	if template != "" && template != defaultTemplate {
 		text += " " + tr.Tf("tracking.template_fmt", template)
 	}
 	if db.IsEdit(clean) {
 		text += " " + tr.T("tracking.edit")
+	} else if defaultEdit {
+		text += " " + tr.T("tracking.edit_default")
 	}
 	if db.IsClean(clean) {
 		text += " " + tr.T("tracking.clean")

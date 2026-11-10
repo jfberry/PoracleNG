@@ -97,11 +97,14 @@ type FairQueue struct {
 	rateLimiter    *ratelimit.Limiter
 	rateLimitHooks RateLimitHooks
 
-	// backpressure counts send enqueues that blocked on a full lane.
-	// lastBackpressureLog throttles the corresponding warn log to once per 5s
-	// (unix nanoseconds, read/written via CompareAndSwap).
-	backpressure        atomic.Int64
-	lastBackpressureLog atomic.Int64
+	// shed counts jobs discarded to make room on a full lane.
+	shed atomic.Int64
+
+	// backpressure counts send enqueues that found a full lane.
+	// lastShedLog throttles the shed warn log to once per 5s (unix
+	// nanoseconds, read/written via CompareAndSwap).
+	backpressure atomic.Int64
+	lastShedLog  atomic.Int64
 }
 
 // NewFairQueue creates a FairQueue that dispatches jobs through the
@@ -137,9 +140,21 @@ func NewFairQueue(senders map[string]Sender, tracker *MessageTracker, cfg QueueC
 }
 
 // enqueue routes a job to its destination lane, spawning the lane + drainer on
-// first use. block=true (sends) applies backpressure: it blocks until the lane
-// has room. block=false (clean-deletes) drops on a full lane and returns false.
-// Returns false if the queue is stopping or the job was dropped.
+// first use.
+//
+// Enqueue never blocks. Producers are render workers shared across every
+// destination, so parking one here is exactly how a single saturated
+// destination stalls delivery system-wide — the failure this policy exists to
+// prevent. When a lane is full the OLDEST buffered job is shed to make room
+// for the arrival: a lane only fills because its drainer is parked in
+// rate-limit backoff, which makes the buffered jobs the stalest and the
+// arrival the freshest, and alerts are perishable.
+//
+// Clean-deletes (block=false) drop rather than shed — a delete is cleanup, and
+// evicting a live send to make room for one would be a bad trade.
+//
+// Returns false if the queue is stopping, if this job was shed in favour of a
+// buffered administrative message, or if a clean-delete was dropped.
 func (fq *FairQueue) enqueue(job *Job, block bool) bool {
 	fq.lanesMu.Lock()
 	if fq.stopped {
@@ -155,48 +170,97 @@ func (fq *FairQueue) enqueue(job *Job, block bool) bool {
 		metrics.DeliveryLaneSpawned.Inc()
 	}
 	l.pending++ // reserve BEFORE releasing the lock so the reaper can't drop us
-	fq.lanesMu.Unlock()
 
-	// A concurrent Stop() can close l.ch after we passed the stopped check and
-	// released the lock; sending on a closed channel panics. Recover so a
-	// shutdown race drops the job (returns false) instead of crashing the
-	// caller. A channel send is the only panic source below this point, so this
-	// masks nothing else.
-	defer func() { _ = recover() }()
-
-	if block {
-		select {
-		case l.ch <- job:
-			return true
-		default:
-			// Lane full — record + throttle-log backpressure, then block.
-			fq.recordBackpressure(l.target)
-			l.ch <- job
-			return true
-		}
-	}
+	// The lock is held across the channel operations below. All of them are
+	// non-blocking, so this costs no latency, and it buys two guarantees the
+	// overflow path depends on: no other producer can slip in between the pop
+	// and the push in makeRoom, and Stop() cannot close the channel underneath
+	// us (which is why no recover() is needed here any more).
 	select {
 	case l.ch <- job:
+		fq.lanesMu.Unlock()
 		return true
 	default:
-		fq.lanesMu.Lock()
+	}
+
+	if !block {
 		l.pending--
 		fq.lanesMu.Unlock()
 		fq.recordCleanDropped(l.target)
 		return false
 	}
+
+	shed, accepted := fq.makeRoom(l, job)
+	fq.lanesMu.Unlock()
+
+	fq.recordBackpressure()
+	fq.recordShed(l.target, shed)
+	return accepted
 }
 
-// recordBackpressure is called when a send blocks on a full lane. It counts the
-// event and logs at most once per 5s per queue (naming the target), so a hot
-// lane doesn't flood the log.
-func (fq *FairQueue) recordBackpressure(target string) {
+// makeRoom sheds exactly one job from a full lane so an arriving send can be
+// buffered. Returns the shed job and whether the arriving job was accepted.
+//
+// Must be called with lanesMu held and only when the lane is full. Because the
+// caller holds the lock, no other producer can push; the drainer only ever
+// removes. So popping one job always leaves room for the push that follows,
+// and neither send below can block.
+func (fq *FairQueue) makeRoom(l *lane, job *Job) (shed *Job, accepted bool) {
+	select {
+	case victim := <-l.ch:
+		// Administrative messages — rate-limit breach notices, ban farewells —
+		// are dispatched precisely BECAUSE the destination is flooded, so
+		// their lane is full by definition. Shedding one would let the flood
+		// swallow the very message reporting on it, breaking the invariant
+		// DispatchBypass and processJob step 2b both promise. Put it back and
+		// shed the arriving alert instead.
+		if victim.BypassRateLimit {
+			l.ch <- victim
+			l.pending-- // the arrival never reaches the drainer
+			return job, false
+		}
+		// The drainer will never see the victim, so it will never run the
+		// matching pending-- for it. Do it here or the lane leaks and the
+		// reaper can never delete it.
+		l.pending--
+		shed = victim
+	default:
+		// Drainer emptied the lane while we waited for the lock — room now.
+	}
+
+	l.ch <- job
+	return shed, true
+}
+
+// recordBackpressure counts an enqueue that found its destination lane full.
+// Retained under its original metric name so existing dashboards keep working;
+// it now measures lane saturation, not delay, because enqueue no longer blocks.
+// Alert on ShedCount for actual message loss.
+func (fq *FairQueue) recordBackpressure() {
 	metrics.DeliveryLaneBackpressure.Inc()
 	fq.backpressure.Add(1)
+}
+
+// recordShed accounts for a job discarded to make room on a full lane. This is
+// real, user-visible message loss, so it gets its own counter and a
+// DeliveryTotal result label (without which poracle_delivery_total under-counts
+// attempts and dashboards show a healthy success ratio while alerts are being
+// destroyed). The per-job LogReference is preserved at debug level so "why
+// didn't I get that alert?" stays answerable; the warn is throttled to once
+// per 5s so a flood produces a readable signal rather than thousands of lines.
+func (fq *FairQueue) recordShed(target string, job *Job) {
+	if job == nil {
+		return
+	}
+	fq.shed.Add(1)
+	metrics.DeliveryLaneShed.Inc()
+	metrics.DeliveryTotal.WithLabelValues(PlatformFromType(job.Type), "shed_lane_full").Inc()
+	logref.Debugf(job.LogReference, "delivery: shed queued message for %s %s (lane full)", job.Type, target)
+
 	now := time.Now().UnixNano()
-	last := fq.lastBackpressureLog.Load()
-	if now-last > int64(5*time.Second) && fq.lastBackpressureLog.CompareAndSwap(last, now) {
-		log.Warnf("delivery: lane full, applying backpressure to sends for %s", target)
+	last := fq.lastShedLog.Load()
+	if now-last > int64(5*time.Second) && fq.lastShedLog.CompareAndSwap(last, now) {
+		log.Warnf("delivery: lane full for %s — shedding oldest queued messages (total shed: %d)", target, fq.shed.Load())
 	}
 }
 
@@ -205,9 +269,14 @@ func (fq *FairQueue) recordCleanDropped(target string) {
 	metrics.DeliveryCleanDeleteDropped.Inc()
 }
 
-// BackpressureCount returns the cumulative count of send enqueues that blocked
-// on a full lane. Used by the [Status] reporter to detect a developing backlog.
+// BackpressureCount returns the cumulative count of send enqueues that found a
+// full lane. Used by the [Status] reporter to detect a developing backlog.
 func (fq *FairQueue) BackpressureCount() int64 { return fq.backpressure.Load() }
+
+// ShedCount returns the cumulative number of jobs discarded to make room on a
+// full destination lane. Unlike BackpressureCount this counts real message
+// loss, so it is the signal to alert on.
+func (fq *FairQueue) ShedCount() int64 { return fq.shed.Load() }
 
 // runLane is one destination's drainer: it processes jobs FIFO and reaps itself
 // after idleTimeout with an empty lane and no pending work.
@@ -267,6 +336,19 @@ func (fq *FairQueue) Stop() {
 	fq.cancel()
 }
 
+// editTooOld reports whether a tracked message is past the job's edit window.
+// maxAge 0 means no window. SentAt 0 is an entry persisted before SentAt
+// existed; with no known age it is treated as too old.
+func editTooOld(msg *TrackedMessage, maxAge time.Duration, now time.Time) bool {
+	if maxAge <= 0 {
+		return false
+	}
+	if msg.SentAt == 0 {
+		return true
+	}
+	return now.Sub(time.Unix(msg.SentAt, 0)) > maxAge
+}
+
 func (fq *FairQueue) processJob(job *Job) {
 	// 1. Wait for rate limits. Per-platform wire concurrency is now enforced
 	//    by the sender itself (see DiscordSender/TelegramSender.roundTrip),
@@ -309,10 +391,18 @@ func (fq *FairQueue) processJob(job *Job) {
 	// and the tracker has a prior under EditKey, the existing message is
 	// updated in place — we do not fall through to the reply-stamping path
 	// below, because the message reuses the prior rather than replying to
-	// it.
+	// it. The exception is a prior past the job's EditMaxAge window, which
+	// replies instead.
+	editWindowPassed := false
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
-		if existing != nil {
+		if existing != nil && editTooOld(existing, job.EditMaxAge, time.Now()) {
+			// Too far up the channel for an edit to be seen: reply instead
+			// (the reply-stamping path below) and track the reply under its
+			// own key so the original keeps its clean-deletion.
+			logref.Debugf(job.LogReference, "edit: prior for key=%s is past the %v edit window, replying instead", job.EditKey, job.EditMaxAge)
+			editWindowPassed = true
+		} else if existing != nil {
 			logref.Infof(job.LogReference, "edit: found tracked message for key=%s, attempting edit", job.EditKey)
 			if err := sender.Edit(fq.ctx, existing.SentID, job.Message, job.StaticMapData); err == nil {
 				logref.Infof(job.LogReference, "edit: succeeded for key=%s", job.EditKey)
@@ -335,6 +425,15 @@ func (fq *FairQueue) processJob(job *Job) {
 						}
 					}
 				}
+
+				// Refresh the clean-deletion TTL: the follow-up may carry a
+				// later end time. SentAt (the edit-window anchor) and the
+				// rest of the entry are preserved; copy rather than mutate
+				// the cached pointer.
+				if job.TTH.Duration() > 0 {
+					updated := *existing
+					fq.tracker.Track(job.EditKey, &updated, job.TTH.Duration())
+				}
 				return
 			} else {
 				logref.Warnf(job.LogReference, "edit: failed for key=%s: %v, sending new message", job.EditKey, err)
@@ -350,8 +449,8 @@ func (fq *FairQueue) processJob(job *Job) {
 	// message_reference / Telegram reply_to_message_id.
 	//
 	// Only runs after the edit path falls through (either no EditKey, no
-	// prior under EditKey, or the edit attempt failed and we're sending a
-	// fresh message). Caller is not expected to set ReplyToID — it's an
+	// prior under EditKey, the edit attempt failed and we're sending a
+	// fresh message, or the prior is past the edit window). Caller is not expected to set ReplyToID — it's an
 	// ephemeral queue→sender field.
 	if job.ReplyKey != "" && job.ReplyToID == "" {
 		if msgID := fq.tracker.LookupReply(job.ReplyKey, job.Target); msgID != "" {
@@ -442,8 +541,7 @@ func (fq *FairQueue) processJob(job *Job) {
 
 	sent, err := sender.Send(fq.ctx, job)
 	if err != nil {
-		var permErr *PermanentError
-		if errors.As(err, &permErr) {
+		if permErr, ok := errors.AsType[*PermanentError](err); ok {
 			logref.Warnf(job.LogReference, "delivery: permanent error for %s/%s: %s", job.Type, job.Target, permErr.Reason)
 			metrics.DeliveryTotal.WithLabelValues(platform, "permanent_error").Inc()
 			fq.recordFailure(job.Target, job.Name, job.Type)
@@ -509,7 +607,7 @@ func (fq *FairQueue) processJob(job *Job) {
 		}
 
 		key := job.EditKey
-		if key == "" {
+		if key == "" || editWindowPassed {
 			key = fmt.Sprintf("clean:%s:%s:%s", job.Type, job.Target, sent.ID)
 		}
 
@@ -524,6 +622,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			Clean:    job.Clean,
 			ReplyKey: job.ReplyKey,
 			Template: job.Template,
+			SentAt:   time.Now().Unix(),
 		}, ttl)
 		logref.Debugf(job.LogReference, "tracked message key=%s sentID=%s ttl=%v clean=%d replyKey=%q", key, sent.ID, ttl, job.Clean, job.ReplyKey)
 	}

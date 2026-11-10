@@ -338,6 +338,39 @@ func RegisterDTSPartials(api huma.API, ts dtsTemplateReader) {
 	})
 }
 
+// dtsCustomMapsOutput is the typed body for GET /api/dts/custommaps: {status,
+// maps} where maps is keyed by lookup key ("name" or "name.language") and each
+// value is that map's key → value object (values may be strings, numbers or
+// objects).
+type dtsCustomMapsOutput struct {
+	Body struct {
+		Status string                    `json:"status"`
+		Maps   map[string]map[string]any `json:"maps"`
+	}
+}
+
+// RegisterDTSCustomMaps registers GET /api/dts/custommaps, returning the custom
+// maps loaded from config/customMaps/ so clients can reproduce {{map}} /
+// {{map2}} lookups when previewing templates.
+func RegisterDTSCustomMaps(api huma.API, customMaps func() map[string]map[string]any) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-dts-custommaps", Method: "GET", Path: "/dts/custommaps",
+		Summary: "Custom maps for client-side rendering", Tags: []string{"dts"},
+		Description: "Returns {status, maps}: the custom maps loaded from config/customMaps/, keyed by lookup key — the map name, or `name.language` for a language variant. " +
+			"The {{map}} / {{map2}} helpers try `name.<user language>` then `name`, key by key; a key missing from both renders empty (falsy in subexpressions). " +
+			"Values may be strings, numbers or objects (objects are used with block syntax). Maps are loaded at startup.",
+		Security: []map[string][]string{{"poracleSecret": {}}},
+	}, func(_ context.Context, _ *struct{}) (*dtsCustomMapsOutput, error) {
+		out := &dtsCustomMapsOutput{}
+		out.Body.Status = "ok"
+		out.Body.Maps = customMaps()
+		if out.Body.Maps == nil {
+			out.Body.Maps = map[string]map[string]any{}
+		}
+		return out, nil
+	})
+}
+
 // dtsTestdataInput carries the optional type/dtsType filter query params.
 type dtsTestdataInput struct {
 	Type    string `query:"type" doc:"Legacy filter: exact raw webhook type (e.g. pokemon, raid, pokestop). Returns every entry of that type, untagged. Takes precedence over dtsType if both are set."`
@@ -435,6 +468,7 @@ func RegisterDTSReads(api huma.API, emoji dtsEmojiLookup, ts dtsTemplateReader, 
 	RegisterDTSFieldTypes(api)
 	RegisterDTSFields(api)
 	RegisterDTSPartials(api, ts)
+	RegisterDTSCustomMaps(api, dts.CustomMaps)
 	RegisterDTSTestdata(api, configDir, fallbackDir)
 }
 

@@ -52,6 +52,9 @@ func TestInvasionMatchBasic(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "invasion" {
+		t.Errorf("RuleTable = %q, want invasion", matched[0].RuleTable)
+	}
 }
 
 func TestInvasionMatchEverything(t *testing.T) {

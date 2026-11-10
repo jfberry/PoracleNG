@@ -199,7 +199,7 @@ func TestHumaMasterdataGrunts_OK(t *testing.T) {
 	humaAPI := NewHumaAPI(r, r.Group("/api"), "test")
 
 	// nil game data yields an empty map — still a valid 200 JSON object.
-	RegisterMasterdataGrunts(humaAPI, nil)
+	RegisterMasterdataGrunts(humaAPI, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/masterdata/grunts", nil)
 	w := httptest.NewRecorder()

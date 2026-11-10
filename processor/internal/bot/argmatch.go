@@ -354,6 +354,10 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 
 	result := NewParsedArgs()
 	consumed := make([]bool, len(tokens))
+	consume := func(i int, param ParamDef) {
+		consumed[i] = true
+		result.Matched = append(result.Matched, MatchedArg{Token: tokens[i], Param: param})
+	}
 
 	// Sort params by priority: prefix patterns first, then keywords, then names last
 	// We process in this order to avoid ambiguity
@@ -367,7 +371,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryMatch(tok, param, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 					break // each param definition matches at most one token (except Pokemon/Type which collect)
 				}
 			}
@@ -382,7 +386,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryPrefixStringList(tok, param.Key, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -392,7 +396,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if tryRemoveUID(tok, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -402,7 +406,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryLureType(tok, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -412,7 +416,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryMatchPokemon(tok, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -422,7 +426,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if am.tryMatchType(tok, lang, result) {
-					consumed[i] = true
+					consume(i, param)
 				}
 			}
 		}
@@ -521,34 +525,53 @@ func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) 
 		if !ok {
 			continue
 		}
-		parts := strings.SplitN(val, "-", 2)
-		min, err := strconv.Atoi(parts[0])
-		if err != nil {
-			// Try resolving as a name (e.g. "xxl" → 5 for size, "rare" → 3 for rarity)
-			if resolved, ok := am.resolveRangeName(key, parts[0], lang); ok {
-				min = resolved
-			} else {
-				continue
-			}
+		r, ok := am.parseRangeValue(key, val, lang)
+		if !ok {
+			continue
 		}
-		shortKey := strings.TrimPrefix(key, "arg.prefix.")
-		if len(parts) == 2 {
-			max, err := strconv.Atoi(parts[1])
-			if err != nil {
-				if resolved, ok := am.resolveRangeName(key, parts[1], lang); ok {
-					max = resolved
-				} else {
-					continue
-				}
-			}
-			result.Ranges[shortKey] = Range{Min: min, Max: max, HasMax: true}
-		} else {
-			// Single value: only min is set, max uses the field's default
-			result.Ranges[shortKey] = Range{Min: min, HasMax: false}
-		}
+		result.Ranges[strings.TrimPrefix(key, "arg.prefix.")] = r
 		return true
 	}
 	return false
+}
+
+// parseRangeValue parses the value of a range prefix: a single bound
+// ("100", "rare") or two bounds joined by "-" ("50-100", "common-rare").
+// Bounds are non-negative integers or, for size and rarity, names — and
+// names may themselves contain hyphens ("very-rare"), so the whole value
+// is tried as one bound first, then each "-" in turn as the separator.
+// A single bound sets only Min; the max uses the field's default.
+func (am *ArgMatcher) parseRangeValue(key, val, lang string) (Range, bool) {
+	if v, ok := am.parseRangeBound(key, val, lang); ok {
+		return Range{Min: v}, true
+	}
+	for i := 0; i < len(val); i++ {
+		if val[i] != '-' {
+			continue
+		}
+		lo, okLo := am.parseRangeBound(key, val[:i], lang)
+		if !okLo {
+			continue
+		}
+		if hi, okHi := am.parseRangeBound(key, val[i+1:], lang); okHi {
+			return Range{Min: lo, Max: hi, HasMax: true}, true
+		}
+	}
+	return Range{}, false
+}
+
+// parseRangeBound parses one range bound: a non-negative integer, or a
+// size/rarity name.
+func (am *ArgMatcher) parseRangeBound(key, s, lang string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	if s[0] >= '0' && s[0] <= '9' {
+		if v, err := strconv.Atoi(s); err == nil {
+			return v, true
+		}
+	}
+	return am.resolveRangeName(key, s, lang)
 }
 
 // resolveRangeName resolves a name like "xxl" or "rare" to its numeric ID
@@ -568,7 +591,10 @@ func (am *ArgMatcher) resolveRangeName(key, name, lang string) (int, bool) {
 		return 0, false
 	}
 
-	lower := strings.ToLower(name)
+	// Names compare with spaces and underscores folded to hyphens: the
+	// English names are hyphenated ("Very-Rare"), and the tokenizer turns
+	// a typed very_rare into "very rare".
+	lower := normaliseRangeName(name)
 
 	// Try user language, then English. size_N / rarity_N are shipped in the
 	// embedded i18n files (processor/internal/i18n/locale/) for every
@@ -584,13 +610,19 @@ func (am *ArgMatcher) resolveRangeName(key, name, lang string) (int, bool) {
 			}
 			for id := 1; id <= maxID; id++ {
 				translated := tr.T(keyPrefix + strconv.Itoa(id))
-				if translated != "" && strings.ToLower(translated) == lower {
+				if translated != "" && normaliseRangeName(translated) == lower {
 					return id, true
 				}
 			}
 		}
 	}
 	return 0, false
+}
+
+var rangeNameFolder = strings.NewReplacer(" ", "-", "_", "-")
+
+func normaliseRangeName(s string) string {
+	return rangeNameFolder.Replace(strings.ToLower(s))
 }
 
 // tryPrefixSingle matches patterns like "d500", "d:500", "t60", "gen3".

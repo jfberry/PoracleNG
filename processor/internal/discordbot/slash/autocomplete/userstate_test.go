@@ -99,3 +99,63 @@ func TestFilterAndCapNoMarkerKeepsHead(t *testing.T) {
 		t.Errorf("expected trailing ellipsis: %q", name)
 	}
 }
+
+func multiTestChoices() []Choice {
+	return []Choice{
+		{Label: "London", Value: "London"},
+		{Label: "Paris", Value: "Paris"},
+		{Label: "Berlin", Value: "Berlin"},
+	}
+}
+
+func TestFilterAndCapMultiComposesOntoPrefix(t *testing.T) {
+	got := FilterAndCapMulti(multiTestChoices(), "London,pa")
+	if len(got) != 1 {
+		t.Fatalf("got %d choices, want 1: %v", len(got), got)
+	}
+	if got[0].Name != "Paris" {
+		t.Errorf("label = %q, want the bare area name", got[0].Name)
+	}
+	if got[0].Value != "London,Paris" {
+		t.Errorf("value = %q, want the whole field value", got[0].Value)
+	}
+}
+
+func TestFilterAndCapMultiSkipsAlreadyChosen(t *testing.T) {
+	got := FilterAndCapMulti(multiTestChoices(), "London,")
+	if len(got) != 2 {
+		t.Fatalf("got %d choices, want 2 (London already chosen): %v", len(got), got)
+	}
+	for _, c := range got {
+		if c.Name == "London" {
+			t.Errorf("re-offered an already-chosen value: %v", got)
+		}
+		if v, _ := c.Value.(string); !strings.HasPrefix(v, "London,") {
+			t.Errorf("value %q dropped the earlier selections", c.Value)
+		}
+	}
+}
+
+func TestFilterAndCapMultiNoCommaBehavesLikeSingle(t *testing.T) {
+	got := FilterAndCapMulti(multiTestChoices(), "ber")
+	if len(got) != 1 || got[0].Value != "Berlin" {
+		t.Fatalf("got %v, want the bare Berlin choice", got)
+	}
+}
+
+func TestFilterAndCapMultiNormalisesSpacingAndEmptySegments(t *testing.T) {
+	got := FilterAndCapMulti(multiTestChoices(), " London , , pa")
+	if len(got) != 1 || got[0].Value != "London,Paris" {
+		t.Fatalf("got %v, want a single London,Paris choice", got)
+	}
+}
+
+func TestFilterAndCapMultiSkipsOverlongValues(t *testing.T) {
+	// Discord rejects choice values over 100 characters, so a composed
+	// value that would exceed the limit is dropped rather than sent.
+	long := strings.Repeat("a", 95)
+	got := FilterAndCapMulti([]Choice{{Label: "Paris", Value: "Paris"}}, long+",")
+	if len(got) != 0 {
+		t.Fatalf("got %v, want no choices (composed value exceeds 100 chars)", got)
+	}
+}

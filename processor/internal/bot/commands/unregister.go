@@ -1,11 +1,10 @@
 package commands
 
 import (
-	"strings"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/humanlock"
 )
 
 // UnregisterCommand implements !unregister -- delete user registration and tracking.
@@ -15,6 +14,10 @@ type UnregisterCommand struct{}
 
 func (c *UnregisterCommand) Name() string      { return "cmd.unregister" }
 func (c *UnregisterCommand) Aliases() []string { return nil }
+
+// ExemptFromTargetLock: an admin !unregister deletes the humans it names, not
+// its own target, so Run locks each deleted human itself (spec §3.6).
+func (c *UnregisterCommand) ExemptFromTargetLock() {}
 
 func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
@@ -50,9 +53,14 @@ func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Re
 		targets = []string{ctx.TargetID}
 	}
 
-	var unregistered []string
+	var unregistered, unknown []string
 	for _, id := range targets {
-		if err := ctx.Humans.Delete(id); err != nil {
+		registered, err := deleteHumanLocked(ctx, id)
+		if !registered {
+			unknown = append(unknown, id)
+			continue
+		}
+		if err != nil {
 			log.Errorf("unregister: delete %s: %v", id, err)
 			continue
 		}
@@ -60,16 +68,28 @@ func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Re
 		unregistered = append(unregistered, id)
 	}
 
-	if len(unregistered) == 0 {
-		return []bot.Reply{{React: "👌"}}
+	if len(unregistered) > 0 {
+		ctx.TriggerReload()
 	}
 
-	ctx.TriggerReload()
-
 	if !ctx.IsAdmin {
+		if len(unregistered) == 0 {
+			return []bot.Reply{{React: "👌"}}
+		}
 		// Self-unregister: friendly goodbye
 		return []bot.Reply{{React: "✅", Text: tr.T("msg.unregister.goodbye")}}
 	}
 	// Admin unregistering others: show IDs
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.unregister.success", strings.Join(unregistered, ", "))}}
+	return adminTargetsReply(tr, "msg.unregister.success", unregistered, unknown)
+}
+
+// deleteHumanLocked deletes id (and its tracking) while holding id's write
+// lock. registered is false (and nothing is deleted) when id has no humans row.
+func deleteHumanLocked(ctx *bot.CommandContext, id string) (registered bool, err error) {
+	unlock := humanlock.Lock(id)
+	defer unlock()
+	if !humanRegistered(ctx, id) {
+		return false, nil
+	}
+	return true, ctx.Humans.Delete(id)
 }

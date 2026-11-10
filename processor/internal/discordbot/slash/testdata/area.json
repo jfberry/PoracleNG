@@ -12,7 +12,7 @@
         {
           "type": 3,
           "name": "area",
-          "description": "Area to add",
+          "description": "Areas to add (comma-separated)",
           "channel_types": null,
           "required": true,
           "options": null,
@@ -33,7 +33,7 @@
         {
           "type": 3,
           "name": "area",
-          "description": "Area to remove",
+          "description": "Areas to remove (comma-separated)",
           "channel_types": null,
           "required": true,
           "options": null,

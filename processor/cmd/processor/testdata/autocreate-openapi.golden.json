@@ -462,6 +462,58 @@
           "autocreate"
         ]
       }
+    },
+    "/health": {
+      "get": {
+        "description": "Public (no secret). Returns the binary version and a static feature-capability map for client feature detection.",
+        "operationId": "get-health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "capabilities": {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "type": "object"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "version",
+                    "capabilities"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Healthy"
+          }
+        },
+        "security": [],
+        "summary": "Health check",
+        "tags": [
+          "health"
+        ]
+      },
+      "servers": [
+        {
+          "url": "/"
+        }
+      ]
     }
-  }
+  },
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ]
 }

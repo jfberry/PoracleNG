@@ -398,7 +398,7 @@ func TestV2Fort_BulkDelete(t *testing.T) {
 
 // --- PUT full-replace -------------------------------------------------------
 
-func TestV2Fort_PutFullReplace_NewUID(t *testing.T) {
+func TestV2Fort_PutFullReplace_KeepsUID(t *testing.T) {
 	r, fs, _, restore := newV2FortTestAPI(t)
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/fort", `[{"fort_type":"gym","change_types":["new"]}]`)
@@ -410,8 +410,8 @@ func TestV2Fort_PutFullReplace_NewUID(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	newUID := int64(v2RulesArray(t, v2DecodeBody(t, w), "updated")[0]["uid"].(float64))
-	if newUID == oldUID {
-		t.Fatalf("PUT must yield a NEW uid")
+	if newUID != oldUID {
+		t.Fatalf("PUT must keep the rule uid: was %d, now %d", oldUID, newUID)
 	}
 	rows := fs.AllRows()
 	if len(rows) != 1 || rows[0].ChangeTypes != "[]" || !bool(rows[0].IncludeEmpty) {

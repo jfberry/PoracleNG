@@ -58,6 +58,9 @@ func TestMaxbattleMatchPokemon(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct pokemon, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "maxbattle" {
+		t.Errorf("RuleTable = %q, want maxbattle", matched[0].RuleTable)
+	}
 
 	// Wrong pokemon
 	data.PokemonID = 26

@@ -16,7 +16,10 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/humanlock"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -34,7 +37,10 @@ type TelegramReconciliation struct {
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
-	log          *log.Entry
+	// stateMgr gives reconciliation the live fence list, without which it
+	// cannot apply userSelectable or exemptFromAreaSecurity when pruning (#243).
+	stateMgr *state.Manager
+	log      *log.Entry
 }
 
 // NewTelegramReconciliation creates a new TelegramReconciliation instance.
@@ -44,6 +50,7 @@ func NewTelegramReconciliation(
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
+	stateMgr *state.Manager,
 ) *TelegramReconciliation {
 	return &TelegramReconciliation{
 		api:          api,
@@ -51,8 +58,22 @@ func NewTelegramReconciliation(
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
+		stateMgr:     stateMgr,
 		log:          log.WithField("component", "reconciliation-telegram"),
 	}
+}
+
+// fences returns the live fence list, or nil when no state is loaded. nil
+// means "unknown", and the prune paths treat it as a reason to skip.
+func (r *TelegramReconciliation) fences() []geofence.Fence {
+	if r.stateMgr == nil {
+		return nil
+	}
+	st := r.stateMgr.Get()
+	if st == nil {
+		return nil
+	}
+	return st.Fences
 }
 
 // getChannelList returns the list of channel/group IDs to check membership against.
@@ -174,6 +195,10 @@ func (r *TelegramReconciliation) reconcileUser(id string, user *store.Human, tel
 			r.log.Errorf("Synchronisation of Poracle user %s panicked: %v", id, rv)
 		}
 	}()
+
+	// Hold the per-human write lock for the whole reconcile. Nothing called
+	// from here locks again.
+	defer humanlock.Lock(id)()
 
 	r.log.Debugf("Check user %s", id)
 
@@ -311,9 +336,35 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *store.Hu
 			updates["area_restriction"] = string(areaRestrictionJSON)
 		}
 
-		if !bot.HaveSameContents(communityList, user.CommunityMembership) {
+		communityChanged := !bot.HaveSameContents(communityList, user.CommunityMembership)
+		if communityChanged {
 			communityJSON, _ := json.Marshal(communityList)
 			updates["community_membership"] = string(communityJSON)
+		}
+
+		// Opt-in humans.area prune (#243), run BEFORE the membership save so a
+		// failed prune is retried next cycle, through PermittedAreas so exempt
+		// fences survive. Telegram has never pruned override_areas; Discord
+		// does. That asymmetry predates #243 and is deliberately not changed here.
+		if communityChanged && r.cfg.Reconciliation.Telegram.PruneUserAreas {
+			fences := r.fences()
+			if len(fences) == 0 {
+				r.log.Warnf("prune areas for %s skipped: no geofences loaded", id)
+			} else {
+				after := &store.Human{ID: id, CommunityMembership: communityList, AreaRestriction: areaRestriction}
+				removed, err := bot.PruneForMembership(r.humanStore, fences, r.cfg, after,
+					bot.IsAdmin(r.cfg, "telegram", id), bot.PruneOptions{UserAreas: true})
+				if err != nil {
+					// Keep the membership change pending so the next cycle
+					// retries the prune (the prune is idempotent).
+					r.log.Errorf("prune areas for %s: %v", id, err)
+					delete(updates, "community_membership")
+					delete(updates, "area_restriction")
+				}
+				if len(removed) > 0 {
+					r.log.Infof("Pruned areas %v from %s after community change", removed, id)
+				}
+			}
 		}
 
 		if len(updates) > 0 {
@@ -343,9 +394,13 @@ func (r *TelegramReconciliation) UpdateTelegramChannels() {
 			areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, user.CommunityMembership)
 			if !bot.HaveSameContents(areaRestriction, user.AreaRestriction) {
 				areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-				if err := r.humanStore.Update(user.ID, map[string]any{
-					"area_restriction": string(areaRestrictionJSON),
-				}); err != nil {
+				err := func() error {
+					defer humanlock.Lock(user.ID)()
+					return r.humanStore.Update(user.ID, map[string]any{
+						"area_restriction": string(areaRestrictionJSON),
+					})
+				}()
+				if err != nil {
 					r.log.Errorf("Update channel %s: %v", user.ID, err)
 					continue
 				}
@@ -389,13 +444,8 @@ func (r *TelegramReconciliation) sendGreetings(id string) {
 		return
 	}
 
-	tmpl := r.dtsStore.Get("greeting", "telegram", "", "")
-	if tmpl == nil {
-		tmpl = r.dtsStore.Get("greeting", "telegram", "1", "")
-	}
-	if tmpl == nil {
-		tmpl = r.dtsStore.Get("greeting", "telegram", "default", "")
-	}
+	// Select in [general] locale — the same language the greeting renders in.
+	tmpl := r.dtsStore.Greeting("telegram", r.cfg.General.Locale)
 	if tmpl == nil {
 		r.log.Debug("No greeting template found")
 		return
@@ -405,7 +455,7 @@ func (r *TelegramReconciliation) sendGreetings(id string) {
 		"prefix": "/",
 	}
 
-	result, err := tmpl.Exec(view)
+	result, err := dts.ExecTemplate(tmpl, view, r.cfg.General.Locale, "telegram")
 	if err != nil {
 		r.log.Errorf("Cannot render greeting for %s: %v", id, err)
 		return

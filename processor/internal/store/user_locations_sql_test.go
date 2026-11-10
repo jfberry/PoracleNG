@@ -1,7 +1,9 @@
 package store
 
 import (
+	"database/sql"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -67,7 +69,21 @@ func openTestDB(t *testing.T) *sqlx.DB {
 		UNIQUE KEY uniq_id_label (id, label)
 	) ENGINE=InnoDB`)
 
-	// Minimal tracking tables needed by CountLocationReferences and PruneOverrideAreas (all 10 types).
+	// Mirrors 000001_initial_schema.up.sql.
+	exec(`CREATE TABLE IF NOT EXISTS profiles (
+		uid          int unsigned NOT NULL AUTO_INCREMENT,
+		id           varchar(255) NOT NULL,
+		profile_no   int NOT NULL DEFAULT 1,
+		name         varchar(255) NOT NULL,
+		area         text NOT NULL,
+		latitude     float(14,10) NOT NULL DEFAULT 0,
+		longitude    float(14,10) NOT NULL DEFAULT 0,
+		active_hours varchar(4096) NOT NULL DEFAULT '[]',
+		PRIMARY KEY (uid),
+		UNIQUE KEY profile_unique (id, profile_no)
+	) ENGINE=InnoDB`)
+
+	// Minimal tracking tables needed by CountLocationReferences and StripOverrideAreas (all 10 types).
 	for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle"} {
 		exec(`CREATE TABLE IF NOT EXISTS ` + tbl + ` (
 			uid                     INT PRIMARY KEY AUTO_INCREMENT,
@@ -88,6 +104,7 @@ func openTestDB(t *testing.T) *sqlx.DB {
 		for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle"} {
 			_, _ = db.Exec(`DELETE FROM ` + tbl + ` WHERE id = 'u1'`)
 		}
+		_, _ = db.Exec(`DELETE FROM profiles WHERE id = 'u1'`)
 		_, _ = db.Exec(`DELETE FROM humans WHERE id = 'u1'`)
 		_ = db.Close()
 	})
@@ -153,57 +170,46 @@ func TestCountLocationReferences(t *testing.T) {
 	}
 }
 
-// --- filterPermittedAreas (pure in-memory helper) ---
+// --- dropDeniedAreas (pure in-memory helper) ---
 
-func TestFilterPermittedAreas_StripsDisallowed(t *testing.T) {
-	permitted := map[string]bool{"munich": true, "berlin": true}
-	result := filterPermittedAreas([]string{"munich", "berlin", "hamburg"}, permitted)
-	if len(result) != 2 {
-		t.Fatalf("expected 2 kept, got %d: %v", len(result), result)
-	}
-	for _, a := range result {
-		if !permitted[a] {
-			t.Errorf("unexpected area %q in result", a)
-		}
+func TestDropDeniedAreas_StripsDenied(t *testing.T) {
+	result := dropDeniedAreas([]string{"munich", "berlin", "hamburg"}, map[string]bool{"hamburg": true})
+	if !slices.Equal(result, []string{"munich", "berlin"}) {
+		t.Fatalf("got %v", result)
 	}
 }
 
-func TestFilterPermittedAreas_AllDisallowed(t *testing.T) {
-	permitted := map[string]bool{"munich": true}
-	result := filterPermittedAreas([]string{"berlin", "hamburg"}, permitted)
+func TestDropDeniedAreas_AllDenied(t *testing.T) {
+	result := dropDeniedAreas([]string{"berlin", "hamburg"}, map[string]bool{"berlin": true, "hamburg": true})
 	if len(result) != 0 {
 		t.Fatalf("expected empty result, got %v", result)
 	}
 }
 
-func TestFilterPermittedAreas_NoneDisallowed(t *testing.T) {
-	permitted := map[string]bool{"munich": true, "berlin": true}
-	result := filterPermittedAreas([]string{"munich", "berlin"}, permitted)
-	if len(result) != 2 {
-		t.Fatalf("expected 2 kept, got %d", len(result))
+// A name absent from denied survives even if it is not a known fence.
+func TestDropDeniedAreas_UnknownNameKept(t *testing.T) {
+	result := dropDeniedAreas([]string{"ghost", "berlin"}, map[string]bool{"berlin": true})
+	if !slices.Equal(result, []string{"ghost"}) {
+		t.Fatalf("got %v, want [ghost]", result)
 	}
 }
 
-func TestFilterPermittedAreas_EmptyInput(t *testing.T) {
-	permitted := map[string]bool{"munich": true}
-	result := filterPermittedAreas(nil, permitted)
-	if len(result) != 0 {
+func TestDropDeniedAreas_EmptyInput(t *testing.T) {
+	if result := dropDeniedAreas(nil, map[string]bool{"munich": true}); len(result) != 0 {
 		t.Fatalf("expected empty result for nil input, got %v", result)
 	}
 }
 
-func TestFilterPermittedAreas_CaseInsensitive(t *testing.T) {
-	// Areas stored in mixed case should match lowercase permitted keys.
-	permitted := map[string]bool{"munich": true}
-	result := filterPermittedAreas([]string{"Munich", "BERLIN"}, permitted)
+func TestDropDeniedAreas_CaseInsensitive(t *testing.T) {
+	result := dropDeniedAreas([]string{"Munich", "BERLIN"}, map[string]bool{"berlin": true})
 	if len(result) != 1 || result[0] != "Munich" {
 		t.Fatalf("expected [Munich], got %v", result)
 	}
 }
 
-// --- PruneOverrideAreas (integration test, requires PORACLENG_TEST_DSN) ---
+// --- StripOverrideAreas (integration test, requires PORACLENG_TEST_DSN) ---
 
-func TestPruneOverrideAreas_StripsDisallowed(t *testing.T) {
+func TestStripOverrideAreas_StripsDenied(t *testing.T) {
 	dbx := openTestDB(t)
 	s := &SQLHumanStore{db: dbx}
 
@@ -211,9 +217,9 @@ func TestPruneOverrideAreas_StripsDisallowed(t *testing.T) {
 		('u1', 0, 25, '["berlin","munich"]'),
 		('u1', 0, 26, '["berlin"]')`)
 
-	permitted := map[string]bool{"munich": true}
-	if err := s.PruneOverrideAreas("u1", permitted); err != nil {
-		t.Fatalf("PruneOverrideAreas: %v", err)
+	denied := map[string]bool{"berlin": true}
+	if err := s.StripOverrideAreas("u1", denied); err != nil {
+		t.Fatalf("StripOverrideAreas: %v", err)
 	}
 
 	var rows []struct {
@@ -254,5 +260,266 @@ func TestUserLocationsSQL_UpdateUnchangedCoordinates(t *testing.T) {
 	// A genuinely missing label must still report not-found.
 	if err := s.UpdateLocation("u1", "nowhere", 1, 2); err == nil {
 		t.Fatal("UpdateLocation on missing label should fail")
+	}
+}
+
+func TestStripUserAreas_SQL(t *testing.T) {
+	dbx := openTestDB(t)
+	s := &SQLHumanStore{db: dbx}
+	mustExec(t, dbx, `UPDATE humans SET area = '["alpha","beta","gent_centrum"]', current_profile_no = 1 WHERE id = 'u1'`)
+	mustExec(t, dbx, `INSERT INTO profiles (id, profile_no, name, area) VALUES
+		('u1', 1, 'one', '["alpha","beta","gent_centrum"]'),
+		('u1', 2, 'two', '["beta","delta"]')`)
+
+	removed, err := s.StripUserAreas("u1", map[string]bool{"beta": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(removed, []string{"beta"}) {
+		t.Errorf("removed = %v, want [beta]", removed)
+	}
+	var humanArea string
+	if err := dbx.Get(&humanArea, `SELECT area FROM humans WHERE id='u1'`); err != nil {
+		t.Fatal(err)
+	}
+	if humanArea != `["alpha","gent_centrum"]` {
+		t.Errorf("humans.area = %s", humanArea)
+	}
+	// A name absent from denied survives even when it is not a fence.
+	mustExec(t, dbx, `UPDATE humans SET area = '["ghost","beta"]' WHERE id = 'u1'`)
+	if _, err := s.StripUserAreas("u1", map[string]bool{"beta": true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbx.Get(&humanArea, `SELECT area FROM humans WHERE id='u1'`); err != nil || humanArea != `["ghost"]` {
+		t.Errorf("humans.area = %q err=%v, want [\"ghost\"] kept", humanArea, err)
+	}
+	var rows []struct {
+		ProfileNo int    `db:"profile_no"`
+		Area      string `db:"area"`
+	}
+	if err := dbx.Select(&rows, `SELECT profile_no, area FROM profiles WHERE id='u1' ORDER BY profile_no`); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].Area != `["alpha","gent_centrum"]` || rows[1].Area != `["delta"]` {
+		t.Errorf("profiles = %+v", rows)
+	}
+	// Everything pruned writes [] (not NULL), matching marshalStringSlice.
+	if _, err := s.StripUserAreas("u1", map[string]bool{"alpha": true, "beta": true, "ghost": true, "gent_centrum": true, "delta": true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbx.Get(&humanArea, `SELECT area FROM humans WHERE id='u1'`); err != nil {
+		t.Fatal(err)
+	}
+	if humanArea != `[]` {
+		t.Errorf("fully pruned humans.area = %q, want []", humanArea)
+	}
+}
+
+func TestStripUserAreas_SQL_NoHuman(t *testing.T) {
+	dbx := openTestDB(t)
+	s := &SQLHumanStore{db: dbx}
+	mustExec(t, dbx, `INSERT INTO profiles (id, profile_no, name, area) VALUES ('ghost', 1, 'one', '["beta","alpha"]')`)
+	t.Cleanup(func() { _, _ = dbx.Exec(`DELETE FROM profiles WHERE id = 'ghost'`) })
+
+	removed, err := s.StripUserAreas("ghost", map[string]bool{"beta": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != nil {
+		t.Errorf("removed = %v, want nil", removed)
+	}
+	var area string
+	if err := dbx.Get(&area, `SELECT area FROM profiles WHERE id='ghost'`); err != nil {
+		t.Fatal(err)
+	}
+	if area != `["beta","alpha"]` {
+		t.Errorf("profile area = %s, want unchanged", area)
+	}
+}
+
+func TestRemoveAreaFromProfiles_SQL(t *testing.T) {
+	dbx := openTestDB(t)
+	s := &SQLHumanStore{db: dbx}
+
+	mustExec(t, dbx, `UPDATE humans SET current_profile_no = 1, area = ? WHERE id = 'u1'`, `["alpha","gent_centrum"]`)
+	mustExec(t, dbx, `INSERT INTO profiles (id, profile_no, name, area) VALUES
+		('u1', 1, 'a', '["alpha","gent_centrum"]'),
+		('u1', 2, 'b', '["gent_centrum","beta"]'),
+		('u1', 3, 'c', '["beta"]')`)
+
+	// Dry run first: reports, writes nothing.
+	got, _, err := s.RemoveAreaFromProfiles("u1", "Gent Centrum", []int{1, 2, 3}, true)
+	if err != nil || !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("dry run: got=%v err=%v", got, err)
+	}
+	var area string
+	if err := dbx.Get(&area, `SELECT area FROM humans WHERE id = 'u1'`); err != nil || area != `["alpha","gent_centrum"]` {
+		t.Fatalf("dry run wrote humans.area: %q %v", area, err)
+	}
+
+	got, _, err = s.RemoveAreaFromProfiles("u1", "Gent Centrum", []int{1, 2, 3}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []int{1, 2}) {
+		t.Errorf("removedFrom = %v, want [1 2]", got)
+	}
+	if err := dbx.Get(&area, `SELECT area FROM humans WHERE id = 'u1'`); err != nil || area != `["alpha"]` {
+		t.Errorf("humans.area = %q %v, want [\"alpha\"]", area, err)
+	}
+	var rows []struct {
+		ProfileNo int    `db:"profile_no"`
+		Area      string `db:"area"`
+	}
+	if err := dbx.Select(&rows, `SELECT profile_no, area FROM profiles WHERE id = 'u1' ORDER BY profile_no`); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{`["alpha"]`, `["beta"]`, `["beta"]`}
+	for i, r := range rows {
+		if r.Area != want[i] {
+			t.Errorf("profile %d = %s, want %s", r.ProfileNo, r.Area, want[i])
+		}
+	}
+
+	// A non-current profile leaves humans.area alone.
+	mustExec(t, dbx, `UPDATE humans SET area = '["beta"]' WHERE id = 'u1'`)
+	if _, _, err := s.RemoveAreaFromProfiles("u1", "beta", []int{2}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbx.Get(&area, `SELECT area FROM humans WHERE id = 'u1'`); err != nil || area != `["beta"]` {
+		t.Errorf("live humans.area changed: %q %v", area, err)
+	}
+}
+
+func TestEditOverrideAreas_SQL(t *testing.T) {
+	dbx := openTestDB(t)
+	s := &SQLHumanStore{db: dbx}
+
+	mustExec(t, dbx, `INSERT INTO monsters (uid, id, profile_no, override_areas) VALUES
+		(12, 'u1', 1, '["private"]'),
+		(40, 'u1', 1, '["Private","alpha"]'),
+		(41, 'u1', 2, '["private"]')`)
+	mustExec(t, dbx, `INSERT INTO raid (uid, id, profile_no, override_areas) VALUES (7, 'u1', 1, '["private"]')`)
+	mustExec(t, dbx, `INSERT INTO lures (uid, id, profile_no, override_areas) VALUES (9, 'u1', 1, '["private"]')`)
+
+	read := func(table string, uid int) any {
+		var v sql.NullString
+		if err := dbx.Get(&v, "SELECT override_areas FROM `"+table+"` WHERE uid = ?", uid); err != nil {
+			t.Fatal(err)
+		}
+		if !v.Valid {
+			return nil
+		}
+		return v.String
+	}
+
+	// Dry run reports and writes nothing.
+	b, ch, err := s.EditOverrideAreas("u1", []int{1}, "PRIVATE", "", true)
+	if !ch {
+		t.Error("dry run must report changed")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(b["pokemon"], []int64{12}) || !slices.Equal(b["raid"], []int64{7}) || !slices.Equal(b["lure"], []int64{9}) || len(b) != 3 {
+		t.Fatalf("dry run broadened = %v", b)
+	}
+	if read("monsters", 12) != `["private"]` {
+		t.Fatal("dry run wrote")
+	}
+
+	b, _, err = s.EditOverrideAreas("u1", []int{1}, "PRIVATE", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(b["pokemon"], []int64{12}) {
+		t.Errorf("broadened = %v", b)
+	}
+	if read("monsters", 12) != nil || read("raid", 7) != nil || read("lures", 9) != nil {
+		t.Error("emptied rules must be NULL")
+	}
+	if got := read("monsters", 40); got != `["alpha"]` {
+		t.Errorf("rule 40 = %v, want [\"alpha\"]", got)
+	}
+	if got := read("monsters", 41); got != `["private"]` {
+		t.Errorf("profile 2 rule must be untouched, got %v", got)
+	}
+
+	// Rename replaces and collapses.
+	mustExec(t, dbx, `UPDATE monsters SET override_areas = '["old name","new_name"]' WHERE uid = 40`)
+	if b, ch, err = s.EditOverrideAreas("u1", []int{1}, "old_name", "new_name", false); err != nil || len(b) != 0 || !ch {
+		t.Fatalf("rename: %v %v", b, err)
+	}
+	if got := read("monsters", 40); got != `["new_name"]` {
+		t.Errorf("rename = %v", got)
+	}
+}
+
+func TestRenameAreaInProfiles_SQL(t *testing.T) {
+	dbx := openTestDB(t)
+	s := &SQLHumanStore{db: dbx}
+
+	mustExec(t, dbx, `UPDATE humans SET current_profile_no = 1, area = ? WHERE id = 'u1'`, `["private","gent centrum"]`)
+	mustExec(t, dbx, `INSERT INTO profiles (id, profile_no, name, area) VALUES
+		('u1', 1, 'a', '["private","gent centrum"]'),
+		('u1', 2, 'b', '["alpha","private"]'),
+		('u1', 3, 'c', '["beta"]')`)
+
+	got, ch, err := s.RenameAreaInProfiles("u1", "private", "gent_centrum", []int{1, 2, 3}, true)
+	if err != nil || !ch || !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("dry run: got=%v ch=%v err=%v", got, ch, err)
+	}
+	var area string
+	if err := dbx.Get(&area, `SELECT area FROM humans WHERE id = 'u1'`); err != nil || area != `["private","gent centrum"]` {
+		t.Fatalf("dry run wrote humans.area: %q %v", area, err)
+	}
+
+	got, _, err = s.RenameAreaInProfiles("u1", "private", "gent_centrum", []int{1, 2, 3}, false)
+	if err != nil || !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("got=%v err=%v", got, err)
+	}
+	if err := dbx.Get(&area, `SELECT area FROM humans WHERE id = 'u1'`); err != nil || area != `["gent_centrum"]` {
+		t.Errorf("humans.area = %q %v", area, err)
+	}
+	var rows []struct {
+		ProfileNo int    `db:"profile_no"`
+		Area      string `db:"area"`
+	}
+	if err := dbx.Select(&rows, `SELECT profile_no, area FROM profiles WHERE id = 'u1' ORDER BY profile_no`); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{`["gent_centrum"]`, `["alpha","gent_centrum"]`, `["beta"]`}
+	for i, r := range rows {
+		if r.Area != want[i] {
+			t.Errorf("profile %d = %s, want %s", r.ProfileNo, r.Area, want[i])
+		}
+	}
+	// Idempotent.
+	if got, ch, _ = s.RenameAreaInProfiles("u1", "private", "gent_centrum", []int{1, 2, 3}, false); len(got) != 0 || ch {
+		t.Errorf("repeat: got=%v ch=%v", got, ch)
+	}
+}
+
+// A current profile with no profiles row (legacy human) still has its
+// humans.area written, so it is reported, in order and once, under dry_run too.
+func TestAreaOps_SQL_CurrentProfileWithoutRowReported(t *testing.T) {
+	dbx := openTestDB(t)
+	s := &SQLHumanStore{db: dbx}
+	for _, dry := range []bool{true, false} {
+		mustExec(t, dbx, `DELETE FROM profiles WHERE id = 'u1'`)
+		mustExec(t, dbx, `UPDATE humans SET current_profile_no = 2, area = '["alpha","private"]' WHERE id = 'u1'`)
+		mustExec(t, dbx, `INSERT INTO profiles (id, profile_no, name, area) VALUES ('u1', 3, 'c', '["private"]')`)
+		got, ch, err := s.RemoveAreaFromProfiles("u1", "private", []int{1, 2, 3}, dry)
+		if err != nil || !ch || !slices.Equal(got, []int{2, 3}) {
+			t.Errorf("dry=%v remove: got=%v ch=%v err=%v, want [2 3]", dry, got, ch, err)
+		}
+
+		mustExec(t, dbx, `DELETE FROM profiles WHERE id = 'u1'`)
+		mustExec(t, dbx, `UPDATE humans SET current_profile_no = 2, area = '["alpha","private"]' WHERE id = 'u1'`)
+		mustExec(t, dbx, `INSERT INTO profiles (id, profile_no, name, area) VALUES ('u1', 3, 'c', '["private"]')`)
+		got, ch, err = s.RenameAreaInProfiles("u1", "private", "beta", []int{1, 2, 3}, dry)
+		if err != nil || !ch || !slices.Equal(got, []int{2, 3}) {
+			t.Errorf("dry=%v rename: got=%v ch=%v err=%v, want [2 3]", dry, got, ch, err)
+		}
 	}
 }

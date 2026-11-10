@@ -235,12 +235,13 @@ type dtsSaveOutput struct {
 // RegisterDTSSaveTemplates registers POST /api/dts/templates, saving an array
 // of DTS entries. Replaces gin HandleDTSSaveTemplates. The request body is open
 // ([]DTSEntry with a polymorphic `template` value). Each entry is saved to its
-// own file; readonly entries are rejected (403).
+// own file. Saving over a readonly (bundled) entry appends a writable
+// override that shadows it; store errors surface as 403.
 func RegisterDTSSaveTemplates(api huma.API, ts dtsSaveWriter) {
 	huma.Register(api, huma.Operation{
 		OperationID: "post-dts-templates", Method: "POST", Path: "/dts/templates",
 		Summary:     "Save DTS template entries",
-		Description: "Saves an array of DTS entries. Request body is open: []DTSEntry where each entry's `template` field is polymorphic (string, object, or array). Readonly (bundled) entries are rejected.",
+		Description: "Saves an array of DTS entries. Request body is open: []DTSEntry where each entry's `template` field is polymorphic (string, object, or array). Saving an entry whose key matches a readonly (bundled fallback) entry creates a writable override under config/dts/ that takes precedence; the bundled entry is left untouched. Store errors yield 403.",
 		Tags:        []string{"dts"},
 		Security:    []map[string][]string{{"poracleSecret": {}}},
 	}, func(_ context.Context, in *dtsSaveInput) (*dtsSaveOutput, error) {

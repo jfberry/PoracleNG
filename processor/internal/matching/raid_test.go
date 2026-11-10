@@ -54,6 +54,9 @@ func TestRaidMatchBasic(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 raid match, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "raid" {
+		t.Errorf("RuleTable = %q, want raid", matched[0].RuleTable)
+	}
 }
 
 func TestRaidMatchLevel9000(t *testing.T) {
@@ -192,6 +195,9 @@ func TestEggMatchBasic(t *testing.T) {
 	matched, _ := matcher.MatchEgg(eggData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 egg match, got %d", len(matched))
+	}
+	if len(matched) == 1 && matched[0].RuleTable != "egg" {
+		t.Errorf("RuleTable = %q, want egg", matched[0].RuleTable)
 	}
 }
 
@@ -577,4 +583,29 @@ func TestRaidMatchCostume(t *testing.T) {
 	check(1, 1)    // exact match
 	check(2, 0)    // different costume: no match
 	check(0, 0)    // "no costume" filter: costumed boss must not match
+}
+
+// Raid and egg rules have independent uid sequences and share raidUserData;
+// the matcher (not the struct) decides the table (#323).
+func TestRaidAndEggSameUIDGetOwnTables(t *testing.T) {
+	human := makeHuman("user1")
+	raid := &db.RaidTracking{
+		UID: 60, ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Form: 0, Evolution: 9000, Move: 9000, Template: "1",
+	}
+	egg := &db.EggTracking{UID: 60, ID: "user1", ProfileNo: 1, Level: 5, Team: 4, Template: "1"}
+	st := makeRaidTestState([]*db.RaidTracking{raid}, []*db.EggTracking{egg}, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	rm, _ := matcher.MatchRaid(&RaidData{GymID: "g", PokemonID: 150, Level: 5, TeamID: 1, Latitude: 51, Longitude: 0}, st)
+	em, _ := matcher.MatchEgg(&EggData{GymID: "g", Level: 5, TeamID: 1, Latitude: 51, Longitude: 0}, st)
+	if len(rm) != 1 || len(em) != 1 {
+		t.Fatalf("matches raid=%d egg=%d, want 1/1", len(rm), len(em))
+	}
+	if rm[0].RuleUID != 60 || rm[0].RuleTable != "raid" {
+		t.Errorf("raid = uid %d table %q", rm[0].RuleUID, rm[0].RuleTable)
+	}
+	if em[0].RuleUID != 60 || em[0].RuleTable != "egg" {
+		t.Errorf("egg = uid %d table %q", em[0].RuleUID, em[0].RuleTable)
+	}
 }

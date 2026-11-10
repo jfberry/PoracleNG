@@ -44,6 +44,7 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 		}
 
 		trackings = append(trackings, trackingUserData{
+			RuleTable:             "lure",
 			HumanID:               l.ID,
 			ProfileNo:             l.ProfileNo,
 			Distance:              l.Distance,

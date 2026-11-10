@@ -260,3 +260,135 @@ func TestSlash_TelegramRefusal(t *testing.T) {
 		t.Errorf("Telegram should not get success reply, got: %q", replies[0].Text)
 	}
 }
+
+// --- list ---
+
+// The whole point of the command: each row carries the rendered mention
+// (proves the id resolves) AND the same syntax fenced, because Discord gives
+// no way to copy text back out of a rendered mention.
+func TestSlash_ListRendersMentionAndCopyableSyntax(t *testing.T) {
+	ctx, _ := testCtx(t)
+	ctx.IsAdmin = true
+	ctx.Admin = &bot.AdminDeps{
+		SlashList: func(guildID string) ([]bot.SlashScopeCommands, error) {
+			return []bot.SlashScopeCommands{{
+				Name: "global",
+				Commands: []bot.SlashCommandMention{
+					{Path: "help", ID: "111"},
+					{Path: "untrack raid", ID: "222"},
+				},
+			}}, nil
+		},
+	}
+
+	cmd := &PoracleAdminCommand{}
+	replies := cmd.Run(ctx, []string{"slash", "list"})
+	if len(replies) == 0 {
+		t.Fatal("expected a reply")
+	}
+	text := replies[0].Text
+	for _, want := range []string{
+		"</help:111>", "`</help:111>`",
+		"</untrack raid:222>", "`</untrack raid:222>`",
+		"global",
+	} {
+		if !containsStr(text, want) {
+			t.Errorf("reply missing %q:\n%s", want, text)
+		}
+	}
+}
+
+// Guild-scoped registrations get different ids per guild, so scopes are
+// reported separately and the invoking guild is passed through.
+func TestSlash_ListPassesInvokingGuildAndSeparatesScopes(t *testing.T) {
+	ctx, _ := testCtx(t)
+	ctx.IsAdmin = true
+	ctx.GuildID = "guild-9"
+	var gotGuild string
+	ctx.Admin = &bot.AdminDeps{
+		SlashList: func(guildID string) ([]bot.SlashScopeCommands, error) {
+			gotGuild = guildID
+			return []bot.SlashScopeCommands{
+				{Name: "global", Commands: []bot.SlashCommandMention{{Path: "help", ID: "111"}}},
+				{Name: "guild-9", Commands: []bot.SlashCommandMention{{Path: "help", ID: "999"}}},
+			}, nil
+		},
+	}
+
+	cmd := &PoracleAdminCommand{}
+	replies := cmd.Run(ctx, []string{"slash", "list"})
+	if gotGuild != "guild-9" {
+		t.Errorf("SlashList got guildID %q, want guild-9", gotGuild)
+	}
+	text := replies[0].Text
+	if !containsStr(text, "</help:111>") || !containsStr(text, "</help:999>") {
+		t.Errorf("both scopes' ids should appear:\n%s", text)
+	}
+}
+
+func TestSlash_ListNotConfigured(t *testing.T) {
+	ctx, _ := testCtx(t)
+	ctx.IsAdmin = true
+	ctx.Admin = &bot.AdminDeps{}
+
+	cmd := &PoracleAdminCommand{}
+	replies := cmd.Run(ctx, []string{"slash", "list"})
+	if len(replies) == 0 || !containsStr(replies[0].Text, "not configured") {
+		t.Fatalf("expected not-configured message, got %+v", replies)
+	}
+}
+
+func TestSlash_ListErrorSurfaces(t *testing.T) {
+	ctx, _ := testCtx(t)
+	ctx.IsAdmin = true
+	ctx.Admin = &bot.AdminDeps{
+		SlashList: func(string) ([]bot.SlashScopeCommands, error) {
+			return nil, errors.New("discord says no")
+		},
+	}
+
+	cmd := &PoracleAdminCommand{}
+	replies := cmd.Run(ctx, []string{"slash", "list"})
+	if len(replies) == 0 || !containsStr(replies[0].Text, "discord says no") {
+		t.Fatalf("error should surface to the operator, got %+v", replies)
+	}
+}
+
+// A long command set exceeds Discord's message limit, so it must fall back to
+// a file attachment rather than being split across many messages.
+func TestSlash_ListAttachesWhenLong(t *testing.T) {
+	ctx, _ := testCtx(t)
+	ctx.IsAdmin = true
+	many := make([]bot.SlashCommandMention, 0, 120)
+	for i := range 120 {
+		many = append(many, bot.SlashCommandMention{
+			Path: "command-with-a-longish-name-" + itoaTest(i), ID: "1234567890123456789",
+		})
+	}
+	ctx.Admin = &bot.AdminDeps{
+		SlashList: func(string) ([]bot.SlashScopeCommands, error) {
+			return []bot.SlashScopeCommands{{Name: "global", Commands: many}}, nil
+		},
+	}
+
+	cmd := &PoracleAdminCommand{}
+	replies := cmd.Run(ctx, []string{"slash", "list"})
+	if len(replies) != 1 || replies[0].Attachment == nil {
+		t.Fatalf("expected a single reply with an attachment, got %d replies", len(replies))
+	}
+	if !containsStr(string(replies[0].Attachment.Content), "</command-with-a-longish-name-0:1234567890123456789>") {
+		t.Error("attachment should carry the full list")
+	}
+}
+
+func itoaTest(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	var b []byte
+	for i > 0 {
+		b = append([]byte{byte('0' + i%10)}, b...)
+		i /= 10
+	}
+	return string(b)
+}

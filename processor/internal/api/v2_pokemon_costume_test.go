@@ -18,13 +18,13 @@ func TestV2Pokemon_CostumeWriteMapper(t *testing.T) {
 		want    int
 	}{
 		{"omitted -> any (9000)", nil, 9000},
-		{"zero -> no costume (0)", ptr(0), 0},
-		{"specific costume", ptr(5), 5},
+		{"zero -> no costume (0)", new(0), 0},
+		{"specific costume", new(5), 5},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			req := &v2PokemonRule{PokemonID: 25, Costume: c.costume}
+			req := &v2PokemonRule{PokemonID: new(25), Costume: c.costume}
 			row, err := translateV2Pokemon(&TrackingDeps{}, "u1", 1, overrideContext{}, req)
 			if err != nil {
 				t.Fatalf("translateV2Pokemon returned error: %v", err)

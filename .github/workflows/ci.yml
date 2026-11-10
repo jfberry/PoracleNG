@@ -47,7 +47,11 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          # Must be built with Go >= the go directive in processor/go.mod:
+          # golangci-lint refuses to run when its own Go build version is
+          # older than the module's target ("the Go language version used to
+          # build golangci-lint is lower than the targeted Go version").
+          version: v2.13.1
           working-directory: processor
           # Config is .golangci.yml at repo root.
           args: --config=${{ github.workspace }}/.golangci.yml ./...

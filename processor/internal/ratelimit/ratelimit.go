@@ -42,6 +42,15 @@ type counter struct {
 type violation struct {
 	count    int
 	windowAt time.Time // when 24h violation tracking started
+	// banned latches once the count first crosses MaxLimitsBeforeStop.
+	// The ban is an edge trigger, not a level: OnBan disables the human,
+	// DMs a farewell, posts to the shame channel, notifies admins and
+	// forces a state reload. Without this latch every later breach in
+	// the same 24h window re-fires all of it — and a target that was
+	// just disabled keeps breaching for as long as its already-queued
+	// backlog takes to drain, so the channels get one copy per
+	// timing_period for hours.
+	banned bool
 }
 
 // Limiter tracks per-destination message counts and violations.
@@ -235,7 +244,10 @@ func (l *Limiter) limitFor(destinationID, destinationType string) int {
 	return l.cfg.ChannelLimit
 }
 
-// incrementViolation tracks 24h violations. Returns true if user should be banned.
+// incrementViolation tracks 24h violations. Returns true only on the breach
+// that first crosses the threshold, so the caller fires the ban exactly once
+// per 24h violation window. Later breaches in the same window still count
+// (violationState keeps reporting the target as banned) but return false.
 // Must be called with l.mu held.
 func (l *Limiter) incrementViolation(destinationID string, now time.Time) bool {
 	v := l.violations[destinationID]
@@ -244,7 +256,11 @@ func (l *Limiter) incrementViolation(destinationID string, now time.Time) bool {
 		l.violations[destinationID] = v
 	}
 	v.count++
-	return v.count >= l.cfg.MaxLimitsBeforeStop
+	if v.banned || v.count < l.cfg.MaxLimitsBeforeStop {
+		return false
+	}
+	v.banned = true
+	return true
 }
 
 // isUserType returns true for destination types that should use the DM limit.
@@ -452,6 +468,17 @@ func (l *Limiter) StateFor(id, dtype string) []TargetState {
 	}
 
 	return result
+}
+
+// ClearViolations forgets a target's 24h breach history, including the ban
+// latch, without touching its current window counters. Called when a user
+// is re-enabled (!start, !enable) after a ban, so a repeat offender is
+// banned again after another MaxLimitsBeforeStop breaches rather than
+// never within the rest of the window.
+func (l *Limiter) ClearViolations(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.violations, id)
 }
 
 // Reset clears all counters, violation history, and bans for one target

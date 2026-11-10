@@ -2,6 +2,7 @@ package commands
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -240,4 +241,28 @@ func TestLure_AcceptsAreaOverride(t *testing.T) {
 	rules, _ := ctx.Tracking.Lures.SelectByIDProfile("user1", 1)
 	require.Len(t, rules, 1)
 	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+}
+
+// `!lure remove id:N` is what `/untrack lure` and `!untrack lure id:N` send.
+// It used to fail with "no lure type" because the type check ran before the
+// remove-by-UID branch (#278).
+func TestLure_RemoveByID(t *testing.T) {
+	ctx := lureCtx(t)
+	runLure(t, ctx, "normal glacial")
+	rows, _ := ctx.Tracking.Lures.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 2)
+
+	var target int64
+	for _, r := range rows {
+		if r.LureID == 501 {
+			target = r.UID
+		}
+	}
+	replies := runLure(t, ctx, "remove id:"+strconv.FormatInt(target, 10))
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ = ctx.Tracking.Lures.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 502, rows[0].LureID, "glacial rule should survive")
 }

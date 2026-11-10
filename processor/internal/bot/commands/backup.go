@@ -18,8 +18,13 @@ var validBackupName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // backupTables lists all tracking tables to export/import.
 var backupTables = []string{
-	"monsters", "raid", "egg", "quest", "invasion", "weather", "lures", "gym", "nests", "maxbattle", "forts",
+	"monsters", "raid", "egg", "quest", "invasion", "lures", "gym", "nests", "maxbattle", "forts",
 }
+
+// legacyBackupTables are keys older backup files may contain for tables no
+// longer part of backups. Restore ignores them rather than rejecting the
+// file. weather: !weather was removed and nothing can create weather rules.
+var legacyBackupTables = []string{"weather"}
 
 type BackupCommand struct{}
 

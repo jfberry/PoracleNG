@@ -241,57 +241,16 @@ func (e *Enricher) enrichPokemonGameData(m map[string]any, pokemon *webhook.Poke
 	if weather == 0 {
 		weather = pokemon.Weather
 	}
-	m["boostingWeatherIds"] = gd.GetBoostingWeathers(monster.Types)
+	boostingWeathers := gd.GetBoostingWeathers(monster.Types)
+	m["boostingWeatherIds"] = boostingWeathers
+	m["boostingWeatherEmojiKeys"] = gd.GetWeatherEmojiKeys(boostingWeathers)
 	m["alteringWeathers"] = gd.GetAlteringWeathers(monster.Types, weather)
 
 	// Weakness calculation
 	m["weaknessList"] = gamedata.CalculateWeaknesses(monster.Types, gd.Types)
 
 	// Weather forecast impact
-	if pokemon.DisappearTime > 0 {
-		nextHourTS, _ := m["nextHourTimestamp"].(int64)
-		if nextHourTS > 0 && pokemon.DisappearTime > nextHourTS {
-			forecastCurrent, _ := m["weatherForecastCurrent"].(int)
-			forecastNext, _ := m["weatherForecastNext"].(int)
-			weather := pokemon.BoostedWeather
-			if weather == 0 {
-				weather = pokemon.Weather
-			}
-
-			if forecastNext > 0 {
-				pokemonShouldBeBoosted := forecastCurrent > 0 && gd.IsBoostedByWeather(monster.Types, forecastCurrent)
-
-				boostMayChange := (weather > 0 && forecastNext != weather) ||
-					(forecastCurrent > 0 && forecastNext != forecastCurrent) ||
-					(pokemonShouldBeBoosted && weather == 0)
-
-				if boostMayChange {
-					pokemonWillBeBoosted := gd.IsBoostedByWeather(monster.Types, forecastNext)
-
-					if (weather > 0 && !pokemonWillBeBoosted) || (weather == 0 && pokemonWillBeBoosted) {
-						if pokemonShouldBeBoosted && weather == 0 {
-							m["weatherCurrent"] = 0
-						} else if weather > 0 {
-							m["weatherCurrent"] = weather
-						} else {
-							m["weatherCurrent"] = forecastCurrent
-						}
-						m["weatherNext"] = forecastNext
-						// Format weatherChangeTime only when change matters (matching JS)
-						// Strip seconds — JS uses .slice(0, -3) to remove ":SS"
-						if ts, ok := m["weatherChangeTS"].(int64); ok {
-							tz := geo.GetTimezone(pokemon.Latitude, pokemon.Longitude)
-							formatted := geo.FormatTime(ts, tz, e.TimeLayout)
-							if len(formatted) >= 3 {
-								formatted = formatted[:len(formatted)-3]
-							}
-							m["weatherChangeTime"] = formatted
-						}
-					}
-				}
-			}
-		}
-	}
+	e.addWeatherChangeForecast(m, monster.Types, weather, pokemon.DisappearTime, pokemon.Latitude, pokemon.Longitude)
 
 	// Map URLs
 	e.addMapURLs(m, pokemon.Latitude, pokemon.Longitude, "pokemon", pokemon.EncounterID)
@@ -425,6 +384,9 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	evolutions, megaEvolutions := e.buildEvolutions(gd, tr, pokemon.PokemonID, pokemon.Form)
 	m["evolutions"] = evolutions
 	m["megaEvolutions"] = megaEvolutions
+	// Chain-wide, as PoracleJS did: Electrike → Mega Manectric counts. Outranks
+	// the base-layer flag, which only reflects the species itself.
+	m["hasMegaEvolutions"] = len(megaEvolutions) > 0
 
 	// Previous evolutions (what evolves into this pokemon)
 	m["prevEvolutions"] = e.buildPrevEvolutions(gd, tr, pokemon.PokemonID)
@@ -576,7 +538,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 			}
 
 			nameInfo := make(map[string]any)
-			TranslateMonsterNames(nameInfo, gd, tr, evo.PokemonID, evo.FormID, 0, 0)
+			TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, evo.PokemonID, evo.FormID, 0, 0)
 			TranslateTypeNames(nameInfo, tr, nil, evoMon.Types)
 			nameInfo["id"] = evo.PokemonID
 			nameInfo["form"] = evo.FormID
@@ -597,24 +559,10 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 			}
 
 			megaInfo := make(map[string]any)
-			// Mega name: prefer the pokemon+mega-evolution combination key
-			// poke_{id}_e{tempEvoID} (e.g. poke_6_e2 = "Mega Charizard X")
-			// when pogo-translations ships one. Fall back to the util.json
-			// format pattern ("Mega {0}" applied to the translated base
-			// pokemon name) for species that don't have a dedicated key.
-			fullName := ""
-			comboKey := fmt.Sprintf("poke_%d_e%d", m.PokemonID, te.TempEvoID)
-			if translated := tr.T(comboKey); translated != comboKey && translated != "" {
-				fullName = translated
-			} else {
-				baseName := tr.T(gamedata.PokemonTranslationKey(m.PokemonID))
-				pattern := "{0}"
-				if p, ok := gd.Util.MegaName[te.TempEvoID]; ok {
-					pattern = p
-				}
-				fullName = i18n.Format(pattern, baseName)
+			megaInfo["fullName"] = megaFullName(gd, tr, m.PokemonID, te.TempEvoID)
+			if e.Translations != nil {
+				megaInfo["fullNameEng"] = megaFullName(gd, e.Translations.For("en"), m.PokemonID, te.TempEvoID)
 			}
-			megaInfo["fullName"] = fullName
 			megaInfo["evolution"] = te.TempEvoID
 			megaInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(types)
 			TranslateTypeNames(megaInfo, tr, nil, types)
@@ -629,6 +577,24 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 
 	walk(monster, 0)
 	return evolutions, megaEvolutions
+}
+
+// megaFullName returns the translated name of a mega/primal evolution. It
+// prefers the pokemon+mega-evolution combination key poke_{id}_e{tempEvoID}
+// (e.g. poke_6_e2 = "Mega Charizard X") when pogo-translations ships one, and
+// falls back to the util.json format pattern ("Mega {0}" applied to the
+// translated base pokemon name) for species without a dedicated key.
+func megaFullName(gd *gamedata.GameData, tr *i18n.Translator, pokemonID, tempEvoID int) string {
+	comboKey := fmt.Sprintf("poke_%d_e%d", pokemonID, tempEvoID)
+	if translated := tr.T(comboKey); translated != comboKey && translated != "" {
+		return translated
+	}
+	baseName := tr.T(gamedata.PokemonTranslationKey(pokemonID))
+	pattern := "{0}"
+	if p, ok := gd.Util.MegaName[tempEvoID]; ok {
+		pattern = p
+	}
+	return i18n.Format(pattern, baseName)
 }
 
 // buildPrevEvolutions returns translated info about what pokemon evolve into this one,

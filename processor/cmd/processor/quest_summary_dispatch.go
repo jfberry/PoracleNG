@@ -11,6 +11,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -61,6 +64,21 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		return
 	}
 	if human == nil {
+		return
+	}
+
+	// Fire-time gates (#311). The platform check repeats the buffer-time
+	// one so entries buffered before an operator disabled the platform —
+	// or restored from the summary-buffer snapshot — are not sent. Mutes
+	// are only evaluated here (see ProcessQuest for why not at buffer
+	// time): a mute active when the digest fires suppresses the entries
+	// it covers.
+	if !ps.platformEnabled(human.Type) {
+		log.Debugf("summary dispatch: %s platform disabled — dropping %d buffered entries", humanID, len(fresh))
+		return
+	}
+	fresh = ps.unmutedSummaryRows(human.ID, human.Type, fresh)
+	if len(fresh) == 0 {
 		return
 	}
 
@@ -118,9 +136,10 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		return
 	}
 
-	// External-validator gate at delivery time. Immediate quests run
-	// filterValidation in ProcessQuest; the buffered path defers it to
-	// here so the validator's "is this destination valid right now?"
+	// External-validator gate at delivery time. Each buffered match was
+	// already validated per quest (with its real webhook and areas) in
+	// ProcessQuest before buffering; this second call re-checks at fire
+	// time so the validator's "is this destination valid right now?"
 	// answer reflects current state rather than state from hours ago.
 	// We send the first buffered quest's raw payload as a representative
 	// webhook (the validator's user-level checks dominate; per-quest
@@ -377,4 +396,39 @@ func (ps *ProcessorService) buildQuestSummaryGroupView(rewardType, rewardID, rew
 		Chunk:      chunk,
 		Chunks:     chunks,
 	}, ps.enricher.StaticMap, tr)
+}
+
+// unmutedSummaryRows drops buffered quests covered by a mute active now,
+// building the same mute.Event an immediate quest match uses (pokestop +
+// matched areas + rule UID). A row that was buffered by several rules is
+// only suppressed by tracking-scope mutes when every one of its rules is
+// muted; pokestop/area/everything mutes match regardless of UID.
+func (ps *ProcessorService) unmutedSummaryRows(humanID, humanType string, rows []tracker.BufferedQuest) []tracker.BufferedQuest {
+	if ps.muteStore == nil || len(rows) == 0 {
+		return rows
+	}
+	now := time.Now().Unix()
+	kept := rows[:0]
+	for _, r := range rows {
+		ev := mute.Event{PokestopID: r.PokestopID, Area: r.Areas}
+		muted := ps.muteStore.Match(humanID, ev, now)
+		if !muted && len(r.RuleUIDs) > 0 {
+			muted = true
+			for _, uid := range r.RuleUIDs {
+				ev.MatchedRuleUID = uid
+				ev.MatchedRuleTable = "quest"
+				if !ps.muteStore.Match(humanID, ev, now) {
+					muted = false
+					break
+				}
+			}
+		}
+		if muted {
+			metrics.MuteHitsTotal.WithLabelValues(humanType).Inc()
+			log.Debugf("summary dispatch: dropping muted quest at %s for %s", r.PokestopID, humanID)
+			continue
+		}
+		kept = append(kept, r)
+	}
+	return kept
 }

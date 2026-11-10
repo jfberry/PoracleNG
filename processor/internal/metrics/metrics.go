@@ -326,7 +326,11 @@ var (
 	})
 	DeliveryLaneBackpressure = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "poracle_delivery_lane_backpressure_total",
-		Help: "Send enqueues that blocked on a full lane",
+		Help: "Send enqueues that found a full destination lane (saturation, not loss — see poracle_delivery_lane_shed_total)",
+	})
+	DeliveryLaneShed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_lane_shed_total",
+		Help: "Messages discarded to make room on a full destination lane (real message loss — alert on this)",
 	})
 	DeliveryCleanDeleteDropped = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "poracle_delivery_clean_delete_dropped_total",

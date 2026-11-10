@@ -17,6 +17,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
+	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 )
@@ -67,7 +68,7 @@ func New(cfg Config) (*Bot, error) {
 	// Initialize reconciliation — needed for check_role periodic sync AND
 	// for /start DM registration (verifies channel membership via API).
 	if cfg.DTS != nil {
-		b.reconciliation = NewTelegramReconciliation(api, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS)
+		b.reconciliation = NewTelegramReconciliation(api, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS, b.StateMgr)
 		if cfg.Cfg.Telegram.CheckRole {
 			go b.reconciliationLoop()
 		}
@@ -401,6 +402,29 @@ func (b *Bot) handleMessage(m *models.Message) {
 
 		// Populate delegated admin permissions
 		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "telegram", userID, nil)
+		if !isDM {
+			// The chat is known by its topic-composite ID inside a forum
+			// topic and by the plain chat ID; delegation may be keyed on
+			// either.
+			chatIDs := []string{ctx.ChannelID}
+			if base := formatInt64(chatID); base != ctx.ChannelID {
+				chatIDs = append(chatIDs, base)
+			}
+			var chatCommunities []string
+			if b.Cfg.Area.Enabled {
+				for _, id := range chatIDs {
+					if h, err := ctx.Humans.Get(id); err == nil && h != nil {
+						chatCommunities = h.CommunityMembership
+						break
+					}
+				}
+			}
+			ctx.Permissions.ChannelTracking = bot.CalculateTelegramChannelPermissions(b.Cfg, userID, chatIDs, chatCommunities)
+		}
+		if b.Cfg.Area.Enabled {
+			ctx.CommunityAdminOf = community.IsTelegramCommunityAdmin(b.Cfg.Area.Communities, userID)
+			ctx.IsCommunityAdmin = len(ctx.CommunityAdminOf) > 0
+		}
 
 		// Set language hint from available_languages
 		ctx.SetLanguageHint(cmd.LanguageHint)
@@ -434,7 +458,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 			}
 		}
 
-		replies := handler.Run(ctx, remainingArgs)
+		replies := bot.RunLocked(handler, ctx, remainingArgs)
 		replies = bot.ApplyMaintenanceSuffix(replies, b.Dispatcher, b.Translations.For(userLang).T("cmd.maintenance.active_suffix"))
 		b.sendReplies(chatID, threadID, m.From.ID, replies)
 	}

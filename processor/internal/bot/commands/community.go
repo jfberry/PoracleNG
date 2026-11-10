@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/humanlock"
 )
 
 // CommunityCommand implements !community -- admin-only community management.
@@ -16,6 +17,10 @@ type CommunityCommand struct{}
 
 func (c *CommunityCommand) Name() string      { return "cmd.community" }
 func (c *CommunityCommand) Aliases() []string { return nil }
+
+// ExemptFromTargetLock: !community writes the humans it names (or the channel
+// target it falls back to); each write locks that human itself (spec §3.6).
+func (c *CommunityCommand) ExemptFromTargetLock() {}
 
 func (c *CommunityCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
@@ -121,27 +126,8 @@ func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, 
 
 	var messages []string
 	for _, id := range targets {
-		human, err := ctx.Humans.Get(id)
-		if err != nil {
-			log.Errorf("community: select human %s: %v", id, err)
-			continue
-		}
-		if human == nil {
-			continue
-		}
-
-		var newCommunities []string
-		if isAdd {
-			newCommunities = bot.AddCommunity(ctx.Config, human.CommunityMembership, communityName)
-			messages = append(messages, fmt.Sprintf("Add community %s to target %s %s", communityName, id, human.Name))
-		} else {
-			newCommunities = bot.RemoveCommunity(ctx.Config, human.CommunityMembership, communityName)
-			messages = append(messages, fmt.Sprintf("Remove community %s from target %s %s", communityName, id, human.Name))
-		}
-
-		newRestrictions := bot.CalculateLocationRestrictions(ctx.Config, newCommunities)
-		if err := ctx.Humans.SetCommunity(id, newCommunities, newRestrictions); err != nil {
-			log.Errorf("community: update human %s: %v", id, err)
+		if msg := c.addRemoveOne(ctx, id, communityName, isAdd); msg != "" {
+			messages = append(messages, msg)
 		}
 	}
 
@@ -151,6 +137,39 @@ func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, 
 		return []bot.Reply{{React: "👌"}}
 	}
 	return []bot.Reply{{React: "✅", Text: strings.Join(messages, "\n")}}
+}
+
+// addRemoveOne read-modify-writes id's community membership under id's write
+// lock, so it cannot interleave with the reconciler or an API write. Returns
+// the report line, or "" when id is not registered.
+func (c *CommunityCommand) addRemoveOne(ctx *bot.CommandContext, id, communityName string, isAdd bool) string {
+	unlock := humanlock.Lock(id)
+	defer unlock()
+
+	human, err := ctx.Humans.Get(id)
+	if err != nil {
+		log.Errorf("community: select human %s: %v", id, err)
+		return ""
+	}
+	if human == nil {
+		return ""
+	}
+
+	var newCommunities []string
+	var msg string
+	if isAdd {
+		newCommunities = bot.AddCommunity(ctx.Config, human.CommunityMembership, communityName)
+		msg = fmt.Sprintf("Add community %s to target %s %s", communityName, id, human.Name)
+	} else {
+		newCommunities = bot.RemoveCommunity(ctx.Config, human.CommunityMembership, communityName)
+		msg = fmt.Sprintf("Remove community %s from target %s %s", communityName, id, human.Name)
+	}
+
+	newRestrictions := bot.CalculateLocationRestrictions(ctx.Config, newCommunities)
+	if err := ctx.Humans.SetCommunity(id, newCommunities, newRestrictions); err != nil {
+		log.Errorf("community: update human %s: %v", id, err)
+	}
+	return msg
 }
 
 func (c *CommunityCommand) runShow(ctx *bot.CommandContext, args []string) []bot.Reply {
@@ -203,7 +222,11 @@ func (c *CommunityCommand) runClear(ctx *bot.CommandContext, args []string) []bo
 
 	var messages []string
 	for _, id := range targets {
-		if err := ctx.Humans.SetCommunity(id, nil, nil); err != nil {
+		err := func() error {
+			defer humanlock.Lock(id)()
+			return ctx.Humans.SetCommunity(id, nil, nil)
+		}()
+		if err != nil {
 			log.Errorf("community: clear %s: %v", id, err)
 			continue
 		}

@@ -1,8 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-
 	"github.com/jmoiron/sqlx"
 )
 
@@ -39,9 +37,7 @@ func LoadNests(db *sqlx.DB) ([]*NestTracking, error) {
 
 	result := make([]*NestTracking, len(nests))
 	for i := range nests {
-		if nests[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(nests[i].OverrideAreasRaw), &nests[i].OverrideAreas)
-		}
+		nests[i].OverrideAreas = loadOverrideKeys(nests[i].OverrideAreasRaw)
 		result[i] = &nests[i]
 	}
 	return result, nil

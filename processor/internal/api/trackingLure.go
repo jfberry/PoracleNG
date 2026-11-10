@@ -174,7 +174,7 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Pre-fetch override context once so per-row validation doesn't re-query.
-		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
 		if ocMsg != "" {
 			trackingJSONError(c, ocCode, ocMsg)
 			return
@@ -193,7 +193,7 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 				return
 			}
 
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -220,7 +220,7 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 				Clean:                 clean,
 				LureID:                lureID,
 				OverrideLocationLabel: req.OverrideLocationLabel,
-				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+				OverrideAreas:         v1NormalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 
@@ -231,6 +231,10 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.LureGetUID, store.LureSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.LureGetUID, store.LureSetUID)
 
 		// Build confirmation message before applying changes

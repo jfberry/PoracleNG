@@ -897,6 +897,16 @@
 		"8": "Legendary Gigantamax Battle"
 	},
 	"emojis": {
+		"showcase-focus-pokemon": "\ud83c\udfc6",
+		"showcase-focus-type": "\ud83c\udfc6",
+		"showcase-focus-alignment": "\ud83c\udfc6",
+		"showcase-focus-class": "\ud83c\udfc6",
+		"showcase-focus-family": "\ud83c\udfc6",
+		"showcase-focus-buddy": "\ud83c\udfc6",
+		"showcase-focus-generation": "\ud83c\udfc6",
+		"showcase-focus-hatched": "\ud83c\udfc6",
+		"showcase-focus-mega": "\ud83c\udfc6",
+		"showcase-focus-shiny": "\ud83c\udfc6",
 		"lure-normal": "\ud83d\udccd",
 		"lure-glacial": "\u2744",
 		"lure-mossy": "\uD83C\uDF43",
@@ -964,6 +974,38 @@
 			"name": "Showcase",
 			"color": "03AEB6",
 			"emoji": "incident-showcase"
+		}
+	},
+	"showcaseFocus": {
+		"pokemon": {
+			"emoji": "showcase-focus-pokemon"
+		},
+		"type": {
+			"emoji": "showcase-focus-type"
+		},
+		"alignment": {
+			"emoji": "showcase-focus-alignment"
+		},
+		"class": {
+			"emoji": "showcase-focus-class"
+		},
+		"family": {
+			"emoji": "showcase-focus-family"
+		},
+		"buddy": {
+			"emoji": "showcase-focus-buddy"
+		},
+		"generation": {
+			"emoji": "showcase-focus-generation"
+		},
+		"hatched": {
+			"emoji": "showcase-focus-hatched"
+		},
+		"mega": {
+			"emoji": "showcase-focus-mega"
+		},
+		"shiny": {
+			"emoji": "showcase-focus-shiny"
 		}
 	}
 }

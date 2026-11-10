@@ -30,14 +30,17 @@ type poracleWebResponse struct {
 	AvailableLanguages           []string         `json:"availableLanguages" doc:"Language codes this server accepts for a user's alert language (sorted). null means unrestricted — every language is allowed — so clients should offer their full menu. A non-null array is the exact allow-list enforced by the set-language endpoints."`
 	ChannelNotesContainsCategory bool             `json:"channelNotesContainsCategory" doc:"Whether channel notes carry the category (check_role + update_channel_notes)"`
 	DefaultDistance              int              `json:"defaultDistance" doc:"Default tracking distance (m)"`
+	DefaultEdit                  []string         `json:"defaultEdit" doc:"Alert types ([tracking] default_edit) whose rules edit the original alert in place even without the edit flag. Always an array; empty when none."`
 	DefaultPvpCap                int              `json:"defaultPvpCap" doc:"Default user PVP level cap"`
 	DefaultTemplateName          string           `json:"defaultTemplateName" doc:"Default DTS template name"`
 	DisabledHooks                []string         `json:"disabledHooks" doc:"Webhook types disabled on this server"`
 	EverythingFlagPermissions    string           `json:"everythingFlagPermissions" doc:"Permission mode for the !track everything keyword"`
 	GymBattles                   bool             `json:"gymBattles" doc:"Whether gym battle tracking is enabled"`
 	Locale                       string           `json:"locale" doc:"Default server locale"`
-	MaxDistance                  int              `json:"maxDistance" doc:"Maximum allowed tracking distance (m)"`
+	MaxDistance                  int              `json:"maxDistance" doc:"Maximum tracking distance (m) for users (admins and channels/webhooks/groups exempt); 0 = no limit"`
+	MaxAreas                     int              `json:"maxAreas" doc:"Maximum number of areas a user may select per profile or per rule override (admins and channels/webhooks/groups exempt); 0 = no limit"`
 	Prefix                       string           `json:"prefix" doc:"Discord command prefix"`
+	Provider                     string           `json:"provider" doc:"Geocoding provider type: nominatim | photon | google. Empty when no geocoder is configured — do not infer that from providerURL, which google does not use."`
 	ProviderURL                  string           `json:"providerURL" doc:"Geocoding provider URL"`
 	PvpCaps                      []int            `json:"pvpCaps" doc:"Configured PVP level caps"`
 	PvpFilterGreatMinCP          int              `json:"pvpFilterGreatMinCP" doc:"Minimum CP floor for great-league PVP filters"`
@@ -298,11 +301,23 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		{"nest", cfg.General.DisableNest},
 		{"gym", cfg.General.DisableGym},
 		{"maxbattle", cfg.General.DisableMaxBattle},
+		// "showcase" rather than "pokestop_event": matches how "fort" was
+		// named for its tracking type in #195. See #210.
+		{"showcase", cfg.General.DisableShowcase},
 	}
 	disabledHooks := make([]string, 0)
 	for _, h := range hookTypes {
 		if h.Disable {
 			disabledHooks = append(disabledHooks, h.Name)
+		}
+	}
+
+	// Only the types that actually honour edit; unsupported entries are
+	// ignored by the processor too.
+	defaultEdit := make([]string, 0)
+	for _, t := range config.DefaultEditTypes {
+		if cfg.Tracking.DefaultEditFor(t) {
+			defaultEdit = append(defaultEdit, t)
 		}
 	}
 
@@ -352,6 +367,7 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		Version:                      Version,
 		Locale:                       cfg.General.Locale,
 		Prefix:                       cfg.Discord.Prefix,
+		Provider:                     cfg.Geocoding.Provider,
 		ProviderURL:                  cfg.Geocoding.ProviderURL,
 		AddressFormat:                cfg.Locale.AddressFormat,
 		StaticKey:                    staticKeys,
@@ -371,7 +387,9 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 			Telegram: telegramAdmins,
 		},
 		MaxDistance:               cfg.Tracking.MaxDistance,
+		MaxAreas:                  cfg.Tracking.MaxAreas,
 		DefaultDistance:           cfg.Tracking.DefaultDistance,
+		DefaultEdit:               defaultEdit,
 		EverythingFlagPermissions: cfg.Tracking.EverythingFlagPermissions,
 		DisabledHooks:             disabledHooks,
 		GymBattles:                cfg.Tracking.EnableGymBattle,

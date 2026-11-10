@@ -60,6 +60,7 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 		}
 
 		trackings = append(trackings, trackingUserData{
+			RuleTable:             "invasion",
 			HumanID:               inv.ID,
 			ProfileNo:             inv.ProfileNo,
 			Distance:              inv.Distance,

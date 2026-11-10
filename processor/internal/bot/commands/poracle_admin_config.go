@@ -136,8 +136,20 @@ func paConfigRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 	case "search", "find":
 		return paConfigSearch(ctx, args[1:])
 	default:
-		return paConfigSection(ctx, sub)
+		// Join all args so `config alert limits` works as well as
+		// `config alert_limits` (which the parser has already turned into
+		// the single arg "alert limits").
+		return paConfigSection(ctx, strings.Join(args, " "))
 	}
+}
+
+// normConfigName folds a config section name / search term so it compares
+// equal regardless of case and of underscores vs spaces. The command parser
+// lowercases input and converts unquoted underscores to spaces, so
+// `alert_limits` arrives as "alert limits" and `webhookLogging` as
+// "webhooklogging".
+func normConfigName(s string) string {
+	return strings.ToLower(strings.ReplaceAll(s, "_", " "))
 }
 
 // paConfigSearch walks every leaf in every section and returns the ones
@@ -147,7 +159,8 @@ func paConfigRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 //
 // Multi-word args are joined with spaces so `search dm log` matches the
 // literal substring "dm log" — useful for narrowing when a single word
-// is too noisy.
+// is too noisy. Underscores and spaces are treated as equivalent (see
+// normConfigName), so `search dm_limit` matches alert_limits.dm_limit.
 func paConfigSearch(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
@@ -159,13 +172,14 @@ func paConfigSearch(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	term := strings.ToLower(strings.Join(args, " "))
+	normTerm := normConfigName(term)
 
 	var matches []string
 	for _, sec := range configSections(ctx.Config) {
 		for _, l := range collectLeaves(sec.value, sec.name) {
 			rendered := renderLeaf(l.path, l.value)
-			if strings.Contains(strings.ToLower(l.path), term) ||
-				strings.Contains(strings.ToLower(rendered), term) {
+			if strings.Contains(normConfigName(l.path), normTerm) ||
+				strings.Contains(normConfigName(rendered), normTerm) {
 				matches = append(matches, l.path+" = "+rendered)
 			}
 		}
@@ -176,13 +190,9 @@ func paConfigSearch(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	sort.Strings(matches)
-	var sb strings.Builder
-	sb.WriteString(tr.Tf("cmd.poracle_admin.config.search.header", term, len(matches)))
-	for _, m := range matches {
-		sb.WriteString("\n  ")
-		sb.WriteString(m)
-	}
-	return bot.SplitTextReply(sb.String())
+	replies := bot.SplitCodeBlockReply(strings.Join(matches, "\n"))
+	replies[0].Text = tr.Tf("cmd.poracle_admin.config.search.header", ctx.EscapeForCode(term), len(matches)) + "\n" + replies[0].Text
+	return replies
 }
 
 // paConfigKeys lists all top-level section names with their key counts.
@@ -217,7 +227,7 @@ func paConfigSection(ctx *bot.CommandContext, section string) []bot.Reply {
 	sections := configSections(ctx.Config)
 
 	for _, sec := range sections {
-		if sec.name == section {
+		if normConfigName(sec.name) == normConfigName(section) {
 			if sec.keyCount == 0 {
 				return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.config.empty_section", section)}}
 			}
@@ -226,7 +236,7 @@ func paConfigSection(ctx *bot.CommandContext, section string) []bot.Reply {
 				return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.config.empty_section", section)}}
 			}
 			block := fmt.Sprintf("[%s]\n%s", sec.name, text)
-			return bot.SplitTextReply(block)
+			return bot.SplitCodeBlockReply(block)
 		}
 	}
 
@@ -257,7 +267,7 @@ func paConfigFull(ctx *bot.CommandContext) []bot.Reply {
 		}
 	}
 
-	return bot.SplitTextReply(sb.String())
+	return bot.SplitCodeBlockReply(sb.String())
 }
 
 // sectionEntry holds a parsed config section for display.
@@ -450,8 +460,8 @@ func isNestedStruct(v reflect.Value) bool {
 		return false
 	}
 	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		ft := t.Field(i)
+	for ft := range t.Fields() {
+		ft := ft
 		if !ft.IsExported() {
 			continue
 		}

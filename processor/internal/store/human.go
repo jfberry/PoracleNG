@@ -131,11 +131,13 @@ type HumanStore interface {
 	// disabled_date to now. When enabling, clears disabled_date.
 	SetAdminDisable(id string, disable bool) error
 
-	// SetLocation updates latitude and longitude on both humans and the
-	// active profile.
+	// SetLocation updates latitude and longitude on profile profileNo, and on
+	// humans only when profileNo is the human's current profile (humans holds
+	// the live, matched-against copy of the active profile).
 	SetLocation(id string, profileNo int, lat, lon float64) error
 
-	// SetArea updates the area JSON on both humans and the active profile.
+	// SetArea updates the area JSON on profile profileNo, and on humans only
+	// when profileNo is the human's current profile.
 	SetArea(id string, profileNo int, areas []string) error
 
 	// SetLanguage updates the language field.
@@ -185,12 +187,21 @@ type HumanStore interface {
 	// GetProfiles returns all profiles for a human.
 	GetProfiles(id string) ([]Profile, error)
 
+	// RuleProfileNos returns the distinct profile_no values the human's
+	// tracking rules use, ascending. It can name profiles with no profiles
+	// row: a PoracleJS-migrated human's active profile, or one left behind
+	// by a deleted profile (#330).
+	RuleProfileNos(id string) ([]int, error)
+
 	// SwitchProfile switches the human's active profile. Returns false if
 	// the profile does not exist.
 	SwitchProfile(id string, profileNo int) (bool, error)
 
-	// AddProfile creates a new profile, auto-assigning the next profile_no.
-	AddProfile(id string, name string, activeHours string) error
+	// AddProfile creates a new profile, auto-assigning the LOWEST FREE
+	// profile_no (not max+1 — with 1 and 3 taken the new one is 2), and
+	// returns the number it assigned. Callers cannot predict it, so returning
+	// it is the only way for an API to report what it created (#213).
+	AddProfile(id string, name string, activeHours string) (int, error)
 
 	// DeleteProfile removes a profile and its tracking data. If the
 	// deleted profile was current, switches to the lowest remaining.
@@ -204,6 +215,10 @@ type HumanStore interface {
 
 	// UpdateProfileHours updates the active_hours field on a profile.
 	UpdateProfileHours(id string, profileNo int, activeHours string) error
+
+	// UpdateProfileName renames a profile, leaving its schedule, area and
+	// location untouched (#213).
+	UpdateProfileName(id string, profileNo int, name string) error
 
 	// --- Saved locations ---
 
@@ -237,9 +252,52 @@ type HumanStore interface {
 	// when references exist.
 	CountLocationReferences(id, label string) ([]ReferencingRule, error)
 
-	// PruneOverrideAreas walks every tracking row for the given human and
-	// drops areas no longer in `permitted` from override_areas. If the
-	// override list becomes empty, the column is NULLed so the rule falls
-	// back to the human's areas. No-op when the user has no override rows.
-	PruneOverrideAreas(humanID string, permitted map[string]bool) error
+	// StripOverrideAreas walks every tracking row for the given human and
+	// drops areas present in `denied` (keyed lowercase) from override_areas.
+	// Names absent from denied are kept, even if they are not known fences.
+	// If the override list becomes empty, the column is NULLed so the rule
+	// falls back to the human's areas. No-op when the user has no override rows.
+	StripOverrideAreas(humanID string, denied map[string]bool) error
+
+	// StripUserAreas drops every area present in denied (keyed lowercase) from
+	// humans.area and from EVERY profile row of this human, in one
+	// transaction. Every profile, because SwitchProfile copies profiles.area
+	// into humans.area. Returns the distinct lowercased names removed, in
+	// first-seen order. Names absent from denied are kept. Destroys
+	// user-entered data: callers gate it behind prune_user_areas (#243).
+	StripUserAreas(humanID string, denied map[string]bool) (removed []string, err error)
+
+	// RemoveAreaFromProfiles removes every stored area matching name (by
+	// areaNameMatches: case, underscore/space insensitive) from each listed
+	// profile row, and from humans.area only when the human's
+	// current_profile_no is in profileNos. Kept names keep their stored
+	// spelling and order. Returns the profile numbers whose row changed,
+	// ascending, plus current_profile_no when humans.area changed (so a
+	// current profile with no profiles row is still reported). No transaction: callers hold the per-human lock and the
+	// operation is idempotent. With dryRun true nothing is written and the
+	// return values are what a real run would have changed; changed reports
+	// whether ANY row (a profile or humans.area) was, or with dryRun would be, written (the repo-wide
+	// dry-run mechanism: a trailing dryRun bool parameter).
+	RemoveAreaFromProfiles(id, name string, profileNos []int, dryRun bool) (removedFrom []int, changed bool, err error)
+
+	// RenameAreaInProfiles replaces every stored area matching from (by
+	// areaNameMatches) with to, written exactly as passed, in each listed
+	// profile row and in humans.area when current_profile_no is in
+	// profileNos. Entries already matching to by key are normalised to to and
+	// duplicates collapse, so the list ends holding to once. Returns the
+	// profile numbers whose row changed, ascending, plus current_profile_no
+	// when humans.area changed; changed and dryRun follow
+	// RemoveAreaFromProfiles.
+	RenameAreaInProfiles(id, from, to string, profileNos []int, dryRun bool) (renamedIn []int, changed bool, err error)
+
+	// EditOverrideAreas edits override_areas on the human's rules in the
+	// listed profiles (profile_no IN profileNos). An empty to removes from;
+	// otherwise every entry matching from (by areaNameMatches) is replaced by
+	// to, written exactly as passed, collapsing duplicates by key. Returns,
+	// keyed by canonical v2 type name, the uids whose override list became
+	// empty (those are set to NULL, so the rule falls back to the human's
+	// areas). With dryRun true nothing is written; the result is what a real
+	// run would report. changed is true when ANY override row was (or with
+	// dryRun would be) written, even if broadened is empty.
+	EditOverrideAreas(id string, profileNos []int, from, to string, dryRun bool) (broadened map[string][]int64, changed bool, err error)
 }

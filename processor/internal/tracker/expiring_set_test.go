@@ -134,7 +134,7 @@ func BenchmarkDuplicateCacheCheckPokemon(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
-		dc.CheckPokemon(ids[i%n], true, 1500, disappear)
+		dc.CheckPokemon(ids[i%n], 1, true, 1500, disappear)
 	}
 }
 
@@ -173,16 +173,14 @@ func TestCheckAndAddIsAtomic(t *testing.T) {
 
 	start.Add(1)
 	for range workers {
-		done.Add(1)
-		go func() {
-			defer done.Done()
+		done.Go(func() {
 			start.Wait()
 			k := s.newKey()
 			k.Str("same-encounter").Bool(true).Int(1500)
 			if !s.CheckAndAdd(&k, time.Hour) {
 				firsts.Add(1)
 			}
-		}()
+		})
 	}
 	start.Done()
 	done.Wait()

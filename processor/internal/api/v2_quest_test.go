@@ -313,10 +313,10 @@ func TestV2Quest_CleanEditSummaryBitmask(t *testing.T) {
 	r, qs, _, restore := newV2QuestTestAPI(t)
 	defer restore()
 
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/quest", `[{"reward_type":3,"clean":true,"edit":true,"summary":true}]`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/quest", `[{"reward_type":3,"clean":true,"summary":true}]`)
 	rows := qs.AllRows()
-	if len(rows) != 1 || rows[0].Clean != 7 {
-		t.Fatalf("expected clean bitmask 7, got %+v", rows)
+	if len(rows) != 1 || rows[0].Clean != 5 {
+		t.Fatalf("expected clean bitmask 5 (clean+summary; edit unsupported), got %+v", rows)
 	}
 }
 
@@ -425,7 +425,7 @@ func TestV2Quest_BulkDelete(t *testing.T) {
 
 // --- PUT full-replace -------------------------------------------------------
 
-func TestV2Quest_PutFullReplace_NewUID(t *testing.T) {
+func TestV2Quest_PutFullReplace_KeepsUID(t *testing.T) {
 	r, qs, _, restore := newV2QuestTestAPI(t)
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/quest", `[{"reward_type":3,"reward":1000,"distance":500}]`)
@@ -437,8 +437,8 @@ func TestV2Quest_PutFullReplace_NewUID(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	newUID := int64(v2RulesArray(t, v2DecodeBody(t, w), "updated")[0]["uid"].(float64))
-	if newUID == oldUID {
-		t.Fatalf("PUT must yield a NEW uid")
+	if newUID != oldUID {
+		t.Fatalf("PUT must keep the rule uid: was %d, now %d", oldUID, newUID)
 	}
 	rows := qs.AllRows()
 	if len(rows) != 1 || rows[0].RewardType != 7 || rows[0].Reward != 25 || rows[0].Distance != 0 {
@@ -507,5 +507,15 @@ func TestV2Quest_UnknownHuman404(t *testing.T) {
 	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans/nope/tracking/quest", "")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown human, got %d", w.Code)
+	}
+}
+
+func TestV2Quest_EditTrueRejected(t *testing.T) {
+	r, _, _, restore := newV2QuestTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/quest", `[{"reward_type":3,"edit":true}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for edit:true on quest, got %d: %s", w.Code, w.Body.String())
 	}
 }

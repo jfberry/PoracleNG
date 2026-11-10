@@ -589,15 +589,10 @@ func (ps *ProcessorService) enrichMaxbattle(raw json.RawMessage, language string
 //
 // showAlteredPokemonStaticMap is read from ps.cfg.Weather (nil-safe), exactly
 // like the live consumeWeatherChanges path, so !poracle-test faithfully
-// reproduces the live alert. It matters because WeatherTranslate only
-// populates the "activePokemons" key — the one the bundled and operator
-// weatherchange templates iterate ({{#each activePokemons}}) — when this flag
-// is set. (The sibling "enrichedActivePokemons" key is always populated, but
-// the shipped templates don't read it.) Hardcoding the flag false made the
-// affected-pokemon list vanish from the test render even though production,
-// with show_altered_pokemon_static_map on, shows it. The nil guard preserves
-// the flag-off default for the enrich-parity test harness (which leaves
-// ps.cfg nil).
+// reproduces the live alert's static map (per-user tile with active-pokemon
+// markers when on, base cell tile when off). The affected-pokemon list itself
+// (activePokemons / enrichedActivePokemons) is populated regardless of the
+// flag.
 func (ps *ProcessorService) enrichWeatherChange(raw json.RawMessage, language string, freshenStaleTime bool) (*enrichResult, error) {
 	var wc webhook.WeatherChangeWebhook
 	if err := json.Unmarshal(raw, &wc); err != nil {

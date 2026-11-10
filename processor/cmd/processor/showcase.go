@@ -62,9 +62,9 @@ func showcaseFingerprint(rankings json.RawMessage) string {
 }
 
 // ProcessShowcase handles the showcase slice of a pokéstop webhook. Showcases
-// reuse the incident tracking type (grunt_type="showcase") and the incident
-// template; this handler synthesises display_type=9 and feeds the invasion
-// matcher/enrichment. Edit-mode (EditKey + OverrideCleanTTH) collapses the
+// reuse the incident tracking type (grunt_type="showcase") but render with the
+// dedicated "showcase" template type (leaderboard + focus); this handler
+// synthesises display_type=9 and feeds the invasion matcher/enrichment. Edit-mode (EditKey + OverrideCleanTTH) collapses the
 // empty-start fire and each rank-1 update into one self-editing message.
 func (ps *ProcessorService) ProcessShowcase(raw json.RawMessage) error {
 	if ps.cfg.General.DisableShowcase {
@@ -127,6 +127,7 @@ func (ps *ProcessorService) ProcessShowcase(raw json.RawMessage) error {
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokestop", raw, matchedAreas, matched)
 		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokestopID: sc.PokestopID})
+		applyDefaultEdit(matched, ps.cfg.Tracking, "incident")
 
 		if len(matched) == 0 {
 			l.Debugf("Showcase at %s [%.3f,%.3f] and 0 humans cared", sc.Name, sc.Latitude, sc.Longitude)

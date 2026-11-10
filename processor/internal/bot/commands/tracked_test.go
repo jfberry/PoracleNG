@@ -44,3 +44,24 @@ func TestTracked_ShowsLures(t *testing.T) {
 	assert.Contains(t, all.String(), "Lures", "lure section missing from !tracked")
 	assert.NotContains(t, all.String(), "not tracking any lures")
 }
+
+// With lure in [tracking] default_edit, a lure rule without the edit bit is
+// labelled "edit (default)" in !tracked.
+func TestTracked_DefaultEditLabel(t *testing.T) {
+	ctx := lureCtx(t)
+	fillAllTrackingStores(ctx.Tracking)
+	ctx.Config.Tracking.DefaultEdit = []string{"lure"}
+	cfg := ctx.Config
+	ctx.RowText.DefaultEdit = func(alertType string) bool { return cfg.Tracking.DefaultEditFor(alertType) }
+
+	replies := runLure(t, ctx, "everything")
+	require.NotEmpty(t, replies)
+	require.Equal(t, "✅", replies[0].React, "lure command failed: %s", replies[0].Text)
+
+	var all strings.Builder
+	for _, r := range (&TrackedCommand{}).Run(ctx, nil) {
+		all.WriteString(r.Text)
+		all.WriteByte('\n')
+	}
+	assert.Contains(t, all.String(), "edit (default)")
+}

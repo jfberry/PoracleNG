@@ -40,6 +40,10 @@ type TrackedMessage struct {
 	// deserialise with Template="" (config default) — same graceful fallback
 	// as the pre-existing behaviour.
 	Template string `json:"template,omitempty"`
+	// SentAt is the unix time the message was first sent. Edits leave it
+	// unchanged, so it measures how far up the channel the message now sits.
+	// 0 for entries persisted before this field existed.
+	SentAt int64 `json:"sent_at,omitempty"`
 }
 
 // MessageTracker manages sent messages with TTL-based expiry and clean

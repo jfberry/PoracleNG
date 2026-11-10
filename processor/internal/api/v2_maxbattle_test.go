@@ -310,10 +310,10 @@ func TestV2Maxbattle_StationIDRoundTrip(t *testing.T) {
 func TestV2Maxbattle_CleanEditSummaryBitmask(t *testing.T) {
 	r, ms, _, restore := newV2MaxbattleTestAPI(t)
 	defer restore()
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/maxbattle", `[{"pokemon_id":150,"clean":true,"edit":true,"summary":true}]`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/maxbattle", `[{"pokemon_id":150,"clean":true,"summary":true}]`)
 	rows := ms.AllRows()
-	if len(rows) != 1 || rows[0].Clean != 7 {
-		t.Fatalf("expected clean bitmask 7, got %+v", rows)
+	if len(rows) != 1 || rows[0].Clean != 5 {
+		t.Fatalf("expected clean bitmask 5 (clean+summary; edit unsupported), got %+v", rows)
 	}
 }
 
@@ -434,7 +434,7 @@ func TestV2Maxbattle_BulkDelete(t *testing.T) {
 
 // --- PUT full-replace -------------------------------------------------------
 
-func TestV2Maxbattle_PutFullReplace_NewUID(t *testing.T) {
+func TestV2Maxbattle_PutFullReplace_KeepsUID(t *testing.T) {
 	r, ms, _, restore := newV2MaxbattleTestAPI(t)
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/maxbattle", `[{"pokemon_id":150,"gmax":true}]`)
@@ -446,8 +446,8 @@ func TestV2Maxbattle_PutFullReplace_NewUID(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	newUID := int64(v2RulesArray(t, v2DecodeBody(t, w), "updated")[0]["uid"].(float64))
-	if newUID == oldUID {
-		t.Fatalf("PUT must yield a NEW uid")
+	if newUID != oldUID {
+		t.Fatalf("PUT must keep the rule uid: was %d, now %d", oldUID, newUID)
 	}
 	rows := ms.AllRows()
 	if len(rows) != 1 || rows[0].Gmax != 0 {

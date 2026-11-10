@@ -1542,7 +1542,7 @@ Phase 1 smoke test command.
 | `!ask` / `!script` | Power-user / NLP / scripting |
 | `!userlist` / `!backup` / `!restore` | Admin operations |
 | `!start` / `!stop` | Per-channel enable/disable, infrequent |
-| `!weather` | Read-only info; could add later as `/weather` if requested |
+| `!weather` | Removed — it was a stub that only replied "not yet available" (weather info lives in `!info weather` / `/info weather`) |
 
 Power users and admins continue to use text commands for the full feature set. Slash is the **common path**; text is the **full power path**.
 

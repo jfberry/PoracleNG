@@ -72,12 +72,14 @@ func TestWeatherTrackerEvictsHoursOutsideRetention(t *testing.T) {
 	currentHour := now - (now % 3600)
 	cellID := "cell-retention"
 
-	// Six hours of history, the current hour, and a forecast hour ahead.
+	// Six hours of observed history, the current hour, and a forecast hour
+	// ahead. A stale forecast hour checks the forecast map is pruned too.
 	for h := int64(6); h >= 1; h-- {
-		wt.SetHourWeather(cellID, currentHour-h*3600, 1)
+		setObservedHour(wt, cellID, currentHour-h*3600, 1)
 	}
-	wt.SetHourWeather(cellID, currentHour, 2)
+	setObservedHour(wt, cellID, currentHour, 2)
 	wt.SetHourWeather(cellID, currentHour+3600, 3)
+	wt.SetHourWeather(cellID, currentHour-5*3600, 3)
 
 	wt.evict(now)
 
@@ -170,8 +172,8 @@ func TestWeatherTrackerKeepsHistoryForBackloggedWebhooks(t *testing.T) {
 	comparisonHour := eventHour - 3600 // the entry UpdateFromWebhook compares against
 	cellID := "cell-backlog"
 
-	wt.SetHourWeather(cellID, comparisonHour, 1)
-	wt.SetHourWeather(cellID, eventHour, 1)
+	setObservedHour(wt, cellID, comparisonHour, 1)
+	setObservedHour(wt, cellID, eventHour, 1)
 
 	// The sweep runs on wall clock, already past the event's hour.
 	wt.evict(now)
@@ -280,5 +282,120 @@ func TestWeatherTrackerIdleWindowCoversForecastRefresh(t *testing.T) {
 
 	if !wt.hasCell("cell-forecast") {
 		t.Error("forecast-only cell was evicted before its next refresh could arrive")
+	}
+}
+
+// setObservedHour stores game-reported weather directly, for tests that need
+// observed history without going through change detection. SetHourWeather
+// can't stand in for it: that stores a forecast, which change detection
+// deliberately ignores.
+func setObservedHour(wt *WeatherTracker, cellID string, hourTimestamp int64, condition int) {
+	wt.mu.Lock()
+	defer wt.mu.Unlock()
+	wt.touchController(cellID).hourWeather[hourTimestamp] = condition
+}
+
+// drainChanges returns every pending WeatherChange without blocking.
+func drainChanges(wt *WeatherTracker) []WeatherChange {
+	var out []WeatherChange
+	for {
+		select {
+		case c := <-wt.Changes():
+			out = append(out, c)
+		default:
+			return out
+		}
+	}
+}
+
+// TestWeatherForecastIsNotAChangeBaseline is the webhook half of #356: the
+// game reports Windy, AccuWeather forecasts Rain for an hour the game never
+// re-reported, and the next webhook (still Windy) must not alert Rain -> Windy.
+func TestWeatherForecastIsNotAChangeBaseline(t *testing.T) {
+	hour := time.Unix(1_700_000_000, 0).Truncate(time.Hour).Unix()
+	clock := newTestClock(hour + 10)
+	wt := NewWeatherTracker(WithClock(clock.now))
+	defer wt.Close()
+
+	const cellID = "cell-356-webhook"
+	wt.UpdateFromWebhook(cellID, 5, hour-2*3600+60, 51.5, -0.1, [4][2]float64{})
+	drainChanges(wt)
+
+	// Forecast for the previous and current hour; no webhook in the previous hour.
+	wt.SetHourWeather(cellID, hour-3600, 2)
+	wt.SetHourWeather(cellID, hour, 2)
+
+	wt.UpdateFromWebhook(cellID, 5, hour+1, 51.5, -0.1, [4][2]float64{})
+	if got := drainChanges(wt); len(got) != 0 {
+		t.Fatalf("forecast became the change baseline: %+v", got)
+	}
+
+	// A real change against observed weather still alerts.
+	wt.UpdateFromWebhook(cellID, 5, hour-3600+60, 51.5, -0.1, [4][2]float64{})
+	wt.UpdateFromWebhook(cellID, 3, hour+120, 51.5, -0.1, [4][2]float64{})
+	got := drainChanges(wt)
+	if len(got) != 1 || got[0].OldGameplayCondition != 5 || got[0].GameplayCondition != 3 {
+		t.Fatalf("want one 5 -> 3 change, got %+v", got)
+	}
+}
+
+// TestWeatherForecastDoesNotOverwriteObserved is the boosted-pokemon half of
+// #356: a forecast fetch landing after the game reported this hour must not
+// replace the observed value, so neither current-weather reads nor monster
+// inference see the forecast.
+func TestWeatherForecastDoesNotOverwriteObserved(t *testing.T) {
+	hour := time.Unix(1_700_000_000, 0).Truncate(time.Hour).Unix()
+	clock := newTestClock(hour + 1)
+	wt := NewWeatherTracker(WithClock(clock.now))
+	defer wt.Close()
+
+	const cellID = "cell-356-monster"
+	wt.UpdateFromWebhook(cellID, 5, hour-3600+60, 51.5, -0.1, [4][2]float64{})
+	wt.UpdateFromWebhook(cellID, 5, hour+1, 51.5, -0.1, [4][2]float64{})
+	drainChanges(wt)
+
+	wt.SetHourWeather(cellID, hour, 2)
+	wt.SetHourWeather(cellID, hour+3600, 2)
+
+	if got := wt.GetCurrentWeatherInCell(cellID); got != 5 {
+		t.Errorf("GetCurrentWeatherInCell = %d, want observed 5", got)
+	}
+	if fc := wt.GetWeatherForecast(cellID); fc.Current != 5 || fc.Next != 2 {
+		t.Errorf("GetWeatherForecast = %+v, want current 5 (observed), next 2 (forecast)", fc)
+	}
+	if exp := wt.ExportCellWeather(cellID); exp[hour] != 5 || exp[hour+3600] != 2 {
+		t.Errorf("ExportCellWeather = %v, want observed %d=5 and forecast %d=2", exp, hour, hour+3600)
+	}
+
+	clock.advance(33 * time.Second)
+	for range 6 {
+		wt.CheckWeatherOnMonster(cellID, 51.5, -0.1, 5)
+	}
+	if got := drainChanges(wt); len(got) != 0 {
+		t.Fatalf("monster inference compared against the forecast: %+v", got)
+	}
+}
+
+// TestWeatherForecastFillsDisplayGaps checks the forecast is still used where
+// the game has not reported: the next-hour prediction and an unreported
+// current hour.
+func TestWeatherForecastFillsDisplayGaps(t *testing.T) {
+	hour := time.Unix(1_700_000_000, 0).Truncate(time.Hour).Unix()
+	clock := newTestClock(hour + 600)
+	wt := NewWeatherTracker(WithClock(clock.now))
+	defer wt.Close()
+
+	const cellID = "cell-356-gaps"
+	wt.SetHourWeather(cellID, hour, 4)
+	wt.SetHourWeather(cellID, hour+3600, 6)
+
+	if fc := wt.GetWeatherForecast(cellID); fc.Current != 4 || fc.Next != 6 {
+		t.Errorf("GetWeatherForecast = %+v, want forecast 4 / 6", fc)
+	}
+	if !wt.hasHourWeather(cellID, hour+3600) {
+		t.Error("hasHourWeather must see forecast hours, or EnsureForecast refetches every hour")
+	}
+	if got := wt.GetCurrentWeatherInCell(cellID); got != 0 {
+		t.Errorf("GetCurrentWeatherInCell = %d, want 0: a forecast is not the game's weather", got)
 	}
 }

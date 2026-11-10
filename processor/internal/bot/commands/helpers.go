@@ -136,9 +136,8 @@ func extractPings(args []string) (pings string, remaining []string) {
 	return strings.Join(pingParts, " "), remaining
 }
 
-// enforceDistance applies default and max distance limits from config.
 // enforceDistance applies the configured default_distance (when the user gave
-// no explicit d:) and clamps to max_distance. areaMode must be true when the
+// no explicit d:) and clamps to max_distance (unless limitExempt). areaMode must be true when the
 // rule uses an area: override: area-mode and distance-mode are mutually
 // exclusive, so default_distance must NOT be injected there — otherwise it both
 // trips the area-vs-distance rejection in parseOverride and (if stored) makes
@@ -148,8 +147,8 @@ func enforceDistance(ctx *bot.CommandContext, distance int, areaMode bool) int {
 	if !areaMode && distance == 0 && ctx.Config.Tracking.DefaultDistance > 0 {
 		distance = ctx.Config.Tracking.DefaultDistance
 	}
-	if ctx.Config.Tracking.MaxDistance > 0 && distance > ctx.Config.Tracking.MaxDistance {
-		distance = ctx.Config.Tracking.MaxDistance
+	if limit := bot.MaxDistanceFor(ctx.Config, limitExempt(ctx)); limit > 0 && distance > limit {
+		distance = limit
 	}
 	return distance
 }
@@ -180,8 +179,8 @@ func trackingWarnings(ctx *bot.CommandContext, distance int) string {
 	}
 
 	// Check max distance was applied
-	if ctx.Config.Tracking.MaxDistance > 0 && distance > 0 && distance >= ctx.Config.Tracking.MaxDistance {
-		warnings = append(warnings, tr.Tf("tracking.warn_max_distance", ctx.Config.Tracking.MaxDistance))
+	if limit := bot.MaxDistanceFor(ctx.Config, limitExempt(ctx)); limit > 0 && distance >= limit {
+		warnings = append(warnings, tr.Tf("tracking.warn_max_distance", limit))
 	}
 
 	if len(warnings) == 0 {
@@ -219,21 +218,22 @@ func validateTemplate(ctx *bot.CommandContext, dtsType, templateID string) (*bot
 	return &bot.Reply{React: "🙅", Text: tr.Tf("tracking.template_not_found", templateID)}, ""
 }
 
-// resolveMoveByName looks up a move ID by its translated name.
-// Returns bot.WildcardID if no match is found.
-func resolveMoveByName(ctx *bot.CommandContext, moveName string) int {
+// resolveMoveByName looks up a move ID by its translated (or English)
+// name. ok is false when nothing matches; callers must reject the command
+// rather than fall back to "any move".
+func resolveMoveByName(ctx *bot.CommandContext, moveName string) (id int, ok bool) {
 	if ctx.GameData == nil {
-		return bot.WildcardID
+		return 0, false
 	}
 	tr := ctx.Tr()
 	enTr := ctx.Translations.For("en")
 	for id := range ctx.GameData.Moves {
 		key := gamedata.MoveTranslationKey(id)
 		if strings.EqualFold(tr.T(key), moveName) || strings.EqualFold(enTr.T(key), moveName) {
-			return id
+			return id, true
 		}
 	}
-	return bot.WildcardID
+	return 0, false
 }
 
 // buildTrackingMessage generates the confirmation message for tracking mutations.
@@ -389,19 +389,6 @@ func parseCommonTrackFields(ctx *bot.CommandContext, parsed *bot.ParsedArgs, dts
 	return f, nil
 }
 
-// rejectFormOnRemove mirrors pokemon untrack, which treats form: as an
-// unrecognized argument on removal: removes are species-wide, so silently
-// accepting the token would delete rules for every form. Per-form rules
-// are removed via id:N. Returns nil when no form argument is present.
-func rejectFormOnRemove(ctx *bot.CommandContext, parsed *bot.ParsedArgs) *bot.Reply {
-	formName, ok := parsed.Strings["form"]
-	if !ok || formName == "" {
-		return nil
-	}
-	tr := ctx.Tr()
-	return &bot.Reply{React: "🙅", Text: tr.Tf("msg.unrecognized", "form:"+formName)}
-}
-
 // applyFormFilter applies parsed["form"] to monsters. Returns a
 // helpful reply when the form filter rejects every input — e.g.
 // `!track sinistea form:incorrect` should not silently degrade into
@@ -497,6 +484,27 @@ func filterByTypes(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, type
 		}
 	}
 	return filtered
+}
+
+// hasGenOrTypeFilter reports whether a gen:/type filter was supplied.
+func hasGenOrTypeFilter(parsed *bot.ParsedArgs) bool {
+	return parsed.Singles["gen"] > 0 || len(parsed.Types) > 0
+}
+
+// allBaseForms returns every species (form 0) in the game data, for
+// expanding `everything` into individual rows when a gen/type/form filter
+// must narrow it.
+func allBaseForms(ctx *bot.CommandContext) []bot.ResolvedPokemon {
+	var monsters []bot.ResolvedPokemon
+	if ctx.GameData == nil {
+		return monsters
+	}
+	for key := range ctx.GameData.Monsters {
+		if key.Form == 0 {
+			monsters = append(monsters, bot.ResolvedPokemon{PokemonID: key.ID, Form: 0})
+		}
+	}
+	return monsters
 }
 
 // filterByGenAndType applies generation and type filters from parsed args.

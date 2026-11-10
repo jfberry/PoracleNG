@@ -164,3 +164,22 @@ func TestBuildQuestSummaryView_ZeroCoordSkippedInStaticMap(t *testing.T) {
 		t.Errorf("staticMap = %v, want empty when only zero coords", got)
 	}
 }
+
+func TestBuildQuestSummaryView_EscapesPerStopUserContent(t *testing.T) {
+	tr := i18n.NewBundle().For("en")
+	stop := map[string]any{
+		"pokestopName": `The "Cliff"` + "\n" + `a\b`,
+		"latitude":     8.08,
+		"longitude":    2.69,
+	}
+
+	view := BuildQuestSummaryView(QuestSummaryGroup{RewardType: 3, RewardID: 100, Quests: []map[string]any{stop}}, nil, tr)
+
+	quests := view["quests"].([]map[string]any)
+	if got := quests[0]["pokestopName"]; got != `The ''Cliff'' a?b` {
+		t.Errorf("pokestopName = %q, want escaped", got)
+	}
+	if got := stop["pokestopName"]; got != `The "Cliff"`+"\n"+`a\b` {
+		t.Errorf("caller's map mutated: %q", got)
+	}
+}

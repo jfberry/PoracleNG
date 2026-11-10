@@ -383,6 +383,59 @@ func TestHumaDTSPartials_OK(t *testing.T) {
 	}
 }
 
+// --- custom maps ---
+
+func TestHumaDTSCustomMaps_OK(t *testing.T) {
+	r, api := newDTSTestAPI(t)
+	RegisterDTSCustomMaps(api, func() map[string]map[string]any {
+		return map[string]map[string]any{
+			"generation":      {"1": map[string]any{"genName": "Kanto"}},
+			"weatherBoost.de": {"Windy": "Drache"},
+		}
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/dts/custommaps", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	got := decodeBody(t, w)
+	if got["status"] != "ok" {
+		t.Errorf("status = %v, want ok", got["status"])
+	}
+	maps, ok := got["maps"].(map[string]any)
+	if !ok {
+		t.Fatalf("maps = %v, want object", got["maps"])
+	}
+	gen, _ := maps["generation"].(map[string]any)
+	entry, _ := gen["1"].(map[string]any)
+	if entry["genName"] != "Kanto" {
+		t.Errorf("generation[1] = %v, want genName Kanto", gen["1"])
+	}
+	de, _ := maps["weatherBoost.de"].(map[string]any)
+	if de["Windy"] != "Drache" {
+		t.Errorf("weatherBoost.de = %v, want Windy=Drache", maps["weatherBoost.de"])
+	}
+}
+
+func TestHumaDTSCustomMaps_Empty(t *testing.T) {
+	r, api := newDTSTestAPI(t)
+	RegisterDTSCustomMaps(api, func() map[string]map[string]any { return nil })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/dts/custommaps", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if maps, ok := decodeBody(t, w)["maps"].(map[string]any); !ok || len(maps) != 0 {
+		t.Errorf("maps = %v, want empty object (not null)", maps)
+	}
+}
+
 // --- testdata ---
 
 func TestHumaDTSTestdata_OK(t *testing.T) {

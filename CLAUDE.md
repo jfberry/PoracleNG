@@ -71,6 +71,7 @@ processor/                      # Go binary
       tracker.go                # MessageTracker: TTL-based clean deletion, edit key lookup, disk persistence
       image.go                  # Image download, multipart builder, embed normalization
       delivery.go               # Core types: Job, SentMessage, Sender interface, PermanentError
+    humanlock/                  # Process-wide per-human write lock (API middleware, command hosts, reconcilers)
     ratelimit/                  # Per-destination alert rate limiting (not Discord API rate limiting)
     i18n/                       # Translation system (flat JSON, identifier keys, {0} placeholders)
       locale/                   # Embedded locale files (en.json, de.json, ...)
@@ -143,7 +144,7 @@ Golbat POSTs a JSON array to `POST /` on the processor:
 
 ### 2. Parsing & Dedup
 
-Each handler unmarshals the raw JSON into a typed struct (`webhook/types.go`). Duplicate check follows — keyed on encounter ID + CP + disappear time for pokemon, station ID + battle end + pokemon ID for maxbattle, etc. Duplicates are silently dropped.
+Each handler unmarshals the raw JSON into a typed struct (`webhook/types.go`). Duplicate check follows — keyed on encounter ID + species + verified + CP for pokemon (species so a same-CP species change such as a Ditto reveal still reaches change detection), station ID + battle end + pokemon ID for maxbattle, etc. Duplicates are silently dropped.
 
 **Important**: Fort update webhooks use a nested format from Golbat (`change_type`, `edit_types`, `new`/`old` snapshot objects), not flat fields. The enrichment layer flattens these into template-friendly fields (`name`, `oldName`, `newName`, `isEditName`, `changeTypeText`, etc.).
 
@@ -199,7 +200,7 @@ Enrichment is computed in three layers:
 
 **Per-user enrichment** (computed per matched user):
 - PVP display lists filtered by user's tracking criteria
-- Distance and bearing from user's location
+- Distance and bearing from user's location (pokemon only — other types render per group, see step 4 of Template Rendering)
 
 The enrichment is structured as `enrichment` (base), `perLanguageEnrichment` (keyed by language code), and `perUserEnrichment` (keyed by user ID). The DTS `LayeredView` merges these layers at render time without copying.
 
@@ -214,7 +215,7 @@ The processor renders DTS templates using `jfberry/raymond` (a fork of `mailgun/
 1. Webhook handler enqueues a `RenderJob` to the render channel (buffered, configurable pool size)
 2. Render worker picks up the job, resolves pending static map tile (blocking wait with deadline)
 3. For each matched user: build `LayeredView` (8-layer priority lookup), select DTS template, render with raymond, URL-shorten `<S< ... >S>` markers, parse JSON result, append ping
-4. **Group rendering optimization**: for non-pokemon types, users with the same (template, platform, language) share a single render — only per-user fields (distance, bearing) are patched afterward
+4. **Group rendering optimization**: for non-pokemon types, users with the same (template, platform, language, distance-vs-area rule) share a single render; nothing is patched per user afterward (only the ping is appended). So non-pokemon views have no per-user fields — `distance`/`bearing` exist only for pokemon (per-user enrichment); `userDistanceTrack` works everywhere because it is part of the group key
 5. Rendered delivery jobs dispatched directly to the `delivery.Dispatcher`
 
 **Queue pressure**: When the render channel is >80% full, tile generation is skipped to reduce backpressure.
@@ -282,6 +283,11 @@ Rate limiting is handled by the processor (`internal/ratelimit/`) using a two-ph
 
 Quest tracking rules can opt into *buffered* delivery instead of firing immediately. The `summary` keyword on `!quest` (and the `clean & 4` bit on the `monsters`/`quest` row in the API) routes matched quests into an in-memory `tracker.SummaryBuffer`. A per-user, per-alert-type `summary_schedules` row (active_hours JSON, identical shape to profile schedules) decides when the buffer fires; `SummaryScheduler` wakes on the same wall-clock minute marks as the profile scheduler and dispatches via `ProcessorService.DispatchQuestSummary`, which groups buffered entries by `(rewardType, reward)` and renders one `questSummary` template per group with a multi-pin static map. The buffer is snapshotted to `config/.cache/summary-buffer.json` on shutdown and restored on startup. Users manage schedules via `!summary quest [settime <times>|cleartime|now]` or the `/api/summaries/{id}/{alertType}` endpoints; `!summary quest now` calls the same dispatch path on demand. Edit-mode and reply-threading don't apply to summary messages — each is a fresh send — but each source rule's `clean` bit is captured in the buffered entry, then OR'd across the rules contributing to a single reward group so the summary message for that group inherits clean-deletion if any constituent rule had it enabled. The TTH used for clean-deletion is the LATEST `ExpiresAt` within the same reward group (a "summarised block" — the one logical message, or the chunks it splits into when oversized). Different reward groups in the same dispatch compute their own clean + TTH independently, so a Stardust digest doesn't inherit a Rare Candy digest's later expiry just because they fired together.
 
+Post-match filters on buffered matches (#311), split between buffer time (`bufferQuestMatches`, `cmd/processor/quest.go`) and fire time (`DispatchQuestSummary`, `cmd/processor/quest_summary_dispatch.go`):
+- **Platform enabled** (`[discord]`/`[telegram] enabled`): both — disabled-platform humans are never buffered, and the dispatch drops the whole bucket if the platform is disabled when it fires (covers entries buffered earlier or restored from the snapshot). Only the platform half of `filterBlocked` (`filterPlatformEnabled`) runs; the alert-bucket rate-limit pre-filter does not apply, since summaries use the summary bucket.
+- **External validation**: buffer time, per quest with the real webhook + matched areas; the dispatch re-checks the destination once more at fire time.
+- **Mutes**: fire time only (`unmutedSummaryRows`). Each entry stores its pokestop, matched areas and rule UIDs (unioned on upsert) so pokestop/area/tracking/everything mutes active when the digest fires drop just the entries they cover; a tracking mute drops an entry only when all its rule UIDs are muted. Not applied at buffer time: quests last until end of day, so a mute that lapsed (or was `!unmute`d) before the digest fires shouldn't have dropped the quest.
+
 ## Discord Reconciliation
 
 Reconciliation syncs Discord role membership with Poracle user registration. Runs in-process via discordgo in `internal/discordbot/reconciliation.go`. Configured via `[reconciliation.discord]` and triggered by `[discord] check_role = true`.
@@ -317,10 +323,10 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 
 By default a single Discord bot token (the first entry in `[discord] token`) drives both halves of the system: outbound message delivery (REST) AND the gateway side (commands, reconciliation, role management). Setting `[discord] command_token = "..."` splits these onto separate bots — `token` handles delivery, `command_token` handles the gateway.
 
-Token selection lives in `DiscordConfig.DiscordGatewayToken()` (`internal/config/config.go`): returns `command_token` when set, otherwise falls back to `token[0]`. The REST delivery side (`internal/delivery/discord.go`) keeps using the `token` array — it doesn't know about `command_token`.
+Token selection lives in `DiscordConfig.DiscordGatewayToken()` (`internal/config/config.go`): returns `command_token` when set, otherwise falls back to `token[0]`. The REST delivery side (`internal/delivery/discord.go`) uses only `token[0]` (`cmd/processor/main.go`) — further entries in the `token` array are ignored, and delivery doesn't know about `command_token`.
 
 Startup failures are asymmetric on purpose:
-- Single-bot mode (`command_token` empty): bad delivery token → log-and-continue (existing behaviour; alerts side may still work via a later token in the array, commands may recover at next reload).
+- Single-bot mode (`command_token` empty): bad delivery token → log-and-continue (existing behaviour; commands may recover at next reload — there is no fallback to a later token in the array).
 - Split-bot mode (`command_token` non-empty): bad gateway bot → `log.Fatalf`. The operator explicitly asked for a split, so silently falling back to single-bot mode would hide the misconfiguration (typo, revoked token, missing intents).
 
 The `onMessageCreate` filter in `internal/discordbot/bot.go` ignores any message whose author is a bot, which keeps the command parser from re-processing the alerts bot's own outbound messages. Operators should NOT add the alerts bot's user ID to `[discord] admins` — the bot-author filter has an "unless admin" carve-out that would let it through.
@@ -337,8 +343,12 @@ Role-loss handling is left to Discord: private-thread visibility inherits View C
 
 **Shared secret** (`x-poracle-secret`):
 - All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[processor] api_secret` (with legacy `[alerter] api_secret` as a backward-compatible fallback — if the processor key is empty, the alerter key is copied over at config load)
-- If `api_secret` is empty/unset, auth is disabled (all requests allowed)
+- If `api_secret` is empty/unset, auth is disabled (all requests allowed). By design — but startup logs a WARN when the secret is blank and the effective bind host (after the `PORACLE_HOST` default, e.g. Docker's `0.0.0.0`) is not loopback (`ProcessorConfig.BlankAPISecretExposed`, #266)
 - The `RequireSecretGin` middleware in `api/middleware.go` is applied to the `/api/*` route group in `cmd/processor/main.go`
+
+**401 shape**: a missing/wrong secret is `application/problem+json` on every huma route (all `/api/v2` and the unversioned `/api` routes). The frozen v1 gin routes (`/api/tracking`, `/api/humans`, `/api/profiles`) keep the legacy `{"status":"authError",...}` body.
+
+**Per-human write lock** (`internal/humanlock`): the `api.HumanLock()` gin middleware takes the process-wide lock for the `:id` of every non-GET route that has one (v1 and v2), so API writes to one human are serialised with bot commands (`bot.RunLocked`), the reconcilers, apply, rate-limit/delivery-failure disable (`OnBan`), the unsubscribe button, and the profile scheduler. The lock is never taken inside `store`/`db`, and `!restore` keeps its own DB transaction. Deliberately not locked: creating new channel/webhook humans (`!channel add`, `!webhook add`, Telegram `/channel add`), `DeleteHumanAndTracking`, autocreate thread create/delete, and `POST /api/humans` / `POST /api/v2/humans` (no `:id` yet).
 
 **Unprotected endpoints**:
 - `GET /health` — health check
@@ -346,6 +356,12 @@ Role-loss handling is left to Discord: private-thread visibility inherits View C
 - `POST /` — webhook receiver from Golbat (no auth, Golbat doesn't authenticate)
 - `GET /openapi.json` — OpenAPI 3.1 spec
 - `GET /docs` — interactive API docs
+
+**IP filtering and trusted proxies** (`[processor] ip_whitelist` / `ip_blacklist` / `trusted_proxies`):
+- `IPFilter` (`api/middleware.go`) applies to every route (including the webhook receiver). Entries are exact IPs or CIDR ranges (IPv4/IPv6), parsed once at startup; an invalid entry is a fatal startup error. Blacklist is checked first, then a non-empty whitelist must match. IPv4-mapped IPv6 peers match IPv4 rules.
+- The client IP is gin's `ClientIP()`. `api.ConfigureTrustedProxies` calls `r.SetTrustedProxies(trusted_proxies)`; the default (empty) trusts **no** proxy, so `X-Forwarded-For` / `X-Real-IP` are ignored and the TCP peer is used — a client can't spoof its way past the lists (#264). Operators behind a reverse proxy who rely on the whitelist/blacklist must list the proxy's IP/CIDR in `trusted_proxies`, otherwise every request is seen as coming from the proxy.
+
+`/debug/pprof` is not mounted unless `[processor] enable_pprof = true`, and then sits behind the same `api_secret` (`cmd/processor/pprof.go`).
 
 **huma surface (`/api/*` reads + features, and `/api/v2/*`)**: The `/api/*` read/reload/feature endpoints listed below and the entire `/api/v2/*` surface are served by [huma](https://github.com/danielgtaylor/huma) (mounted on gin via humagin, one instance), and appear in the OpenAPI 3.1 spec at `/openapi.json` / `/docs`. Error bodies on this surface are RFC 9457 `application/problem+json` (`status`, `title`, `detail`, `errors[]`) — replacing the old `{status:"error",message}` / `gin.H{"error":...}` bodies (status codes unchanged; a few manual-400s became validation-422s). `/health`, `/metrics`, pprof, and the webhook receiver `POST /` stay on plain gin by design.
 
@@ -363,6 +379,8 @@ Role-loss handling is left to Discord: private-thread visibility inherits View C
 
 ### Command Pattern
 
+Hosts that dispatch commands (Discord/Telegram gateways, slash dispatcher, autocreate, `/api/command`) must call `bot.RunLocked(cmd, ctx, args)`, never `cmd.Run` directly: it takes the process-wide per-human lock (`internal/humanlock`) on `ctx.TargetID`, serialising the command against API writes (`api.HumanLock` middleware) and the reconcilers. The lock is not reentrant, so commands that delegate to other commands call `Run` directly, and commands that act on other humans (`!apply`, `!poracle-admin`, `!enable`, `!disable`, `!community`, `!unregister`) implement `bot.TargetLockExempt` and lock each human they write themselves.
+
 All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion, maxbattle) follow:
 
 1. `BuildTarget(args)` — resolve who the command is for (DM user, channel, webhook, admin override)
@@ -375,6 +393,14 @@ All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion,
 **Default template storage**: Commands store an empty string for `template` when the user does not specify `template:X`. The renderer resolves empty template to `[general] default_template_name` from config at render time, allowing the admin to change the default without updating existing tracking rules.
 
 **`!track remove` delegates to `!untrack`**: `!track remove ...` is equivalent to `!untrack ...`, including gen/type filtering support.
+
+**Remove rules** (`bot/commands/remove.go`): every tracking command's remove goes through `checkRemoveArgs` and `ruleRemover.run`, which share four rules:
+- Unrecognised words are refused before anything is removed.
+- `id:N` stands alone; any other argument beside it is refused.
+- An argument the remove doesn't use is refused ("Not used when removing: …") rather than ignored. Each command's `removeSpec` lists its `selectors` (name rules to remove) and `filters` (narrow a selection but can't select alone, e.g. raid `costume:`, quest `summary`, invasion gender, nest/maxbattle `gen`/type). `ParsedArgs.Matched` records which param consumed each token so the refusal names what the user typed.
+- A remove has to name something. A bare `remove` is refused; `everything` removes every rule of the type (whatever values it holds), then filters narrow it.
+
+Commands that read selectors from the unrecognised words (quest item names, invasion grunt types) consume them first and pass the consumed words to `checkRemoveArgs`. `!untrack` uses the same gate; its `gen:` and type are selectors that add to named pokemon (`!untrack pikachu gen1` removes both), not filters.
 
 ### Command Security & Target Resolution Rules
 
@@ -402,15 +428,15 @@ These rules govern who can execute commands, what they target, and where they ca
 | Level | Who | Can do |
 |-------|-----|--------|
 | **Admin** | Users in `discord.admins` / `telegram.admins` | All commands, target override (`user:`, `name:`), manage channels/webhooks, enable/disable users, broadcast, apply |
-| **Delegated channel admin** | Users/roles in `delegated_administration.channel_tracking` | Manage tracking for specific channels (without full admin) |
+| **Delegated channel admin** | Discord: users/roles in `delegated_administration.channel_tracking`, keyed by channel, guild or category (a thread also matches its parent channel). Telegram: users in `[[telegram.delegated_admins]]`, keyed by chat ID | Manage tracking for specific channels (without full admin) |
 | **Delegated webhook admin** | Users in `delegated_administration.webhook_tracking` | Manage specific webhooks by name |
-| **Community admin (Telegram)** | Users in `area_security.communities.*.telegram.admins` | Manage community channels via `/channel add` |
+| **Community admin (Telegram)** | Users in `area_security.communities.*.telegram.admins` | Manage community channels via `/channel add`; manage tracking in groups belonging to their communities; `/userlist` limited to their communities |
 | **Regular user** | Registered via `!poracle` | Track/untrack, area, location, profile, language, start/stop, script, help, info, ask |
 | **Unregistered user** | Not in humans table | Can only run `!poracle` (registration) and `!version` |
 
 #### Command security (`command_security` config)
 
-Maps Discord role IDs to allowed command sets. Users without the required role for a command get 🙅. Checked via `CommandAllowed()` after registration check, before BuildTarget.
+Maps Discord role IDs to allowed command sets. Users without the required role for a command get 🙅. Admins always pass. Checked via `CommandAllowed()` (text, slash and `/api/command` alike) after registration check, before BuildTarget.
 
 #### Area security (`area_security.enabled`)
 
@@ -419,13 +445,21 @@ When enabled, users belong to communities (determined by Discord roles or Telegr
 - `location_fence` — geographic restriction on alert delivery
 - Registration channels — where `!poracle` works for that community
 
-`AreaLogic.ValidateAndPrune` removes areas no longer permitted when community membership changes.
+`bot.PermittedAreas` (`internal/bot/permitted_areas.go`) is the single definition of the areas a human may hold. It is used by v2 set-areas, `override_areas` validation (v1 and v2 tracking writes, via `newOverrideContext`), v2 `GET …/areas` (with `trusted=true`) and both reconcilers; `!area` (`AreaLogic.GetAvailableAreas`) shares its community predicates. The community filter applies when `area_security.enabled`, the caller is not admin, and the human has a community membership or an `area_restriction`. Fences with `exemptFromAreaSecurity` bypass the community filter (this is not `userSelectable`, and it does not affect `strict_locations`; matching and delivery never read the flag).
+
+**Area spelling.** Stored area names are canonical fence names (lowercase, as the fence is named) everywhere except v1; spaces versus underscores is only a comparison key (`NormalizeAreaKey`). The state loaders normalise `override_areas` at load, `DiffTracking` compares area-key fields by key, and set-areas, community `allowed_areas` (`FilterAreas`, `PermittedAreas`, the startup validator) and `!area add/remove` accept either spelling. v1 still writes and returns spaces; v2 returns `override_areas` as fence names. `location_fence` names still compare as plain lowercase.
+
+Reconciliation prunes through `bot.PruneForMembership` (`internal/bot/reconcile_prune.go`) using a denied set: a name is removed only if it is a currently loaded fence that `PermittedAreas` does not return, so names that are not loaded fences (e.g. after a partial geofence load) are left alone, and an empty fence list skips all pruning. Store methods: `StripOverrideAreas` and `StripUserAreas`. Discord prunes `override_areas` on every community change; `humans.area` and every profile are pruned only when `[reconciliation.discord] prune_user_areas = true` (default false, irreversible). Telegram prunes `humans.area` and every profile, opt-in via `[reconciliation.telegram] prune_user_areas`, and has no `override_areas` prune. A prune happens only on a community change; enabling the flag does not retroactively tidy existing users, and reactivating a disabled user does not prune. Reconcilers prune **before** saving a community-membership change: if the prune errors, `community_membership` / `area_restriction` are not saved, so the change is retried at the next reconcile (member event or the `check_role_interval` sweep, default 6h).
+
+#### Tracking limits (`[tracking] max_distance`, `max_areas`)
+
+Both are 0 = no limit, live in `internal/bot/limits.go`, and apply to users only: `bot.LimitExempt` lifts them for admins (the sender in the bot, `ctx.IsAdmin`; the target human in the API, which has no caller identity) and for every non-`:user` target (channels, webhooks, groups, threads — only admins and delegated admins configure those). v2 `trusted` requests are exempt too (`overrideContext.limitExempt`). `max_distance` clamps a rule's radius (bot `enforceDistance`, v1/v2 `clampDistance`). `max_areas` refuses an area list longer than the limit, without truncating. Profile areas (`!area add`, v1 `setAreas`, v2 set-areas, human create) compare with the list being replaced. Per-rule `area:` / `override_areas` is judged on the diff the write is about to apply (`bot.OverrideAreaLimitBreached`, called before `store.ApplyDiff` in the 10 commands via `overrideLimitReply` and in v1/v2 POST via `overrideLimitMsg`; v2 PUT compares with the stored rule; PATCH can't change areas): inserts must be within the limit, an update may only keep a subset of the list on the row it replaces. So a list stored before the limit was lowered round-trips but can't be copied into new rules.
 
 #### `everything` flag permissions (`tracking.everything_flag_permissions`)
 
 Controls whether non-admin users can use the `everything` keyword in `!track`:
-- `deny` (default) — `everything` keyword not available to non-admins
-- `allow-any` — `everything` and `individually` both available
+- `deny` — `everything` keyword not available to non-admins
+- `allow-any` (example config; an empty/omitted value behaves the same) — `everything` and `individually` both available
 - `allow-and-always-individually` — `everything` expands to all pokemon individually
 - `allow-and-ignore-individually` — `everything` available but `individually` keyword hidden
 
@@ -438,10 +472,11 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 - `!quest` — stardust/energy/candy/item/pokemon rewards
 - `!nest`, `!lure`, `!gym`, `!fort`, `!invasion`, `!maxbattle` — type-specific filters
 - `!tracked` — list all active tracking, shows `[id:XX]` per rule for targeted removal
-- `!untrack id:45` or `!raid remove id:12` — remove a specific tracking rule by database UID (works for all tracking types)
+- `!raid remove id:12` or `!untrack raid id:12` — remove a specific tracking rule by database UID (any tracking type; bare `!untrack id:45` removes pokemon rules only)
 - `!untrack <type> [args]` — reroute to per-type remove handler (e.g. `!untrack raid id:12`, `!untrack egg level:5`, `!untrack invasion grunt:bug`); mirrors the `/untrack <subtype>` slash form. First token is matched against the canonical English type list (`raid`, `egg`, `quest`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`); other tokens fall through to the existing pokemon-untrack path.
 - `!mute <scope> <value> [duration:1h]` / `!unmute <scope> <value>` — silence alerts for a gym, pokemon species, area, pokestop, or station for a time-bounded window. `!mute everything [duration:1h]` self-mutes the user across all alert types. Per-type aliases work too (`!raid mute id:X` ≡ `!mute raid id:X`). Mutes are listed by `!tracked`. See the "Mute Infrastructure" section for store + matcher integration.
-- `!poracle-admin <group> [subcommand] [args]` (also `!pa`) — administrative umbrella for live operations, admin-only. Groups: `slash` (slash-command lifecycle), `reload` (dts/geofence/state), `status` (health snapshot), `ratelimit` (inspect/reset alert limits), `summary` (summary buffer), `cache` (geocoder stats/clear), `maintenance` (pause/resume delivery), `emoji` (emoji config inspection), `reconcile` (Discord role sync), `config` (effective config dump), `warnings` (captured WARN/ERROR log buffer). See `docs/admin-commands/` for design and smoke-test checklist.
+- `!poracle-admin <group> [subcommand] [args]` (also `!pa`) — administrative umbrella for live operations, admin-only. Groups: `slash` (slash-command lifecycle, incl. `list` — registered commands as Discord `</name:id>` mentions), `reload` (dts/geofence/state), `status` (health snapshot), `ratelimit` (inspect/reset alert limits), `summary` (summary buffer), `cache` (geocoder stats/clear), `maintenance` (pause/resume delivery), `emoji` (emoji config inspection), `reconcile` (Discord role sync), `config` (effective config dump), `warnings` (captured WARN/ERROR log buffer). See `docs/admin-commands/` for design and smoke-test checklist.
+- `!backup <name>` / `!restore <name>` (admin) — per-profile tracking template saved to `backups/<name>.json` covering every tracking table (`backupTables`; not profiles or summary schedules). Restore **replaces**: table/column names from the file are validated (allow-listed table, strict identifier, real column via information_schema) before anything changes, then in one transaction every backup table is cleared for the target's current profile and refilled from the file (empty/absent tables end up empty). `!script` emits re-runnable commands for every tracking type, including `!maxbattle` and `!fort`.
 - `!poracle` — register/start
 - `!profile` — switch/create/delete profiles
 - `!area` — add/remove geofence areas
@@ -506,13 +541,14 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | GET | `/api/dts/fields` | List all DTS type names |
 | GET | `/api/dts/fields/{type}` | Template fields, block scopes, and snippets for a type |
 | GET | `/api/dts/partials` | Handlebars partials for client-side rendering |
+| GET | `/api/dts/custommaps` | Custom maps (`config/customMaps/`) keyed by `name` / `name.language`, for client-side `{{map}}` preview |
 | POST | `/api/dts/sendtest` | Render and deliver a test message |
 | GET | `/api/dts/testdata` | Test webhook scenarios from testdata.json |
 | GET/POST | `/api/dts/reload` | Reload DTS templates and partials from disk |
 | POST | `/api/deliverMessages` | Deliver confirmation/notification messages |
 | POST | `/api/postMessage` | Legacy alias for /api/deliverMessages |
 | POST | `/api/resolve` | Batch resolve Discord/Telegram IDs to names |
-| POST | `/api/command` | Execute a bot command via API |
+| POST | `/api/command` | Execute a bot command via API (command prefix optional) |
 | GET | `/api/masterdata/monsters` | All pokemon with names, forms, types (built from raw masterfile) |
 | GET | `/api/masterdata/grunts` | Grunt types (built from classic.json) |
 | GET | `/api/tracking/all/{id}` | All tracking for a user (all types) |
@@ -546,9 +582,14 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | POST | `/api/profiles/{id}/update` | Update profile active_hours |
 | POST | `/api/profiles/{id}/copy/{from}/{to}` | Copy tracking rules between profiles |
 | DELETE | `/api/profiles/{id}/byProfileNo/{profile_no}` | Delete profile |
+| PATCH | `/api/v2/humans/{id}/tracking/{type}` | v2 bulk settings update (`uids` + `set`), per-rule outcomes; `?dry_run` |
+| DELETE | `/api/v2/humans/{id}/tracking/{type}` | v2 bulk delete via `?uid=1,2,3` or body `{"uids":[…]}`; `?dry_run` |
+| DELETE | `/api/v2/humans/{id}/areas?name=` | v2 remove one area name everywhere, incl. `override_areas`; `?dry_run` |
+| PATCH | `/api/v2/humans/{id}/areas?from=&to=` | v2 rename one area name everywhere; `?dry_run` |
+| GET/POST/DELETE | `/api/v2/humans/{id}/mutes` | v2 mutes; `tracking_type` required for `scope=tracking` |
 | GET | `/api/snapshots/{messageID}?target={id}` | Inspect a delivered-message snapshot (admin diagnostics; 503 if `[snapshots] enabled = false`) |
 | GET | `/api/dts/actions` | List registered button actions + their scopes/params (drives the config editor's button UI) |
-| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`) so clients can do explicit feature detection without probing endpoints |
+| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`, `derivedDtsTypes`, `costume`, `customMaps`) so clients can do explicit feature detection without probing endpoints |
 | GET | `/metrics` | Prometheus metrics |
 | GET | `/openapi.json` | OpenAPI 3.1 spec (whole `/api` + `/api/v2` surface; public) |
 | GET | `/docs` | Interactive API docs (public) |
@@ -556,9 +597,18 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 Tracking types: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle.
 
 **`/api/v2/*` (strict v2 surface)**: Alongside the in-place `/api/*` endpoints above sits a clean, strict, documented v2 API for tracking + humans/profiles. It is served by the same huma instance (typed bodies, `additionalProperties:false`, no lenient coercion, problem+json errors).
-- **Tracking** is human-scoped: `GET|POST /api/v2/humans/{id}/tracking/{type}`, `GET|PUT|DELETE /api/v2/humans/{id}/tracking/{type}/{uid}`, bulk `DELETE …/{type}?uid=1,2,3`, and a full snapshot `GET /api/v2/humans/{id}/tracking` (human + all-type rules + profiles + locations + summaries). Query params: `?profile=`, `?include_descriptions=`, `?silent=`, `?all_profiles=`. v2 adds an **11th tracking type, `incident`** (game `PokestopEvent`, e.g. Showcase), not present in v1.
+- **Tracking** is human-scoped: `GET|POST /api/v2/humans/{id}/tracking/{type}`, `GET|PUT|DELETE /api/v2/humans/{id}/tracking/{type}/{uid}`, bulk `DELETE …/{type}?uid=1,2,3` (or body `{"uids":[…]}`, not both), bulk `PATCH …/{type}` (`{"uids":[…],"set":{…}}` — delivery settings only, one outcome per rule), and a full snapshot `GET /api/v2/humans/{id}/tracking` (human + all-type rules + profiles + locations + summaries). Query params: `?profile=`, `?include_descriptions=`, `?silent=`, `?all_profiles=`. v2 adds an **11th tracking type, `incident`** (game `PokestopEvent`, e.g. Showcase), not present in v1.
 - **humans/profiles** are discrete typed action endpoints under `/api/v2/humans/{id}/…` (enable/disable, admin-disable, language, location, areas, check-location, locations CRUD incl. a **new `PUT …/locations/{label}`** to update coords, roles, profiles CRUD with a strict typed `active_hours` schema, profile switch). Pure action endpoints return a minimal `{"status":"ok"}` ack; resource endpoints return the typed body directly.
-- Design doc: `docs/v2-api-design.md`.
+- **v2 has its own response shapes** — it never reuses the frozen v1 DTOs (`HumanResponse`, `ProfileResponse`, …). The human is `v2Human` (`api/v2_human_shape.go`: booleans, real arrays, nullable `area_restriction`), profiles are `v2ProfileResponse`, and the snapshot embeds the same types as the per-resource endpoints. Coordinates are `latitude` / `longitude` in requests and responses alike.
+- **`PUT …/tracking/{type}/{uid}` keeps the rule's `uid`**: the full replace is delete + insert, then `store.UIDReassigner.ReassignUID` moves the new row back onto the old uid, so mutes and `id:N` references survive. `store.ApplyDiff` does the same for every update (bot commands, v1 and v2 POST), so an edited rule never changes id.
+- **`?dry_run=true`** on POST, PUT, single and bulk DELETE, PATCH, and area DELETE/PATCH: same validation and diff, nothing written; created rules have uid 0 and the response carries `"dry_run": true`.
+- **`previous`**: rules in `updated` (POST/PUT/PATCH) carry `previous` (dedicated schema; the rule as stored before the edit). A commit reports what it actually replaced.
+- **PATCH** `…/tracking/{type}` is the bulk settings update, body `{uids, set{distance,clean,edit,summary,template,ping}}`. Per-rule outcomes `updated` / `unchanged` / `refused{uid,reason: invalid|conflict|not_found,detail,conflicts_with}`; repeated uids deduped (first kept); earlier rules in the request count in their patched state for the conflict check, so first in `uids` order wins. `summary` is quest only; `edit` is rejected for gym/invasion/maxbattle/nest/quest.
+- **Bulk DELETE** takes `?uid=` or body `{"uids":[…]}` (not both, not neither: 422). **PUT** returns 409 "would duplicate rule N" when the edit would make the rule a duplicate or near-duplicate (one updatable field) of another. Squash behaviour comes from `store.SquashPolicy` / `RowDiffPolicy` (`DiffResult.Replaced`); an existing row is an update target for at most one candidate in a batch, and a duplicate match pins its row. Maxbattle `clean`/`distance`/`template` are `diff:"update"`.
+- **Area ops**: `DELETE /api/v2/humans/{id}/areas?name=&profile=&all_profiles=&dry_run=` returns `{name, removed_from, broadened{type:[uid]}, dry_run}` and also strips `override_areas` (`broadened` = rules whose override list became empty). `PATCH …/areas?from=&to=&profile=&all_profiles=&trusted=&dry_run=` returns `{from, to (canonical), renamed_in, dry_run}`; `to` must be permitted (422, nothing changes).
+- **Wildcards**: nullable v2 fields use shared constants (`v2_wildcards.go`) for both `Translate` and `ToRule`; a test checks every nullable field on all 11 types round-trips `null`. The documented contract is "`null` means unconstrained"; the stored sentinels are internal.
+- **OpenAPI**: top-level `servers: [{url:"/api"}]`; `GET /health` is documented (path-level `servers: [{url:"/"}]`, public).
+- Design doc: `docs/v2-api-design.md` (its "Changes" section lists breaking changes for v2 clients).
 
 **v1 is frozen**: the v1 `/api/tracking/*`, `/api/humans/*`, `/api/profiles/*` (and `/api/tracking/pokemon/refresh`) endpoints remain on plain gin, unchanged and fully supported (still lenient via the coercion below), but deprecated — clients migrate to `/api/v2` on their own schedule. No sunset date yet.
 
@@ -595,9 +645,11 @@ The `clean` field on tracking rules is a bitmask with two bits (`db/clean.go`):
 
 Helper functions `IsClean(clean)` and `IsEdit(clean)` test individual bits. When `IsEdit` is true, the renderer generates an `EditKey` (a stable identifier derived from the webhook event, e.g. gym ID + pokemon ID for raids). This EditKey flows through `RenderJob` into the `delivery.Job`. The `FairQueue` in delivery checks the `MessageTracker` for an existing message with the same EditKey; if found, it edits the existing message instead of sending a new one. First consumer: raids with RSVP updates (`rsvp_changes` tracking), where the same raid alert is edited in-place as RSVP counts change.
 
+**`[tracking] default_edit`** (list of `pokemon`, `raid`, `egg`, `lure`, `incident`) makes edit the default per alert type. It is applied at match time, not stored: each handler calls `applyDefaultEdit` (`cmd/processor/helpers.go`) after filtering, which ORs bit 2 into every `MatchedUser.Clean` for a listed type, so the renderer, raid partition and delivery queue all see an ordinary edit rule. Existing rules pick it up immediately and removing the type reverts them; there is no per-rule opt-out. Rowtext labels such rules "edit (default)" (`Generator.DefaultEdit`; invasion rows only when `grunt_type = "showcase"`), and `/api/config/poracleWeb` exposes `defaultEdit`. Unsupported entries are ignored with a startup warning.
+
 ### Pokemon change events
 
-The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set. The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
+The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set: pokemon jobs carry base edit key `pokemon:<encounterID>` (renderer appends `:<userID>`) and `EditMaxAge` from `[tracking] pokemon_edit_window_mins` (default 5, 0 = no limit). `FairQueue.processJob` skips the edit when the tracked original's `SentAt` is older than `EditMaxAge` (or unknown), replies instead, and tracks the reply under its own `clean:` key so the original keeps its clean-deletion. `[tracking] pokemon_edit = false` drops the edit key entirely. v2 rejects `edit: true` for gym/invasion/nest/maxbattle/quest (their alerts never carry an edit key). The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
 
 ### Raid/egg RSVP change events
 
@@ -638,7 +690,7 @@ Template selection uses a two-pass mechanism. The first pass considers only user
 5. Default + configured locale: type + default template + platform + `[general] locale` (only when the user's language differs from the configured locale)
 6. Default + any language: type + default template + platform (last resort, any language)
 
-Within each level, the **last match wins** so that `config/dts/` overrides `config/dts.json` (later-loaded files are appended). Levels 3 and 4 share a return check: a level 4 match supersedes a level 3 match.
+Within each level, the **last match wins** so that `config/dts/` overrides `config/dts.json` (later-loaded files are appended). The first level with a match returns it, so a default in the user's language (level 3) beats a language-less default (level 4).
 
 Step 5 protects against a real-world failure mode: a user with a legacy language setting (e.g. `language="nl"`) that no longer ships templates would otherwise drop to step 6, where "last match wins" picks whichever default entry was loaded last — often a language unrelated to the operator's chosen `[general] locale`. Preferring the configured locale before step 6 keeps these users on the operator's default language rather than an arbitrary one.
 
@@ -704,7 +756,7 @@ The store is a separate pogreb instance from the geocoder cache — different wo
 
 ## Mute Infrastructure
 
-`internal/mute/` is the in-memory mute store (no DB persistence; mutes are typically short-lived). Each `mute.Entry` is `(HumanID, ScopeType, ScopeValue, ExpiresAt)`. Scopes: `gym`, `pokemon`, `pokestop`, `station`, `area`, `everything`, `tracking` (Phase 2.5 — accepted by validator but matcher enforcement deferred).
+`internal/mute/` is the in-memory mute store (no DB persistence; mutes are typically short-lived). Each `mute.Entry` is `(HumanID, ScopeType, ScopeValue, ExpiresAt)`. Scopes: `gym`, `pokemon`, `pokestop`, `station`, `area`, `everything`, `tracking` (matches the rule UID that produced the alert — see the last paragraph of this section).
 
 **Matcher integration**: every per-type matcher (`internal/matching/*.go`) calls `filterMuted(matched, store, ev)` after `ValidateHumansGeneric`. Each handler constructs a `mute.Event` carrying the scope-specific identifiers it has (e.g. `GymID` for raid, `PokemonID` for monster, `Area` shared across the whole batch); `Store.Match` returns true if any active entry for that user matches. The check is O(active mutes per user) — typical usage is single-digit; a future index can land if production telemetry shows otherwise.
 
@@ -716,9 +768,9 @@ The store is a separate pogreb instance from the geocoder cache — different wo
 - `!<type> mute ...` aliases (e.g. `!raid mute id:X`) route through `RouteToMuteFromType`.
 - `!tracked` shows the active mutes alongside tracking rules.
 - Mute buttons on alerts (see "Button actions" below) write the same `mute.Entry` shape via `buttonactions.HandleMute`.
-- **v2 mutes API** (`internal/api/v2_mutes.go`): `GET|POST /api/v2/humans/{id}/mutes`, `DELETE …/mutes?scope=&value=` (single) and `DELETE …/mutes` (all). Strict schemas, problem+json; mute identity is `(scope, value)` so deletes address via query params; DELETE returns `{deleted:[…]}` like v2 tracking. Area values validate against `AreaLogic` when present, else live `StateMgr` fences (production path). The v2 full snapshot includes a `mutes` array. The API documents the in-memory volatility — entries vanish on restart. Design: `docs/superpowers/specs/2026-06-11-mute-api-design.md`.
+- **v2 mutes API** (`internal/api/v2_mutes.go`): `GET|POST /api/v2/humans/{id}/mutes`, `DELETE …/mutes?scope=&value=` (single; `scope=tracking` also needs `&tracking_type=`) and `DELETE …/mutes` (all). Strict schemas, problem+json; mute identity is `(scope, rule table, value)` — the table (`tracking_type`, any of the 11 type names, `incident` stored as `invasion`) is required for `scope=tracking` and rejected for other scopes, because rule uids are per table — so deletes address via query params; DELETE returns `{deleted:[…]}` like v2 tracking. Area values validate against `AreaLogic` when present, else live `StateMgr` fences (production path). The v2 full snapshot includes a `mutes` array. The API documents the in-memory volatility — entries vanish on restart. Design: `docs/superpowers/specs/2026-06-11-mute-api-design.md`.
 
-Tracking-UID mutes are fully wired: the matcher compares `mute.Event.MatchedRuleUID` (populated per matched user in `cmd/processor/helpers.go`) against `tracking`-scope entries, created via `!mute id:N`, alert buttons, or the v2 mutes API.
+Tracking mutes are table-aware: uids are per-table, so `mute.Entry.RuleTable` and `MatchedUser.RuleTable` carry the table, and the matcher compares `mute.Event.MatchedRuleUID` **and** the table (populated per matched user in `cmd/processor/helpers.go`) against `tracking`-scope entries. An untyped tracking entry matches nothing. v2 mutes: `tracking_type` (any of the 11 type names; `incident` maps to `invasion`; GET returns the canonical name) is required for `scope=tracking` and a `422` otherwise; `POST` checks the uid is the human's rule in that table on any profile (status stays 200); `DELETE ?scope=tracking&tracking_type=&value=`. Bot: `!<type> mute id:N` keeps the type; bare `!mute id:N` looks the uid up in the current profile (one hit is typed; several are refused with `msg.mute.uid_ambiguous`; none is refused); bare `!unmute id:N` resolves from the active mutes (ambiguous refused). `!tracked` shows "<type> rule <uid>". An alert mute button with `scope=tracking` writes one typed entry per `TrackingUID`.
 
 ## Button Actions
 

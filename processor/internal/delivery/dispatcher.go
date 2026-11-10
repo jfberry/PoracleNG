@@ -197,6 +197,10 @@ func (d *Dispatcher) LaneStats() (totalQueued, active, maxDepth int, deepestTarg
 // BackpressureCount exposes the cumulative full-lane backpressure count.
 func (d *Dispatcher) BackpressureCount() int64 { return d.queue.BackpressureCount() }
 
+// ShedCount exposes the cumulative count of messages discarded to make room on
+// a full lane — real message loss, as distinct from lane saturation.
+func (d *Dispatcher) ShedCount() int64 { return d.queue.ShedCount() }
+
 // PerRouteBuffer is the configured per-lane buffer size (for near-capacity math).
 func (d *Dispatcher) PerRouteBuffer() int { return d.queue.perRouteBuf }
 

@@ -123,19 +123,14 @@ func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bo
 	}
 	name := strings.Join(args, " ")
 
-	if err := ctx.Humans.AddProfile(ctx.TargetID, name, ""); err != nil {
+	// AddProfile reports the number it assigned. Deriving it instead — by
+	// searching back for the highest profile with a matching name — reported
+	// the wrong profile whenever the name was reused, since names are not
+	// unique and the store assigns the lowest FREE number, not max+1.
+	newNo, err := ctx.Humans.AddProfile(ctx.TargetID, name, "")
+	if err != nil {
 		log.Errorf("profile: add: %v", err)
 		return []bot.Reply{{React: "🙅"}}
-	}
-
-	// Find the new profile number
-	newNo := 0
-	if profiles, err := ctx.Humans.GetProfiles(ctx.TargetID); err == nil {
-		for _, p := range profiles {
-			if strings.EqualFold(p.Name, name) && p.ProfileNo > newNo {
-				newNo = p.ProfileNo
-			}
-		}
 	}
 
 	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.created", newNo, ctx.EscapeForReply(name))}}
@@ -202,45 +197,11 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 }
 
 // buildDayPrefixMap creates a map from translated + English day prefixes to ISO day numbers.
+// buildDayPrefixMap returns the day prefixes the settime grammar accepts.
+// The canonical table lives in the bot package so the slash autocomplete can
+// offer exactly what this parser will accept (see bot.DayPrefixMap).
 func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
-	m := map[string][]int{
-		// English always accepted
-		"mon": {1}, "tue": {2}, "wed": {3}, "thu": {4},
-		"fri": {5}, "sat": {6}, "sun": {7},
-		"weekday":  {1, 2, 3, 4, 5},
-		"weekend":  {6, 7},
-		"every":    {1, 2, 3, 4, 5, 6, 7},
-		"everyday": {1, 2, 3, 4, 5, 6, 7},
-	}
-
-	// Add translated day abbreviations from i18n
-	// Uses arg.prefix.mon through arg.prefix.sun and arg.prefix.weekday/weekend
-	dayKeys := []struct {
-		key  string
-		days []int
-	}{
-		{"arg.prefix.mon", []int{1}},
-		{"arg.prefix.tue", []int{2}},
-		{"arg.prefix.wed", []int{3}},
-		{"arg.prefix.thu", []int{4}},
-		{"arg.prefix.fri", []int{5}},
-		{"arg.prefix.sat", []int{6}},
-		{"arg.prefix.sun", []int{7}},
-		{"arg.prefix.weekday", []int{1, 2, 3, 4, 5}},
-		{"arg.prefix.weekend", []int{6, 7}},
-		{"arg.prefix.every", []int{1, 2, 3, 4, 5, 6, 7}},
-		{"arg.prefix.everyday", []int{1, 2, 3, 4, 5, 6, 7}},
-	}
-
-	tr := ctx.Tr()
-	for _, dk := range dayKeys {
-		translated := strings.ToLower(tr.T(dk.key))
-		if translated != dk.key && translated != "" {
-			m[translated] = dk.days
-		}
-	}
-
-	return m
+	return bot.DayPrefixMap(ctx.Tr())
 }
 
 func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.Reply {
@@ -250,15 +211,11 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	dayPrefixes := buildDayPrefixMap(ctx)
-	var entries []db.ActiveHourEntry
-	for _, arg := range args {
-		parsed, err := ParseSettimeArg(arg, dayPrefixes)
-		if err != nil {
-			// Matched a known form (range) but failed validation
-			// — surface the reason instead of silently dropping.
-			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", arg, SettimeErrorMessage(tr, err))}}
-		}
-		entries = append(entries, parsed...)
+	// Accepts several specs in one go, comma- or space-separated:
+	// the slash surface sends the whole `times` option as one token.
+	entries, err := ParseSettimeArgs(args, dayPrefixes)
+	if err != nil {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", strings.Join(args, " "), SettimeErrorMessage(tr, err))}}
 	}
 
 	if len(entries) == 0 {
@@ -304,36 +261,31 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	// Determine which target profiles match.
-	var valid []string
+	// Determine which target profiles match, by name or by number (the
+	// /profile copyto autocomplete sends the number). The current profile
+	// is never a valid target.
+	targets := make(map[int]bool)
+	hasAll := false
 	var invalid []string
 
 	for _, arg := range args {
-		lower := strings.ToLower(arg)
-		if lower == "all" {
-			valid = append(valid, "all")
+		if strings.EqualFold(arg, "all") {
+			hasAll = true
 			continue
 		}
+		n, numErr := strconv.Atoi(arg)
 		found := false
 		for _, p := range profiles {
-			if strings.ToLower(p.Name) == lower && p.ProfileNo != ctx.ProfileNo {
+			if p.ProfileNo == ctx.ProfileNo {
+				continue
+			}
+			if strings.EqualFold(p.Name, arg) || (numErr == nil && p.ProfileNo == n) {
+				targets[p.ProfileNo] = true
 				found = true
-				break
 			}
 		}
-		if found {
-			valid = append(valid, arg)
-		} else {
+		if !found {
 			invalid = append(invalid, arg)
-		}
-	}
-
-	// Copy tracking to each matching profile.
-	hasAll := false
-	for _, v := range valid {
-		if strings.ToLower(v) == "all" {
-			hasAll = true
-			break
 		}
 	}
 
@@ -342,14 +294,7 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 		if p.ProfileNo == ctx.ProfileNo {
 			continue
 		}
-		nameMatch := false
-		for _, v := range valid {
-			if strings.EqualFold(v, p.Name) {
-				nameMatch = true
-				break
-			}
-		}
-		if !hasAll && !nameMatch {
+		if !hasAll && !targets[p.ProfileNo] {
 			continue
 		}
 		if err := ctx.Humans.CopyProfile(ctx.TargetID, ctx.ProfileNo, p.ProfileNo); err != nil {

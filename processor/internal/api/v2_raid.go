@@ -14,7 +14,7 @@ import (
 // All filter fields are optional POINTERS (omitted ⇒ documented default via
 // valueOr); there is no required field. team and rsvp_changes are STRING enums
 // (teamEnum / rsvpChangesEnum), both stored as ints. gym_id is a nullable string
-// (null/empty = any). ping is server-managed (not a caller input).
+// (null/empty = any).
 //
 // v2 is STRICT and deliberately drops v1's array expansions: v1 accepted
 // `level` as an int OR [int,...] (one row per level) and `pokemon_form` as
@@ -32,44 +32,41 @@ import (
 // level placeholder. move/evolution default to 9000 ("any"), per the field
 // audit raid table.
 type v2RaidRule struct {
-	PokemonID *int    `json:"pokemon_id,omitempty" nullable:"true" doc:"Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level."`
-	Form      *int    `json:"form,omitempty" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
-	Costume   *int    `json:"costume,omitempty" nullable:"true" doc:"Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume."`
-	Level     *int    `json:"level,omitempty" nullable:"true" doc:"Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused)."`
+	PokemonID *int    `json:"pokemon_id,omitempty" minimum:"1" nullable:"true" doc:"Omit pokemon_id to track by raid level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level."`
+	Form      *int    `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
+	Costume   *int    `json:"costume,omitempty" minimum:"0" nullable:"true" doc:"Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume."`
+	Level     *int    `json:"level,omitempty" minimum:"1" maximum:"90" nullable:"true" doc:"Raid tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Single int — POST multiple rule objects for multiple tiers. Returned as null when stored 90 (any tier) or 9000 (level unused)."`
 	Team      *string `json:"team,omitempty" nullable:"true" enum:"harmony,mystic,valor,instinct,any" doc:"Controlling team: harmony|mystic|valor|instinct|any (0|1|2|3|4). Omit to match any team (defaults to 'any', stored as 4). Returned as null when 'any'."`
 	Exclusive *bool   `json:"exclusive,omitempty" nullable:"true" doc:"Match EX-raids only. Omit to match regardless (default false). Returned as null when false."`
-	Move      *int    `json:"move,omitempty" nullable:"true" doc:"Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
-	Evolution *int    `json:"evolution,omitempty" nullable:"true" doc:"Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
+	Move      *int    `json:"move,omitempty" minimum:"0" nullable:"true" doc:"Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
+	Evolution *int    `json:"evolution,omitempty" minimum:"0" nullable:"true" doc:"Mega evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
 	GymID     *string `json:"gym_id,omitempty" nullable:"true" doc:"Restrict to a specific gym id. Omit (or empty/null) to match any gym (stored as null). Returned as null when unset."`
 
 	RSVPChanges *string `json:"rsvp_changes,omitempty" nullable:"true" enum:"none,rsvp,rsvp_only" doc:"RSVP change handling: none|rsvp|rsvp_only (0|1|2). Omit to disable RSVP updates (defaults to 'none', stored as 0). Returned as null when 'none'."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
-	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset."`
+	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). At most [tracking] max_areas names unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted (a rule already stored over it may keep or shrink its own list). Omit for none. Returned as null when unset."`
 }
 
 // translateV2Raid converts a strict v2 raid rule into the stored
 // RaidTrackingAPI, applying documented defaults, the team/rsvp enum→int
 // translation, the clean bitmask, profile, and validated/normalized override
-// fields. ping is always stored "" (server-managed).
+// fields.
 func translateV2Raid(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2RaidRule) (db.RaidTrackingAPI, error) {
 	// team/rsvp are enum-validated by huma; toStored/resolveStored is
 	// defence-in-depth and applies the documented default for nil.
 	team := teamEnum.resolveStored(req.Team)
 	rsvp := rsvpChangesEnum.resolveStored(req.RSVPChanges)
 
-	distance := valueOr(req.Distance, 0)
-	const maxDistance = 40000000 // Earth circumference (metres)
-	if distance > maxDistance {
-		distance = maxDistance
-	}
+	distance := clampDistance(deps, oc.limitExempt, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {
@@ -82,11 +79,11 @@ func translateV2Raid(deps *TrackingDeps, humanID string, profileNo int, oc overr
 	//     level" guard).
 	//   - specific-pokemon mode: level is ignored by the matcher and stored as the
 	//     9000 placeholder (byte-identical to bot/v1 rows).
-	pokemonID := valueOr(req.PokemonID, 9000)
-	level := 9000
-	if pokemonID == 9000 {
+	pokemonID := valueOr(req.PokemonID, wcAnyID)
+	level := wcLevelPlaceholder
+	if pokemonID == wcAnyID {
 		if req.Level == nil {
-			level = 90
+			level = wcLevelAny
 		} else {
 			level = *req.Level
 			if level < 1 {
@@ -103,22 +100,22 @@ func translateV2Raid(deps *TrackingDeps, humanID string, profileNo int, oc overr
 	row := db.RaidTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
 		Team:                  team,
 		PokemonID:             pokemonID,
-		Form:                  valueOr(req.Form, 0),
-		Costume:               valueOr(req.Costume, 9000),
+		Form:                  valueOr(req.Form, wcForm),
+		Costume:               valueOr(req.Costume, wcAnyID),
 		Level:                 level,
 		Exclusive:             db.IntBool(valueOr(req.Exclusive, false)),
-		Move:                  valueOr(req.Move, 9000),
-		Evolution:             valueOr(req.Evolution, 9000),
+		Move:                  valueOr(req.Move, wcAnyID),
+		Evolution:             valueOr(req.Evolution, wcAnyID),
 		GymID:                 gymID,
 		RSVPChanges:           rsvp,
 		Clean:                 packClean(valueOr(req.Clean, false), valueOr(req.Edit, false), valueOr(req.Summary, false)),
 		OverrideLocationLabel: overrideLabel,
-		OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+		OverrideAreas:         canonicalOverrideAreas(deps, req.OverrideAreas),
 	}
 	return row, nil
 }
@@ -128,7 +125,7 @@ func translateV2Raid(deps *TrackingDeps, humanID string, profileNo int, oc overr
 // placeholder, incl. legacy bot rows) or 90 (by-level "any tier"). Any other
 // value is a concrete tracked tier.
 func raidLevelOrNull(level int) *int {
-	if level == 9000 || level == 90 {
+	if level == wcLevelPlaceholder || level == wcLevelAny {
 		return nil
 	}
 	return &level
@@ -145,20 +142,21 @@ func raidRowToRule(row *db.RaidTrackingAPI) v2RaidRule {
 		gymID = &s
 	}
 	return v2RaidRule{
-		PokemonID: ptrUnless(row.PokemonID, 9000),
-		Form:      ptrUnless(row.Form, 0),
-		Costume:   ptrUnless(row.Costume, 9000),
+		PokemonID: ptrUnless(row.PokemonID, wcAnyID),
+		Form:      ptrUnless(row.Form, wcForm),
+		Costume:   ptrUnless(row.Costume, wcAnyID),
 		// level has no meaningful tier when stored 9000 (specific-pokemon
 		// placeholder, incl. legacy bot rows) or 90 (by-level any-tier).
 		Level:                 raidLevelOrNull(row.Level),
 		Team:                  ptrUnless(team, "any"),
 		Exclusive:             ptrUnless(bool(row.Exclusive), false),
-		Move:                  ptrUnless(row.Move, 9000),
-		Evolution:             ptrUnless(row.Evolution, 9000),
+		Move:                  ptrUnless(row.Move, wcAnyID),
+		Evolution:             ptrUnless(row.Evolution, wcAnyID),
 		GymID:                 gymID,
 		RSVPChanges:           ptrUnless(rsvp, "none"),
-		Distance:              ptrUnless(row.Distance, 0),
+		Distance:              ptrUnless(row.Distance, wcDistance),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),

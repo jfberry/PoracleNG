@@ -155,6 +155,8 @@ Server-side validation rules:
 - `override_location_label` references unknown saved location → 400 "unknown location label"
 - `override_areas` contains area outside user's permitted set → 400 "area not permitted"
 
+Area names are matched by a comparison key (spaces and underscores are equal), so either spelling is accepted. Stored names are the canonical lowercase fence names; v1 still writes and returns spaces, while v2 returns fence names. See `docs/v2-api-design.md`.
+
 Example with override location:
 
 ```json
@@ -264,7 +266,7 @@ When a tracked pokemon's data changes after the initial sighting (form, species,
 | `original.encountered` | bool | true once CP > 0 |
 | `original.name`, `formName`, `weatherName`, `fullName` | string | translated to the recipient's language |
 
-The encounter event itself (non-IV → IV) deliberately re-fires the regular `monster` template threaded as a reply — it's the natural fulfilment of the non-IV alert, not a "change". Reply threading is implicit (every pokemon render carries a reply key keyed on the encounter ID) and applies to both Discord (`message_reference`) and Telegram (`reply_to_message_id`). Edit mode (clean bit 2) takes priority when set: the prior message is updated in place rather than replied to. Users matched at the change event with no prior message receive a fresh `monster` render (no reply target, no `monsterChanged` — they never saw the original).
+The encounter event itself (non-IV → IV) deliberately re-fires the regular `monster` template threaded as a reply — it's the natural fulfilment of the non-IV alert, not a "change". Reply threading is implicit (every pokemon render carries a reply key keyed on the encounter ID) and applies to both Discord (`message_reference`) and Telegram (`reply_to_message_id`). Edit mode (clean bit 2) takes priority when set and `[tracking] pokemon_edit` is on (default): while the original alert is at most `pokemon_edit_window_mins` old (default 5, `0` = no limit, measured from the first send), the follow-up edits it in place — with the `monster` template if the rule still matches, or the `monsterChanged` template if it no longer does. Once the original is older than the window, follow-ups arrive as threaded replies instead, so they aren't lost further up a busy channel. Users matched at the change event with no prior message receive a fresh `monster` render (no reply target, no `monsterChanged` — they never saw the original).
 
 Ships a default `monsterChanged` template per platform in `fallbacks/dts.json`; admins can override via `config/dts.json` or `config/dts/` like any other type.
 
@@ -556,7 +558,7 @@ Returns per-row results:
 Delete a saved location by label. Returns 409 if any tracking rule currently references it, with a list of referencing rules:
 
 ```json
-{"status": "conflict", "referencing_rules": [{"type": "pokemon", "uid": 42}]}
+{"status": "error", "error": "location is referenced by tracking rules", "referencing_rules": [{"Type": "pokemon", "UID": 42}]}
 ```
 
 ### POST /api/humans/{id}/switchProfile/{profile}
@@ -678,6 +680,23 @@ Force-flush the buffered events for `(id, alertType)` immediately. Equivalent to
 
 All geofences with metadata.
 
+### Geofence properties: `userSelectable` and `exemptFromAreaSecurity`
+
+Both are fence properties, read from native geofence files and from GeoJSON `properties`.
+
+| Property | Default | Meaning |
+|----------|---------|---------|
+| `userSelectable` | false | Users may pick the fence themselves. |
+| `exemptFromAreaSecurity` | false | The fence is outside the community system: `area_security` does not filter it for selection or for pruning on community change. |
+
+`exemptFromAreaSecurity` does not imply `userSelectable`: a non-selectable exempt fence still needs `trusted: true` to be set. It does not affect `strict_locations`.
+
+**Known sharp edge.** On an instance with `area_security.enabled = true` and `strict_locations = false` (the default), there is no delivery-time gate, so selection *is* enforcement. A fence marked `exemptFromAreaSecurity` is selectable by any user regardless of community (still subject to `userSelectable`, or `trusted` via the API), and they will receive its alerts. Set `strict_locations = true` if delivery must stay community-gated.
+
+`GET /api/v2/humans/{id}/areas` returns `{areas: [{name, group, description, userSelectable, exemptFromAreaSecurity}]}`; the listing is what a trusted caller may select (community-filtered under area_security, exempt fences included).
+
+Reconciliation option: `[reconciliation.discord] prune_user_areas` / `[reconciliation.telegram] prune_user_areas` (default false). When true, a community change also removes areas the user may no longer select from `humans.area` and every profile (Discord additionally always prunes `override_areas`). Irreversible; exempt fences are never pruned. A prune happens only when a user's community membership changes: turning the flag on does not retroactively tidy existing users, and reactivating a previously disabled user does not prune. If no geofences are loaded the prune is skipped, and a fence missing from a partial load is never stripped.
+
 ### GET /api/geofence/all/hash
 
 MD5 hash of each geofence path (for cache validation).
@@ -763,7 +782,7 @@ Two fields client authors most often need:
 | Field | Meaning |
 |-------|---------|
 | `availableLanguages` | The allow-list enforced by the set-language endpoints, sorted. **`null` means unrestricted** — the server accepts any language, so offer your full menu. A non-null array is exhaustive: anything outside it is rejected with 400. |
-| `disabledHooks` | Alert types disabled on this server, named to match the tracking-type names (`pokemon`, `raid`, `fort`, `invasion`, `lure`, `quest`, `weather`, `nest`, `gym`, `maxbattle`). Only flags the processor actually enforces appear; `disable_pokestop` is a deprecated no-op and is never reported. |
+| `disabledHooks` | Alert types disabled on this server, named to match the tracking-type names (`pokemon`, `raid`, `fort`, `invasion`, `lure`, `quest`, `weather`, `nest`, `gym`, `maxbattle`, `showcase`). Only flags the processor actually enforces appear; `disable_pokestop` is a deprecated no-op and is never reported. |
 
 ### GET /api/config/templates
 
@@ -1101,7 +1120,7 @@ Response is grouped by `sections`, each with `fields` and optional `tables` (arr
 
 ### GET /api/config/values
 
-Returns current merged config values (TOML + overrides) plus a list of fields that are currently overridden by `config/overrides.json`. The editor uses `overridden` to display badges showing which fields come from the web editor vs the user's `config.toml`. Only web-editable fields. Sensitive fields are masked.
+Returns current config values. Only web-editable fields. Sensitive fields are masked.
 
 | Parameter | Description |
 |-----------|-------------|
@@ -1114,15 +1133,15 @@ Returns current merged config values (TOML + overrides) plus a list of fields th
     "general": {"locale": "en", "max_pokemon": 0},
     "discord": {"admins": ["344179542874914817"], "check_role": true}
   },
-  "overridden": ["discord.admins", "alert_limits.dm_limit"]
+  "overridden": []
 }
 ```
 
-The processor also logs a prominent banner at startup listing every field overridden by `overrides.json` — so users editing `config.toml` directly can see at a glance which of their values are being shadowed.
+`overridden` is always an empty list. It is retained for editor backward compatibility from when saves went to a separate `overrides.json`; all values now live in `config.toml`.
 
 ### POST /api/config/values
 
-Save config changes. Accepts partial updates — only changed fields. Writes to `config/overrides.json` (never modifies config.toml). Hot-reloadable settings are applied immediately.
+Save config changes. Accepts partial updates — only changed fields. Rewrites `config/config.toml` in place; the previous version is backed up to `config/backups/` first (the relative path is returned as `backup`). Values equal to the schema default are removed from the file rather than written. Non-editor fields (database, tokens, etc.) are passed through untouched. TOML comments and key ordering are not preserved. Hot-reloadable settings are applied immediately.
 
 **Sensitive field handling:** Fields marked sensitive in the schema are returned as `"****"` by `GET /values`. When you POST a value of `"****"` for a sensitive field, the processor silently strips it before saving — preserving the existing secret. This lets the editor resubmit a whole form without wiping secrets the user didn't change. To actually update a secret, send a real value.
 
@@ -1138,7 +1157,8 @@ Save config changes. Accepts partial updates — only changed fields. Writes to 
 {
   "status": "ok",
   "saved": 2,
-  "restart_required": false
+  "restart_required": false,
+  "backup": "backups/config.toml.bak.2026-04-08_153022"
 }
 ```
 
@@ -1148,6 +1168,7 @@ If any changed field requires restart:
   "status": "ok",
   "saved": 3,
   "restart_required": true,
+  "backup": "backups/config.toml.bak.2026-04-08_153022",
   "restart_fields": ["discord.check_role"]
 }
 ```
@@ -1200,45 +1221,6 @@ Empty `issues` array means everything is valid. Each issue is one of:
 - `color[]` fields: each entry must be a valid hex colour (`#RGB` or `#RRGGBB`)
 - `MinLength`/`MaxLength`: array length must fall within bounds
 - `geofence.paths`: each entry must be either an http(s):// URL or a relative path under the config directory; absolute paths and `..` escapes are rejected; non-existent files trigger a warning
-
-### POST /api/config/migrate
-
-Slim `config.toml` by moving every web-editable non-default value into `config/overrides.json`. Useful after a user has been using the web editor for a while — it cleans up `config.toml` so it contains only TOML-only fields (database, tokens, processor host/port).
-
-**Process:**
-1. Backs up the current `config.toml` to `config.toml.bak.YYYY-MM-DD_HHMMSS`
-2. For every web-editable field with a non-default value, copies it to `overrides.json` (without overwriting existing overrides — existing overrides win)
-3. Rewrites `config.toml` containing only fields NOT in the editor schema (database, tokens, etc.) with a header comment pointing to the backup
-
-**Idempotent:** running it twice produces the same result. Safe to retry on errors.
-
-**Reversible:** delete `overrides.json` and restore the backup file to undo.
-
-```bash
-curl -X POST -H "X-Poracle-Secret: secret" http://localhost:3030/api/config/migrate
-```
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "backup": "config.toml.bak.2026-04-08_153022",
-  "fields_moved": [
-    "alert_limits.dm_limit",
-    "discord.admins",
-    "general.locale"
-  ],
-  "fields_kept": [
-    "alerter.api_secret",
-    "database.host",
-    "database.password",
-    "discord.token",
-    "processor.api_secret",
-    "processor.port",
-    "telegram.token"
-  ]
-}
-```
 
 ### POST /api/resolve
 
@@ -1555,8 +1537,7 @@ Send a confirmation message to a user via Discord or Telegram. Used internally b
   "name": "UserName",
   "message": {"content": "Hello from Poracle"},
   "tth": {"hours": 1, "minutes": 0, "seconds": 0},
-  "clean": false,
-  "language": "en"
+  "clean": 0
 }]
 ```
 

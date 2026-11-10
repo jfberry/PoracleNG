@@ -1,42 +1,44 @@
-[{
-  "id": "index",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "Help",
-      "description": "Type `{{prefix}}help <command>` for details on any of the commands below.",
-      "fields": [
-        {
-          "name": "Tracking commands",
-          "value": "`{{prefix}}help track` — alerts for specific pokemon (IV, CP, PVP)\n`{{prefix}}help raid` — raid bosses at gyms\n`{{prefix}}help egg` — raid eggs before they hatch\n`{{prefix}}help quest` — field research tasks\n`{{prefix}}help incident` — Team Rocket, Kecleon, Showcases, gold stops\n`{{prefix}}help lure` — lure modules at pokestops\n`{{prefix}}help nest` — pokemon nest spawns\n`{{prefix}}help gym` — gym team changes and battles\n`{{prefix}}help fort` — pokestop/gym location updates\n`{{prefix}}help maxbattle` — dynamax/gigantamax raids"
-        },
-        {
-          "name": "Review and remove tracking",
-          "value": "`{{prefix}}help tracked` — list everything you're tracking\n`{{prefix}}help untrack` — remove tracking entries\n`{{prefix}}help summary` — buffer alerts and deliver grouped on a schedule\n`{{prefix}}help script` — export your tracking as commands"
-        },
-        {
-          "name": "Look up",
-          "value": "`{{prefix}}help info` — pokemon details, moves, items, current weather, shiny rates"
-        },
-        {
-          "name": "Your account and alerts",
-          "value": "`{{prefix}}help poracle` — register (or re-enable) your account\n`{{prefix}}help area` — choose which areas to receive alerts for\n`{{prefix}}help location` — set your home/current location\n`{{prefix}}help profile` — multiple tracking profiles (home/work/weekend)\n`{{prefix}}help language` — change bot response language\n`{{prefix}}help start` / `{{prefix}}help stop` — pause or resume alerts\n`{{prefix}}help mute` — silence alerts for a gym, pokemon, area, or pokestop for a while\n`{{prefix}}help unregister` — delete your account and all tracking"
-        },
-        {
-          "name": "{{#if userIsAdmin}}Admin commands{{/if}}",
-          "value": "{{#if userIsAdmin}}`{{prefix}}help enable` / `{{prefix}}help disable` — manage other users\n`{{prefix}}help broadcast` — send a message to everyone\n`{{prefix}}help userlist` — list registered users\n`{{prefix}}help community` — area-security community membership{{/if}}"
-        },
-        {
-          "name": "Filter syntax (applies to most tracking commands)",
-          "value": "All filters use `key:value` form — e.g. `iv:100`, `cp:2000-3000`, `level:25-35`, `d:500`. Ranges are written `low-high` and are always preferred over separate `miniv`/`maxiv` variants — easier to read and easier to change. Use `everything` as the pokemon name to match all pokemon."
-        },
-        {
-          "name": "Full manual",
-          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
-        }
-      ]
+[
+  {
+    "id": "index",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "Help",
+        "description": "Type `{{prefix}}help <command>` for details on any of the commands below.",
+        "fields": [
+          {
+            "name": "Tracking commands",
+            "value": "`{{prefix}}help track` — alerts for specific pokemon (IV, CP, level, PVP)\n`{{prefix}}help raid` — raid bosses at gyms\n`{{prefix}}help egg` — raid eggs before they hatch\n`{{prefix}}help maxbattle` — dynamax/gigantamax battles\n`{{prefix}}help quest` — field research rewards\n`{{prefix}}help incident` — Team Rocket, Kecleon, Showcases, gold stops\n`{{prefix}}help lure` — lure modules at pokestops\n`{{prefix}}help nest` — pokemon nests\n`{{prefix}}help gym` — gym team changes and battles\n`{{prefix}}help fort` — new, changed and removed pokestops/gyms"
+          },
+          {
+            "name": "Review and remove tracking",
+            "value": "`{{prefix}}help tracked` — list everything you're tracking, with each rule's id\n`{{prefix}}help untrack` — remove tracking\n`{{prefix}}help mute` — silence a gym, pokemon, area, pokestop or one rule for a while (`{{prefix}}unmute` lifts it)\n`{{prefix}}help summary` — get quests as a grouped digest at set times\n`{{prefix}}help script` — export your tracking as commands you can re-run"
+          },
+          {
+            "name": "Look up",
+            "value": "`{{prefix}}help info` — pokemon details, forms, costumes, moves, items, weather, shiny and rarity stats{{#if askEnabled}}\n`{{prefix}}help ask` — describe what you want in plain English and get the command for it{{/if}}"
+          },
+          {
+            "name": "Your account and alerts",
+            "value": "`{{prefix}}help poracle` — register (or re-enable) your account\n`{{prefix}}help area` — choose which areas you get alerts for\n`{{prefix}}help location` — set your location and save named ones\n`{{prefix}}help profile` — switch between sets of tracking (home/work/weekend), on a schedule if you like\n`{{prefix}}help language` — change the bot's language\n`{{prefix}}help start` / `{{prefix}}help stop` — resume or pause alerts{{#if roleEnabled}}\n`{{prefix}}help role` — give yourself server roles{{/if}}\n`{{prefix}}help unregister` — delete your account and all tracking"
+          },
+          {
+            "name": "{{#if userIsAdmin}}Admin commands{{/if}}",
+            "value": "{{#if userIsAdmin}}`{{prefix}}help enable` / `{{prefix}}help disable` — manage other users\n`{{prefix}}help broadcast` — send a message to users in an area\n`{{prefix}}help userlist` — list registered users\n`{{prefix}}help community` — area-security community membership{{/if}}"
+          },
+          {
+            "name": "Filter syntax (applies to most tracking commands)",
+            "value": "Most filters are `key:value`: `iv:100`, `cp:2000-3000`, `level:25-35`, `d:500` (distance in metres). Write ranges as `low-high`. Some options are plain words, like team names (`mystic`) or `clean`. Add `clean` to most tracking commands to have alerts deleted once they expire."
+          },
+          {
+            "name": "Full manual",
+            "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+          }
+        ]
+      }
     }
   }
-}]
+]

@@ -53,6 +53,9 @@ func TestNestMatchBasic(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "nest" {
+		t.Errorf("RuleTable = %q, want nest", matched[0].RuleTable)
+	}
 }
 
 func TestNestMatchAnyPokemon(t *testing.T) {

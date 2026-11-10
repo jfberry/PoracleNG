@@ -193,6 +193,10 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 		if _, ok := hook["longitude"]; ok {
 			hook["longitude"] = humanLon
 		}
+		// Nest webhooks use lat/lon and carry a polygon: move both.
+		if hookType == "nest" {
+			moveNestHook(hook, humanLat, humanLon)
+		}
 	}
 
 	// Freshen timestamps
@@ -232,6 +236,10 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 			}
 			hook["rsvps"] = newRsvps
 		}
+	case "nest":
+		// Nests expire 7 days after reset_time; a recent reset keeps the
+		// test alert's expiry in the future.
+		hook["reset_time"] = nowSecs - 3600
 	case "pokestop", "incident":
 		if _, ok := hook["incident_expiration"]; ok {
 			hook["incident_expiration"] = nowSecs + 10*60
@@ -275,7 +283,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 		battleEnd := nowSecs + 120*60
 		hook["battle_end"] = battleEnd
 		hook["end_time"] = battleEnd
-	case "quest", "gym", "nest", "quest_summary":
+	case "quest", "gym", "quest_summary":
 		// No timestamp freshening needed
 	case "monster_changed":
 		// Only the `new` sighting's disappear_time needs freshening so the
@@ -424,5 +432,35 @@ func resolveDTSType(hookType string, webhook map[string]any) string {
 		return "rsvpChanges"
 	default:
 		return hookType // quest, gym, nest, egg, invasion, lure — match 1:1
+	}
+}
+
+// moveNestHook moves a nest test webhook to (lat, lon): the centre point
+// and, by the same offset, its poly_path polygon, so the static map draws
+// the nest around the tester's location.
+func moveNestHook(hook map[string]any, lat, lon float64) {
+	origLat, _ := hook["lat"].(float64)
+	origLon, _ := hook["lon"].(float64)
+	hook["lat"], hook["lon"] = lat, lon
+
+	raw, ok := hook["poly_path"].(string)
+	if !ok || raw == "" {
+		return
+	}
+	var poly [][][]float64
+	if err := json.Unmarshal([]byte(raw), &poly); err != nil {
+		return
+	}
+	dLat, dLon := lat-origLat, lon-origLon
+	for _, ring := range poly {
+		for _, pt := range ring {
+			if len(pt) >= 2 {
+				pt[0] += dLat
+				pt[1] += dLon
+			}
+		}
+	}
+	if b, err := json.Marshal(poly); err == nil {
+		hook["poly_path"] = string(b)
 	}
 }

@@ -3,6 +3,9 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // ---------------------------------------------------------------------------
@@ -90,5 +93,22 @@ func TestTthFromUnix_SmallFuture(t *testing.T) {
 	// Minutes must be at least 1 (we added 92s).
 	if tth.Minutes < 1 {
 		t.Errorf("small future: Minutes = %d, want >= 1 (92s → at least 1 minute)", tth.Minutes)
+	}
+}
+
+func TestBuildDeliveryJob_CarriesEditFields(t *testing.T) {
+	rj := RenderJob{AlertType: "pokemon", ReplyKey: "enc1", EditMaxAge: 5 * time.Minute}
+	dj := webhook.DeliveryJob{Target: "u1", Type: "discord:user", EditKey: "pokemon:enc1:u1"}
+
+	got := buildDeliveryJob(rj, dj, delivery.TTH{Hours: 1}, nil, nil)
+
+	if got.EditKey != "pokemon:enc1:u1" {
+		t.Errorf("EditKey = %q", got.EditKey)
+	}
+	if got.EditMaxAge != 5*time.Minute {
+		t.Errorf("EditMaxAge = %v, want 5m", got.EditMaxAge)
+	}
+	if got.ReplyKey != "enc1" || got.MsgType != "pokemon" {
+		t.Errorf("ReplyKey/MsgType not carried: %+v", got)
 	}
 }

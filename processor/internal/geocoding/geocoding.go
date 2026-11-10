@@ -34,11 +34,33 @@ type Address struct {
 }
 
 // ForwardResult holds forward geocode result.
+// ForwardResult is one candidate from a forward geocode (address search).
+//
+// Everything past latitude/longitude is omitempty and best-effort: providers
+// differ in what they return, and a field a provider does not supply is
+// omitted rather than sent blank, so a client can tell "unknown" from "empty".
+//
+// The detail matters because the caller is almost always drawing a picker.
+// city + country alone collapses five hits on one street into five identical
+// rows, distinguishable only by coordinates the user cannot see; every
+// provider already parses the rest before narrowing it away.
 type ForwardResult struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
-	City      string  `json:"city,omitempty"`
-	Country   string  `json:"country,omitempty"`
+
+	// DisplayName is the provider's own one-line rendering of the result, and
+	// the single most useful field for a picker row.
+	DisplayName string `json:"displayName,omitempty"`
+	// Name is the place's own name when it has one distinct from its address
+	// ("White House"), otherwise empty.
+	Name string `json:"name,omitempty"`
+
+	StreetNumber string `json:"streetNumber,omitempty"`
+	StreetName   string `json:"streetName,omitempty"`
+	City         string `json:"city,omitempty"`
+	State        string `json:"state,omitempty"`
+	Zipcode      string `json:"zipcode,omitempty"`
+	Country      string `json:"country,omitempty"`
 }
 
 // Provider performs geocoding API calls.

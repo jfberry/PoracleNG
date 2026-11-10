@@ -29,6 +29,10 @@ type Choice struct {
 type UserStateHint struct {
 	Subtype string
 	Focused string
+	// IsAdmin reports whether the invoking user is a configured platform
+	// admin. Listers that consult AreaLogic need it: admins see every
+	// fence, not just the user-selectable ones.
+	IsAdmin bool
 }
 
 // UserStateLister produces autocomplete choices for a given user.
@@ -111,4 +115,78 @@ func truncateChoiceLabel(label string) string {
 	}
 	// No selector marker — keep the head, ellipsis at the end.
 	return label[:max-len(ellipsis)] + ellipsis
+}
+
+// maxChoiceValue is Discord's hard limit on an autocomplete choice's
+// value (100 characters). FilterAndCapMulti composes values, so it has to
+// respect the ceiling rather than let the API reject the whole response.
+const maxChoiceValue = 100
+
+// FilterAndCapMulti is FilterAndCap for options that hold a
+// comma-separated list rather than one value — the tracker `areas:`
+// option, which maps to a single `area:X,Y,Z` token.
+//
+// Discord replaces the entire option text with the picked choice's value,
+// so a plain single-value list makes the second pick overwrite the first.
+// Instead we split the typed text at the last comma: everything before it
+// is the user's committed selection, the remainder is what they're
+// currently typing. Choices are filtered by that remainder, already-picked
+// values are dropped, and each choice's value is the whole composed field
+// ("London,Paris") so picking appends instead of replacing. Labels stay
+// the bare name so the list is scannable.
+//
+// Segments are re-joined with a bare "," (no space): the value travels to
+// the text parser as one `area:` token either way, and the tighter form
+// leaves more room under the 100-character value limit.
+func FilterAndCapMulti(choices []Choice, focused string) []*discordgo.ApplicationCommandOptionChoice {
+	committed, typing := SplitLastSegment(focused)
+
+	chosen := make(map[string]bool, len(committed))
+	for _, c := range committed {
+		chosen[strings.ToLower(c)] = true
+	}
+	prefix := strings.Join(committed, ",")
+
+	typing = strings.ToLower(strings.TrimSpace(typing))
+	out := make([]*discordgo.ApplicationCommandOptionChoice, 0, 25)
+	for _, c := range choices {
+		if chosen[strings.ToLower(c.Value)] {
+			continue
+		}
+		if typing != "" && !strings.Contains(strings.ToLower(c.Label), typing) {
+			continue
+		}
+		value := c.Value
+		if prefix != "" {
+			value = prefix + "," + c.Value
+		}
+		if len(value) > maxChoiceValue {
+			continue
+		}
+		out = append(out, &discordgo.ApplicationCommandOptionChoice{
+			Name:  truncateChoiceLabel(c.Label),
+			Value: value,
+		})
+		if len(out) == 25 {
+			break
+		}
+	}
+	return out
+}
+
+// SplitLastSegment splits comma-separated text into the segments the user
+// has committed (everything before the last comma, trimmed, with empty
+// segments dropped) and the segment they are still typing. Text with no
+// comma is entirely "still typing".
+func SplitLastSegment(focused string) (committed []string, typing string) {
+	idx := strings.LastIndex(focused, ",")
+	if idx < 0 {
+		return nil, focused
+	}
+	for _, seg := range strings.Split(focused[:idx], ",") {
+		if seg = strings.TrimSpace(seg); seg != "" {
+			committed = append(committed, seg)
+		}
+	}
+	return committed, focused[idx+1:]
 }

@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"sort"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -58,19 +60,7 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if parsed.HasKeyword("arg.remove") {
-		if reply := rejectFormOnRemove(ctx, parsed); reply != nil {
-			return []bot.Reply{*reply}
-		}
-	}
-
-	// `remove id:N` is unambiguous — no pokemon required. Hoist this above the
-	// pokemon-resolution below so a UID-only removal (e.g. from /untrack nest)
-	// doesn't trip the "no pokemon" reply.
-	if parsed.HasKeyword("arg.remove") && len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Nests, parsed.RemoveUIDs,
-			store.NestGetUID,
-			func(r *db.NestTrackingAPI) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(r)) },
-		)
+		return c.removeNests(ctx, parsed)
 	}
 
 	common, block := parseCommonTrackFields(ctx, parsed, "nest")
@@ -98,17 +88,6 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_pokemon")}}
 	}
 
-	if parsed.HasKeyword("arg.remove") {
-		if len(parsed.RemoveUIDs) > 0 {
-			tr := ctx.Tr()
-			return removeByUIDs(ctx, ctx.Tracking.Nests, parsed.RemoveUIDs,
-				store.NestGetUID,
-				func(r *db.NestTrackingAPI) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(r)) },
-			)
-		}
-		return c.removeNests(ctx, monsterList)
-	}
-
 	insert := make([]db.NestTrackingAPI, 0, len(monsterList))
 	for _, mon := range monsterList {
 		insert = append(insert, db.NestTrackingAPI{
@@ -132,6 +111,9 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	if r := overrideLimitReply(ctx, tracked, insert, store.NestGetUID, store.NestSetUID); r != nil {
+		return r
+	}
 	diff, err := store.ApplyDiff(ctx.Tracking.Nests, ctx.TargetID, tracked, insert,
 		store.NestGetUID, store.NestSetUID)
 	if err != nil {
@@ -162,7 +144,15 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 func (c *NestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
 	if parsed.HasKeyword("arg.everything") {
-		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}, nil
+		if !hasGenOrTypeFilter(parsed) || ctx.GameData == nil {
+			return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}, nil
+		}
+		// `everything gen1` / `everything fire`: expand to every species and
+		// narrow, as !track does, instead of silently ignoring the filter.
+		// Sorted so rows are inserted (and listed) in dex order.
+		monsters := filterByGenAndType(ctx, allBaseForms(ctx), parsed)
+		sort.Slice(monsters, func(i, j int) bool { return monsters[i].PokemonID < monsters[j].PokemonID })
+		return monsters, nil
 	}
 
 	monsters, reply := applyFormFilter(ctx, parsed.Pokemon, parsed)
@@ -172,39 +162,36 @@ func (c *NestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Parse
 	return filterByGenAndType(ctx, monsters, parsed), nil
 }
 
-func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.ResolvedPokemon) []bot.Reply {
-	tracked, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("nest command: select for remove: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
+// nestRemoveSpec: nest rules are removed by pokemon; gen: and type narrow
+// the selection.
+var nestRemoveSpec = removeSpec{
+	selectors: []bot.ParamDef{pokemonParam},
+	filters:   []bot.ParamDef{genParam, typeNameParam},
+}
 
-	removeIDs := make(map[int]bool)
-	for _, mon := range monsterList {
-		removeIDs[mon.PokemonID] = true
+func (c *NestCommand) removeNests(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	if reply := checkRemoveArgs(ctx, parsed, nestRemoveSpec, nil); reply != nil {
+		return []bot.Reply{*reply}
 	}
-
-	var uids []int64
-	var removed []db.NestTrackingAPI
-	for _, existing := range tracked {
-		// PokemonID 0 means everything — remove all
-		if removeIDs[0] || removeIDs[existing.PokemonID] {
-			uids = append(uids, existing.UID)
-			removed = append(removed, existing)
-		}
-	}
-	if len(uids) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-	if err := ctx.Tracking.Nests.DeleteByUIDs(ctx.TargetID, uids); err != nil {
-		log.Errorf("nest command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-	ctx.TriggerReload()
 	tr := ctx.Tr()
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.NestRowText(tr, nestAPIToTracking(&removed[i])))
+
+	selects := func(r *db.NestTrackingAPI) bool {
+		for _, mon := range parsed.Pokemon {
+			if r.PokemonID == mon.PokemonID {
+				return true
+			}
+		}
+		return false
 	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	var keep func(*db.NestTrackingAPI) bool
+	if inGenType := genTypeKeep(ctx, parsed); inGenType != nil {
+		keep = func(r *db.NestTrackingAPI) bool { return inGenType(r.PokemonID, r.Form) }
+	}
+
+	return ruleRemover[db.NestTrackingAPI]{
+		store:    ctx.Tracking.Nests,
+		getUID:   store.NestGetUID,
+		describe: func(r *db.NestTrackingAPI) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(r)) },
+		logName:  "nest",
+	}.run(ctx, parsed, selects, keep)
 }

@@ -102,7 +102,7 @@ func (g *Generator) QuestRowText(tr *i18n.Translator, quest *db.QuestTracking) s
 		s += " | " + tr.Tf("tracking.distance_fmt", quest.Distance)
 	}
 
-	s += " " + standardText(tr, quest.Template, g.DefaultTemplateName, quest.Clean)
+	s += " " + standardText(tr, quest.Template, g.DefaultTemplateName, quest.Clean, false)
 	s = appendOverride(tr, s, quest.OverrideLocationLabel, quest.OverrideAreas)
 
 	return s

@@ -278,3 +278,23 @@ func TestParserPipeWithSpaces(t *testing.T) {
 		t.Fatalf("expected 2, got %d", len(cmds))
 	}
 }
+
+func TestParserEnsurePrefix(t *testing.T) {
+	p := newTestParser()
+	cases := map[string]string{
+		"track pikachu iv90":          "!track pikachu iv90",
+		"!track pikachu iv90":         "!track pikachu iv90",
+		"track pikachu\n!raid level5": "!track pikachu\n!raid level5",
+		"  tracked  ":                 "!tracked",
+		"track a\n\nraid b":           "!track a\n\n!raid b",
+	}
+	for in, want := range cases {
+		if got := p.EnsurePrefix(in); got != want {
+			t.Errorf("EnsurePrefix(%q) = %q, want %q", in, got, want)
+		}
+	}
+	cmds := p.Parse(p.EnsurePrefix("track pikachu iv90"))
+	if len(cmds) != 1 || cmds[0].CommandKey != "cmd.track" {
+		t.Fatalf("parse after EnsurePrefix = %+v", cmds)
+	}
+}

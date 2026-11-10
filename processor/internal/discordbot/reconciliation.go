@@ -14,8 +14,12 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/humanlock"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -33,7 +37,10 @@ type Reconciliation struct {
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
-	log          *log.Entry
+	// stateMgr gives reconciliation the live fence list, without which it
+	// cannot apply userSelectable or exemptFromAreaSecurity when pruning (#243).
+	stateMgr *state.Manager
+	log      *log.Entry
 
 	// Greeting rate limiting: max 10 per minute to avoid Discord ban.
 	greetingCount      int
@@ -48,6 +55,7 @@ func NewReconciliation(
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
+	stateMgr *state.Manager,
 ) *Reconciliation {
 	return &Reconciliation{
 		session:      session,
@@ -55,8 +63,22 @@ func NewReconciliation(
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
+		stateMgr:     stateMgr,
 		log:          log.WithField("component", "reconciliation-discord"),
 	}
+}
+
+// fences returns the live fence list, or nil when no state is loaded. nil
+// means "unknown", and the prune paths treat it as a reason to skip.
+func (r *Reconciliation) fences() []geofence.Fence {
+	if r.stateMgr == nil {
+		return nil
+	}
+	st := r.stateMgr.Get()
+	if st == nil {
+		return nil
+	}
+	return st.Fences
 }
 
 // LoadAllGuildUsers fetches all non-bot members across all configured guilds.
@@ -101,8 +123,7 @@ func (r *Reconciliation) LoadAllGuildUsers() (map[string]*DiscordUserInfo, error
 			}
 			memberCount++
 
-			roleList := make([]string, len(member.Roles))
-			copy(roleList, member.Roles)
+			roleList := discordroles.MemberRoleIDs(guildID, member.Roles)
 
 			existing, ok := userList[member.User.ID]
 			if !ok {
@@ -213,7 +234,7 @@ func (r *Reconciliation) ReconcileSingleUser(id string, removeInvalidUsers bool)
 				}
 				name = stripEmojis(n)
 			}
-			roleList = append(roleList, member.Roles...)
+			roleList = append(roleList, discordroles.MemberRoleIDs(guildID, member.Roles)...)
 		}
 	}
 
@@ -238,6 +259,10 @@ func (r *Reconciliation) ReconcileUser(id string, user *store.Human, discordUser
 			r.log.Errorf("Synchronisation of Poracle user %s panicked: %v", id, rv)
 		}
 	}()
+
+	// Hold the per-human write lock for the whole reconcile (create,
+	// reactivate, disable, delete). Nothing called from here locks again.
+	defer humanlock.Lock(id)()
 
 	r.log.Debugf("Check user %s", id)
 
@@ -423,23 +448,39 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *store.Human, nam
 			updates["community_membership"] = string(communityJSON)
 		}
 
+		// A membership change may leave areas this human can no longer hold.
+		// Pruned through PermittedAreas so exempt and trusted-granted fences
+		// survive. Runs BEFORE the membership save so a failed prune is retried
+		// next cycle. override_areas always; humans.area only when the operator
+		// has asserted their community config is complete (#243).
+		if communityChanged {
+			fences := r.fences()
+			if len(fences) == 0 {
+				r.log.Warnf("prune areas for %s skipped: no geofences loaded", id)
+			} else {
+				after := &store.Human{ID: id, CommunityMembership: communityList, AreaRestriction: areaRestriction}
+				removed, err := bot.PruneForMembership(r.humanStore, fences, r.cfg, after,
+					slices.Contains(r.cfg.Discord.Admins, id),
+					bot.PruneOptions{Overrides: true, UserAreas: r.cfg.Reconciliation.Discord.PruneUserAreas})
+				if err != nil {
+					// Keep the membership change pending so the next cycle
+					// retries the prune (the prune is idempotent).
+					r.log.Errorf("prune areas for %s: %v", id, err)
+					delete(updates, "community_membership")
+					delete(updates, "area_restriction")
+				}
+				if len(removed) > 0 {
+					r.log.Infof("Pruned areas %v from %s after community change", removed, id)
+				}
+			}
+		}
+
 		if len(updates) > 0 {
 			if err := r.humanStore.Update(id, updates); err != nil {
 				r.log.Errorf("Update user %s: %v", id, err)
 				return
 			}
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
-		}
-
-		// When community membership changes, per-rule override_areas may reference
-		// areas no longer permitted. Prune them so rules fall back to the human's
-		// own area list rather than matching nothing.
-		if communityChanged {
-			permitted := bot.BuildPermittedSet(r.cfg.Area.Communities, communityList)
-			if err := r.humanStore.PruneOverrideAreas(id, permitted); err != nil {
-				r.log.Errorf("prune override areas for %s: %v", id, err)
-				// best effort — don't abort reconciliation
-			}
 		}
 	}
 }
@@ -505,19 +546,14 @@ func (r *Reconciliation) SendGreetings(id string) {
 		"prefix": prefix,
 	}
 
-	tmpl := r.dtsStore.Get("greeting", platform, "", "")
-	if tmpl == nil {
-		tmpl = r.dtsStore.Get("greeting", platform, "1", "")
-	}
-	if tmpl == nil {
-		tmpl = r.dtsStore.Get("greeting", platform, "default", "")
-	}
+	// Select in [general] locale — the same language the greeting renders in.
+	tmpl := r.dtsStore.Greeting(platform, r.cfg.General.Locale)
 	if tmpl == nil {
 		r.log.Debug("No greeting template found")
 		return
 	}
 
-	result, err := tmpl.Exec(view)
+	result, err := dts.ExecTemplate(tmpl, view, r.cfg.General.Locale, platform)
 	if err != nil {
 		r.log.Errorf("Cannot render greeting for %s: %v", id, err)
 		return
@@ -652,7 +688,10 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 				if restErr.Response.StatusCode == 404 {
 					if removeInvalidChannels {
 						r.log.Infof("Disable channel %s %s", user.ID, user.Name)
-						if err := r.humanStore.SetAdminDisable(user.ID, true); err != nil {
+						if err := func() error {
+							defer humanlock.Lock(user.ID)()
+							return r.humanStore.SetAdminDisable(user.ID, true)
+						}(); err != nil {
 							r.log.Errorf("Disable channel %s: %v", user.ID, err)
 						}
 					}
@@ -718,7 +757,11 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 		}
 
 		if len(updates) > 0 {
-			if err := r.humanStore.Update(user.ID, updates); err != nil {
+			err := func() error {
+				defer humanlock.Lock(user.ID)()
+				return r.humanStore.Update(user.ID, updates)
+			}()
+			if err != nil {
 				r.log.Errorf("Update channel %s: %v", user.ID, err)
 				continue
 			}

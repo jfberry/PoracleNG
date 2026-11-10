@@ -1,4 +1,4 @@
-.PHONY: all build clean start test
+.PHONY: all build clean start test openapi
 
 # Default: build
 all: build
@@ -19,3 +19,10 @@ start: build
 # Run all tests
 test:
 	cd processor && go test ./...
+
+# Regenerate the committed OpenAPI goldens after an intentional spec change.
+# Two separate goldens: the package-api ops, and the six autocreate ops
+# registered in cmd/processor.
+openapi:
+	cd processor && UPDATE_GOLDEN=1 go test ./internal/api/ -run TestOpenAPIGolden
+	cd processor && UPDATE_GOLDEN=1 go test ./cmd/processor/ -run TestAutocreateOpenAPIGolden

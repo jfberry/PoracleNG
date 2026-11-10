@@ -11,6 +11,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -336,5 +339,42 @@ func TestHumaCommand_NilParser500(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestHumaCommand_PrefixOptional: the endpoint must accept command text with
+// or without the configured prefix. An unknown command in a DM yields an
+// "Unknown command" reply, which proves the line reached the command lookup
+// rather than being dropped by the parser's prefix check.
+func TestHumaCommand_PrefixOptional(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{"cmd.track": "track"}))
+	cfg := &config.Config{}
+	cfg.General.Locale = "en"
+	deps := &bot.BotDeps{
+		Cfg:          cfg,
+		Humans:       store.NewMockHumanStore(),
+		Translations: bundle,
+		Registry:     bot.NewRegistry(),
+		Parser:       bot.NewParser("!", bundle, []string{"en"}, nil),
+	}
+	for _, text := range []string{"nosuchcmd", "!nosuchcmd"} {
+		r, api := newFeaturesTestAPI(t)
+		RegisterCommand(api, deps)
+		body := bytes.NewBufferString(`{"text":"` + text + `","user_id":"123","is_dm":true}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/command", body)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%q: expected 200, got %d body=%s", text, w.Code, w.Body.String())
+		}
+		var resp commandResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Replies) != 1 || resp.Replies[0].Text != "Unknown command" {
+			t.Errorf("%q: replies = %+v, want one Unknown command reply", text, resp.Replies)
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/pokemon/poracleng/processor/internal/buttons"
+	"github.com/pokemon/poracleng/processor/internal/humanlock"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
 )
 
@@ -36,7 +37,12 @@ func HandleUnsubscribe(_ context.Context, snap *snapshots.Snapshot, _ buttons.De
 		}, nil
 	}
 
-	deleted, err := deleteTrackingByAlertType(snap.AlertType, snap.Target, snap.TrackingUIDs, deps)
+	// Serialise with API/bot/reconciler writes to the same human. The rules
+	// deleted belong to snap.Target (the clicker for the DM-only default).
+	deleted, err := func() (int, error) {
+		defer humanlock.Lock(snap.Target)()
+		return deleteTrackingByAlertType(snap.AlertType, snap.Target, snap.TrackingUIDs, deps)
+	}()
 	if err != nil {
 		return Response{Text: tr.T("msg.button.unsubscribe_failed"), Reaction: "🙅"}, err
 	}
@@ -56,14 +62,49 @@ func HandleUnsubscribe(_ context.Context, snap *snapshots.Snapshot, _ buttons.De
 	}, nil
 }
 
+// alertTypeTable maps a RenderJob.AlertType (as copied into a snapshot) to
+// the canonical tracking-table key used by mute.Entry.RuleTable and the
+// per-type stores. Keys are the AlertType values emitted by the webhook
+// handlers in cmd/processor, plus legacy template-type spellings. Keep in step
+// with TestUnsubscribeRoutesEveryRenderedAlertType.
+func alertTypeTable(alertType string) (string, bool) {
+	switch alertType {
+	case "pokemon", "monster", "monsterChanged":
+		return "pokemon", true
+	case "raid":
+		return "raid", true
+	case "egg":
+		return "egg", true
+	case "quest":
+		return "quest", true
+	case "invasion", "incident":
+		return "invasion", true
+	case "pokestop", "lure":
+		return "lure", true
+	case "nest":
+		return "nest", true
+	case "gym":
+		return "gym", true
+	case "fort-update", "fort_update":
+		return "fort", true
+	case "max_battle", "maxbattle":
+		return "maxbattle", true
+	}
+	return "", false
+}
+
 // deleteTrackingByAlertType dispatches the delete to the right per-type
 // store based on the alert type. Returns the number of rules deleted.
 func deleteTrackingByAlertType(alertType, humanID string, uids []int64, deps Deps) (int, error) {
 	if deps.Tracking == nil {
 		return 0, errors.New("nil Tracking")
 	}
-	switch alertType {
-	case "monster", "monsterChanged":
+	table, ok := alertTypeTable(alertType)
+	if !ok {
+		return 0, fmt.Errorf("unsubscribe: unknown alert type %q", alertType)
+	}
+	switch table {
+	case "pokemon":
 		return deleteUIDsAndReport(deps.Tracking.Monsters.DeleteByUIDs, humanID, uids)
 	case "raid":
 		return deleteUIDsAndReport(deps.Tracking.Raids.DeleteByUIDs, humanID, uids)
@@ -71,20 +112,18 @@ func deleteTrackingByAlertType(alertType, humanID string, uids []int64, deps Dep
 		return deleteUIDsAndReport(deps.Tracking.Eggs.DeleteByUIDs, humanID, uids)
 	case "quest":
 		return deleteUIDsAndReport(deps.Tracking.Quests.DeleteByUIDs, humanID, uids)
-	case "invasion", "incident":
+	case "invasion":
 		return deleteUIDsAndReport(deps.Tracking.Invasions.DeleteByUIDs, humanID, uids)
-	case "pokestop", "lure":
+	case "lure":
 		return deleteUIDsAndReport(deps.Tracking.Lures.DeleteByUIDs, humanID, uids)
 	case "nest":
 		return deleteUIDsAndReport(deps.Tracking.Nests.DeleteByUIDs, humanID, uids)
 	case "gym":
 		return deleteUIDsAndReport(deps.Tracking.Gyms.DeleteByUIDs, humanID, uids)
-	case "fort_update":
+	case "fort":
 		return deleteUIDsAndReport(deps.Tracking.Forts.DeleteByUIDs, humanID, uids)
-	case "max_battle", "maxbattle":
+	default: // maxbattle
 		return deleteUIDsAndReport(deps.Tracking.Maxbattles.DeleteByUIDs, humanID, uids)
-	default:
-		return 0, fmt.Errorf("unsubscribe: unknown alert type %q", alertType)
 	}
 }
 

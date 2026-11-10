@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -831,11 +832,11 @@ func TestQueueDoesNotStampWhenEditKeyMatches(t *testing.T) {
 func TestQueueTracksReplyKeyAfterSend(t *testing.T) {
 	// Sender returns deterministic incrementing sentIDs so we can verify the
 	// second job picks up the first job's id.
-	var counter int32
+	var counter atomic.Int32
 	mock := &counterSender{
 		platform: "discord",
 		next: func() string {
-			n := atomic.AddInt32(&counter, 1)
+			n := counter.Add(1)
 			return "chan1:msg-" + strconv.Itoa(int(n))
 		},
 	}
@@ -1014,11 +1015,11 @@ func TestProcessJob_NoReplyKey_NotTracked(t *testing.T) {
 // is sent → tracker lookup stamps job 2's ReplyToID with job 1's SentID before
 // the platform sender receives it.
 func TestProcessJob_ReplyChainWithoutClean(t *testing.T) {
-	var n int32
+	var n atomic.Int32
 	mock := &counterSender{
 		platform: "discord",
 		next: func() string {
-			id := atomic.AddInt32(&n, 1)
+			id := n.Add(1)
 			return "chan1:msg-" + strconv.Itoa(int(id))
 		},
 	}
@@ -1383,4 +1384,386 @@ func TestLaneStats(t *testing.T) {
 		total, active, maxDepth, target, _ := fq.LaneStats()
 		return active == 1 && total == 6 && maxDepth == 6 && target == "t"
 	}, time.Second)
+}
+
+// drainLane blocks a lane's drainer on its first job so the lane's buffer can
+// be filled deterministically, and returns a release func plus a recorder of
+// every job that actually reached the sender.
+func blockedLane(t *testing.T, cfg QueueConfig) (fq *FairQueue, release, stop func(), rec *sentRecorder) {
+	t.Helper()
+	rec = &sentRecorder{}
+	gate := make(chan struct{})
+	started := make(chan struct{}, 1)
+	sender := &laneMockSender{onSend: func(job *Job) {
+		rec.add(job)
+		if job.Target == "full" {
+			select {
+			case started <- struct{}{}:
+				<-gate // only the first job parks the drainer
+			default:
+			}
+		}
+	}}
+	fq, _ = newTestFairQueue(t, map[string]Sender{"discord": sender}, cfg)
+	fq.Start()
+
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "full", LogReference: "head"}, true) {
+		t.Fatal("first send should be accepted")
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("lane drainer never started")
+	}
+
+	var relOnce, stopOnce sync.Once
+	release = func() { relOnce.Do(func() { close(gate) }) }
+	// stop is idempotent so a test can drain explicitly before asserting and
+	// still defer it for the failure paths; FairQueue.Stop itself panics if
+	// called twice.
+	stop = func() { stopOnce.Do(func() { release(); fq.Stop() }) }
+	return fq, release, stop, rec
+}
+
+type sentRecorder struct {
+	mu   sync.Mutex
+	jobs []string
+}
+
+func (r *sentRecorder) add(j *Job) {
+	r.mu.Lock()
+	r.jobs = append(r.jobs, j.LogReference)
+	r.mu.Unlock()
+}
+
+func (r *sentRecorder) seen(ref string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, s := range r.jobs {
+		if s == ref {
+			return true
+		}
+	}
+	return false
+}
+
+// enqueueWithin runs enqueue on a goroutine and fails the test if it has not
+// returned within d. The whole point of the overflow policy is that enqueue
+// returns promptly on a saturated lane, so a hang is the failure being tested
+// for — never something a test should sit on.
+func enqueueWithin(t *testing.T, fq *FairQueue, job *Job, d time.Duration) bool {
+	t.Helper()
+	res := make(chan bool, 1)
+	go func() { res <- fq.enqueue(job, true) }()
+	select {
+	case ok := <-res:
+		return ok
+	case <-time.After(d):
+		t.Fatalf("enqueue for %s blocked on a full lane", job.LogReference)
+		return false
+	}
+}
+
+// TestLanes_OverflowShedsOldestKeepsNewest is the core of the overflow policy:
+// a saturated lane discards its STALEST buffered job to make room for the
+// arriving one. Alerts are perishable — keeping 200 expired jobs and rejecting
+// the live one is the worst possible shedding order.
+func TestLanes_OverflowShedsOldestKeepsNewest(t *testing.T) {
+	fq, _, stop, rec := blockedLane(t, QueueConfig{ConcurrentDiscord: 2, PerRouteBuffer: 2})
+	defer stop()
+
+	// Fill the buffer behind the parked drainer.
+	for _, ref := range []string{"stale", "middle"} {
+		if !fq.enqueue(&Job{Type: "discord:channel", Target: "full", LogReference: ref}, true) {
+			t.Fatalf("%s should fit in the buffer", ref)
+		}
+	}
+	// Buffer full — this must evict "stale", not reject or block.
+	if !enqueueWithin(t, fq, &Job{Type: "discord:channel", Target: "full", LogReference: "fresh"}, 2*time.Second) {
+		t.Fatal("arriving send must be accepted by shedding the oldest")
+	}
+
+	stop() // drain everything still buffered before asserting
+
+	if rec.seen("stale") {
+		t.Error("oldest buffered job should have been shed")
+	}
+	if !rec.seen("fresh") {
+		t.Error("newest job should have been delivered")
+	}
+}
+
+// TestLanes_OverflowNeverBlocksProducer is the reporter's actual bug: a
+// saturated destination must not occupy the shared render worker that called
+// Dispatch, nor stop an unrelated destination from accepting work.
+func TestLanes_OverflowNeverBlocksProducer(t *testing.T) {
+	fq, _, stop, _ := blockedLane(t, QueueConfig{ConcurrentDiscord: 2, PerRouteBuffer: 1})
+	defer stop()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Far more jobs than the buffer holds; none may block.
+		for i := range 50 {
+			fq.enqueue(&Job{Type: "discord:channel", Target: "full", LogReference: fmt.Sprintf("j%d", i)}, true)
+		}
+		fq.enqueue(&Job{Type: "discord:channel", Target: "other", LogReference: "unrelated"}, true)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("enqueue blocked on a saturated lane — producer was not protected")
+	}
+}
+
+// TestLanes_OverflowPreservesBypassJobs guards the invariant that
+// DispatchBypass and processJob step 2b both document: the limiter can never
+// swallow the very message reporting on itself. A rate-limit breach notice is
+// dispatched precisely because the destination is flooded, so its lane is full
+// by definition — head-eviction must skip it and shed an ordinary send instead.
+func TestLanes_OverflowPreservesBypassJobs(t *testing.T) {
+	fq, _, stop, rec := blockedLane(t, QueueConfig{ConcurrentDiscord: 2, PerRouteBuffer: 2})
+	defer stop()
+
+	// Breach notice lands at the head of the buffer, then ordinary alerts
+	// arrive and would evict it.
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "full", LogReference: "breach-notice", BypassRateLimit: true}, true) {
+		t.Fatal("bypass job should be accepted")
+	}
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "full", LogReference: "ordinary"}, true) {
+		t.Fatal("ordinary job should fit")
+	}
+	for i := range 5 {
+		enqueueWithin(t, fq, &Job{Type: "discord:channel", Target: "full", LogReference: fmt.Sprintf("flood%d", i)}, 2*time.Second)
+	}
+
+	stop() // drain everything still buffered before asserting
+
+	if !rec.seen("breach-notice") {
+		t.Error("bypass job was shed — the rate-limit notice can be swallowed by its own flood")
+	}
+}
+
+// TestLanes_OverflowKeepsPendingConsistent proves shed jobs decrement the
+// lane's pending counter. A leak here means the reaper never deletes the lane
+// and its drainer goroutine lives forever.
+func TestLanes_OverflowKeepsPendingConsistent(t *testing.T) {
+	fq, release, stop, _ := blockedLane(t, QueueConfig{ConcurrentDiscord: 2, PerRouteBuffer: 2})
+	// stop() releases first: a t.Fatal below must not leave Stop waiting on a
+	// drainer that is still parked.
+	defer stop()
+
+	for i := range 20 {
+		enqueueWithin(t, fq, &Job{Type: "discord:channel", Target: "full", LogReference: fmt.Sprintf("j%d", i)}, 2*time.Second)
+	}
+	release()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		fq.lanesMu.Lock()
+		l, ok := fq.lanes["full"]
+		var pending int
+		if ok {
+			pending = l.pending
+		}
+		fq.lanesMu.Unlock()
+		if ok && pending == 0 {
+			return // drained with an exact accounting
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("lane pending never returned to zero — shed jobs leaked the counter")
+}
+
+// TestLanes_OverflowCountsShedJobs proves loss is observable. Without a
+// dedicated counter an operator cannot alert on discarded alerts.
+func TestLanes_OverflowCountsShedJobs(t *testing.T) {
+	fq, _, stop, _ := blockedLane(t, QueueConfig{ConcurrentDiscord: 2, PerRouteBuffer: 1})
+	defer stop()
+
+	before := fq.ShedCount()
+	for i := range 10 {
+		enqueueWithin(t, fq, &Job{Type: "discord:channel", Target: "full", LogReference: fmt.Sprintf("j%d", i)}, 2*time.Second)
+	}
+	if got := fq.ShedCount() - before; got == 0 {
+		t.Fatal("ShedCount did not record any shed jobs")
+	}
+}
+
+func TestEditTooOld(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	at := func(ago time.Duration) *TrackedMessage {
+		return &TrackedMessage{SentAt: now.Add(-ago).Unix()}
+	}
+	if editTooOld(at(5*time.Minute), 5*time.Minute, now) {
+		t.Error("a message exactly at the window must still be editable")
+	}
+	if !editTooOld(at(5*time.Minute+time.Second), 5*time.Minute, now) {
+		t.Error("a message one second past the window must not be edited")
+	}
+	if editTooOld(at(3*time.Hour), 0, now) {
+		t.Error("maxAge 0 means no limit")
+	}
+	if !editTooOld(&TrackedMessage{SentAt: 0}, 5*time.Minute, now) {
+		t.Error("unknown SentAt with a window must count as too old")
+	}
+	if editTooOld(&TrackedMessage{SentAt: 0}, 0, now) {
+		t.Error("unknown SentAt with no window must stay editable (raid behaviour)")
+	}
+}
+
+// newEditWindowQueue builds a started queue around a fresh tracker and a
+// mock sender whose sends return sentID.
+func newEditWindowQueue(t *testing.T, sentID string) (*FairQueue, *MessageTracker, *queueMockSender) {
+	t.Helper()
+	mock := &queueMockSender{platform: "discord", sentID: sentID}
+	senders := map[string]Sender{"discord": mock}
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+	fq := NewFairQueue(senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	}, nil)
+	fq.Start()
+	return fq, tracker, mock
+}
+
+func pokemonEditJob(maxAge time.Duration) *Job {
+	return &Job{
+		Target:     "user1",
+		Type:       "discord:user",
+		Message:    json.RawMessage(`{"content":"updated"}`),
+		EditKey:    "pokemon:enc1:user1",
+		EditMaxAge: maxAge,
+		ReplyKey:   "enc1",
+		TTH:        TTH{Hours: 1},
+	}
+}
+
+func trackOriginal(tracker *MessageTracker, sentAt int64) {
+	tracker.Track("pokemon:enc1:user1", &TrackedMessage{
+		SentID:   "chan1:msg-original",
+		Target:   "user1",
+		Type:     "discord:user",
+		Clean:    3,
+		ReplyKey: "enc1",
+		SentAt:   sentAt,
+	}, 30*time.Minute)
+}
+
+func TestEditWindow_InsideWindowEdits(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, time.Now().Add(-1*time.Minute).Unix())
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := mock.getEditCalls(); len(got) != 1 || got[0] != "chan1:msg-original" {
+		t.Fatalf("expected one edit of chan1:msg-original, got %v", got)
+	}
+	if got := len(mock.getSendCalls()); got != 0 {
+		t.Fatalf("expected no new send inside the window, got %d", got)
+	}
+}
+
+func TestEditWindow_PastWindowReplies(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, time.Now().Add(-10*time.Minute).Unix())
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getEditCalls()); got != 0 {
+		t.Fatalf("expected no edit past the window, got %d", got)
+	}
+	sends := mock.getSendCalls()
+	if len(sends) != 1 {
+		t.Fatalf("expected one new send past the window, got %d", len(sends))
+	}
+	if sends[0].ReplyToID != "chan1:msg-original" {
+		t.Errorf("past-window send should reply to the original, got ReplyToID=%q", sends[0].ReplyToID)
+	}
+
+	// The original keeps its entry (and so its clean-deletion).
+	orig := tracker.LookupEdit("pokemon:enc1:user1")
+	if orig == nil || orig.SentID != "chan1:msg-original" {
+		t.Fatalf("original entry under the edit key must survive, got %+v", orig)
+	}
+	// The reply is tracked under its own key, with a send time.
+	reply := tracker.LookupEdit("clean:discord:user:user1:chan1:msg-new")
+	if reply == nil {
+		t.Fatal("past-window reply should be tracked under its own clean: key")
+	}
+	if reply.SentAt == 0 {
+		t.Error("tracked reply should record SentAt")
+	}
+	// The next follow-up replies to the newest message in the chain.
+	if got := tracker.LookupReply("enc1", "user1"); got != "chan1:msg-new" {
+		t.Errorf("reply index should point at the newest message, got %q", got)
+	}
+}
+
+func TestEditWindow_UnknownSentAtReplies(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, 0) // persisted before SentAt existed
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getEditCalls()); got != 0 {
+		t.Fatalf("unknown age must not be edited, got %d edits", got)
+	}
+	if got := len(mock.getSendCalls()); got != 1 {
+		t.Fatalf("expected a reply send, got %d", got)
+	}
+}
+
+func TestEditWindow_NoLimitEditsOldMessage(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	trackOriginal(tracker, time.Now().Add(-2*time.Hour).Unix())
+
+	fq.enqueue(pokemonEditJob(0), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getEditCalls()); got != 1 {
+		t.Fatalf("EditMaxAge 0 must always edit (raid behaviour), got %d edits", got)
+	}
+}
+
+func TestEditWindow_SuccessfulEditRefreshesTTL(t *testing.T) {
+	fq, tracker, mock := newEditWindowQueue(t, "chan1:msg-new")
+	sentAt := time.Now().Add(-1 * time.Minute).Unix()
+	tracker.Track("pokemon:enc1:user1", &TrackedMessage{
+		SentID:   "chan1:msg-original",
+		Target:   "user1",
+		Type:     "discord:user",
+		Clean:    3,
+		ReplyKey: "enc1",
+		SentAt:   sentAt,
+	}, 2*time.Minute)
+
+	fq.enqueue(pokemonEditJob(5*time.Minute), true)
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := mock.getEditCalls(); len(got) != 1 {
+		t.Fatalf("expected one edit, got %v", got)
+	}
+	got := tracker.LookupEdit("pokemon:enc1:user1")
+	if got == nil || got.SentID != "chan1:msg-original" || got.SentAt != sentAt {
+		t.Fatalf("entry must keep SentID and SentAt, got %+v", got)
+	}
+	item := tracker.cache.Get("pokemon:enc1:user1")
+	if item == nil {
+		t.Fatal("entry missing from cache")
+	}
+	if remaining := time.Until(item.ExpiresAt()); remaining < 30*time.Minute {
+		t.Fatalf("TTL not refreshed after edit: %v remaining", remaining)
+	}
 }

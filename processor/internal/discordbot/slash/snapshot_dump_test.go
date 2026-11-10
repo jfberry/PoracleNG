@@ -43,7 +43,7 @@ func TestDumpSnapshots(t *testing.T) {
 		withOverride("en", "slash.cmd.profile", "profile"),
 		withOverride("en", "slash.desc.profile", "Manage your profiles"),
 		withOverride("en", "slash.cmd.location", "location"),
-		withOverride("en", "slash.desc.location", "Set your location"),
+		withOverride("en", "slash.desc.location", "Manage your saved locations"),
 		withOverride("en", "slash.cmd.summary", "summary"),
 		withOverride("en", "slash.desc.summary", "Manage scheduled summary digests (e.g. quest)"),
 		withOverride("en", "slash.cmd.start", "start"),

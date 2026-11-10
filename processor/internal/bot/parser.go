@@ -83,6 +83,23 @@ func NewParser(prefix string, bundle *i18n.Bundle, languages []string, available
 	return &Parser{prefix: strings.ToLower(prefix), commandMap: cmdMap, langMap: langMap}
 }
 
+// EnsurePrefix prepends the configured command prefix to every non-empty line
+// of text that doesn't already start with it (case-insensitive), trimming
+// surrounding whitespace. Used by API callers (POST /api/command) that
+// shouldn't need to know the operator's prefix; chat surfaces keep requiring
+// it so ordinary conversation isn't treated as commands.
+func (p *Parser) EnsurePrefix(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(strings.ToLower(line), p.prefix) {
+			line = p.prefix + line
+		}
+		lines[i] = line
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Parse splits raw message text into one or more ParsedCommands.
 func (p *Parser) Parse(text string) []ParsedCommand {
 	var results []ParsedCommand

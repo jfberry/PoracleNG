@@ -110,7 +110,7 @@ type Config struct {
 	TileserverFailureThreshold int // consecutive errors before circuit opens (default 5)
 	TileserverCooldownMs       int // ms to keep circuit open (default 30000)
 	TileQueueSize              int // async tile request queue depth (default 100)
-	TileDeadlineMs             int // max time a payload waits for its tile (default 5000)
+	TileDeadlineMs             int // max time a payload waits for its tile (default 10000)
 	PregenTTL                  int // seconds for pregenerated tile TTL (default 86400 = 1 day, -1 = no TTL hint)
 
 	// Fallback URL if tile generation fails

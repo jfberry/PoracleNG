@@ -166,7 +166,7 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Pre-fetch override context once so per-row validation doesn't re-query.
-		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
 		if ocMsg != "" {
 			trackingJSONError(c, ocCode, ocMsg)
 			return
@@ -192,7 +192,7 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			team := req.Team.intValue(4)
 			if team < 0 || team > 4 {
@@ -233,7 +233,7 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 					RSVPChanges:           rsvpChanges,
 					Level:                 lvl,
 					OverrideLocationLabel: req.OverrideLocationLabel,
-					OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+					OverrideAreas:         v1NormalizeOverrideAreas(req.OverrideAreas),
 				})
 			}
 		}
@@ -245,6 +245,10 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.EggGetUID, store.EggSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.EggGetUID, store.EggSetUID)
 
 		// Build confirmation message before applying changes

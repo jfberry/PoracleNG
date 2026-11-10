@@ -7,7 +7,9 @@ import (
 )
 
 // CORSMiddleware adds permissive CORS headers for the DTS editor.
-// Only applied to /api/* routes which are already protected by the API secret.
+// It is installed globally on the gin engine (cmd/processor/main.go), so it
+// covers every route, not just /api/*. Only the /api/* group is protected
+// by the API secret; CORS itself grants no access.
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")

@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -327,69 +328,25 @@ func TestAreaResolveDisplayNames(t *testing.T) {
 	}
 }
 
-// --- ValidateAndPrune ---
-
-func TestAreaValidateAndPrune_NoSecurity(t *testing.T) {
-	al := NewAreaLogic(testFences(), noSecurityConfig())
-	valid, removed := al.ValidateAndPrune([]string{"downtown", "park", "harbor"}, nil)
-
-	// With area security disabled, all areas are valid
-	if len(valid) != 3 {
-		t.Fatalf("expected 3 valid, got %d", len(valid))
+// A selectable fence declared exempt is offered by !area to every member
+// under area_security; a non-selectable exempt fence is not, because the
+// flag lifts the community filter only, never userSelectable (#243).
+func TestGetAvailableAreas_HonoursExempt(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{{Name: "coast", AllowedAreas: []string{"alpha"}}}
+	al := NewAreaLogic([]geofence.Fence{
+		{Name: "alpha", UserSelectable: true},
+		{Name: "beta", UserSelectable: true},
+		{Name: "pubx", UserSelectable: true, ExemptFromAreaSecurity: true},
+		{Name: "drawn", UserSelectable: false, ExemptFromAreaSecurity: true},
+	}, cfg)
+	var got []string
+	for _, a := range al.GetAvailableAreas([]string{"coast"}, false) {
+		got = append(got, a.Name)
 	}
-	if len(removed) != 0 {
-		t.Fatalf("expected 0 removed, got %d", len(removed))
-	}
-}
-
-func TestAreaValidateAndPrune_WithSecurity(t *testing.T) {
-	al := NewAreaLogic(testFences(), securityConfig())
-
-	// TeamCity allows Downtown and Uptown only
-	valid, removed := al.ValidateAndPrune([]string{"downtown", "park", "harbor"}, []string{"teamcity"})
-
-	if len(valid) != 1 {
-		t.Fatalf("expected 1 valid, got %d: %v", len(valid), valid)
-	}
-	if valid[0] != "downtown" {
-		t.Errorf("expected downtown valid, got %s", valid[0])
-	}
-	if len(removed) != 2 {
-		t.Fatalf("expected 2 removed, got %d: %v", len(removed), removed)
-	}
-}
-
-func TestAreaValidateAndPrune_NoCommunities(t *testing.T) {
-	al := NewAreaLogic(testFences(), securityConfig())
-
-	// No communities = no allowed areas = all removed
-	valid, removed := al.ValidateAndPrune([]string{"downtown", "park"}, nil)
-
-	if len(valid) != 0 {
-		t.Fatalf("expected 0 valid, got %d", len(valid))
-	}
-	if len(removed) != 2 {
-		t.Fatalf("expected 2 removed, got %d", len(removed))
-	}
-}
-
-func TestAreaValidateAndPrune_MultipleCommunities(t *testing.T) {
-	al := NewAreaLogic(testFences(), securityConfig())
-
-	// Both communities = Downtown, Uptown, Park, Harbor all allowed
-	valid, removed := al.ValidateAndPrune(
-		[]string{"downtown", "park", "harbor", "unknown"},
-		[]string{"teamcity", "teamnature"},
-	)
-
-	if len(valid) != 3 {
-		t.Fatalf("expected 3 valid, got %d: %v", len(valid), valid)
-	}
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed, got %d: %v", len(removed), removed)
-	}
-	if removed[0] != "unknown" {
-		t.Errorf("expected unknown removed, got %s", removed[0])
+	if !slices.Equal(got, []string{"alpha", "pubx"}) {
+		t.Fatalf("available = %v, want [alpha pubx]", got)
 	}
 }
 
@@ -425,5 +382,40 @@ func TestAreaFindFence_UnderscoreInName(t *testing.T) {
 	// Underscore form (quoted, or fence config typed verbatim)
 	if f := al.FindFence("gent_centrum"); f == nil || f.Name != "Gent_centrum" {
 		t.Errorf("underscore-form FindFence failed: %+v", f)
+	}
+}
+
+// TestAreaLogic_EitherSpellingBothDirections: lookups and dedupe go by
+// NormalizeAreaKey, so a space-named fence is reachable by an underscored
+// name as well as the reverse, and the fence's own spelling is stored.
+func TestAreaLogic_EitherSpellingBothDirections(t *testing.T) {
+	under := NewAreaLogic([]geofence.Fence{{Name: "Gent_Centrum", UserSelectable: true}}, noSecurityConfig())
+	if _, nf, list := under.AddAreas(nil, nil, []string{"gent centrum"}, false); len(nf) != 0 || !slices.Equal(list, []string{"gent_centrum"}) {
+		t.Errorf("underscore fence via spaced name: list=%v notFound=%v, want [gent_centrum]", list, nf)
+	}
+
+	spaced := NewAreaLogic([]geofence.Fence{{Name: "Gent Centrum", UserSelectable: true}}, noSecurityConfig())
+	added, nf, list := spaced.AddAreas(nil, nil, []string{"gent_centrum"}, false)
+	if len(nf) != 0 || !slices.Equal(list, []string{"gent centrum"}) || !slices.Equal(added, []string{"Gent Centrum"}) {
+		t.Errorf("spaced fence via quoted underscored name: added=%v list=%v notFound=%v, want stored [gent centrum]", added, list, nf)
+	}
+	if name, ok := spaced.ResolveAvailableArea("gent_centrum", nil, false); !ok || name != "Gent Centrum" {
+		t.Errorf("ResolveAvailableArea(gent_centrum) = %q, %v; want Gent Centrum", name, ok)
+	}
+
+	// Already held under the other spelling: not added again.
+	added, nf, list = under.AddAreas([]string{"gent centrum"}, nil, []string{"gent_centrum"}, false)
+	if len(nf) != 0 || len(added) != 0 || !slices.Equal(list, []string{"gent centrum"}) {
+		t.Errorf("held under other spelling: added=%v list=%v notFound=%v, want no duplicate", added, list, nf)
+	}
+
+	// Remove by either spelling, whichever spelling is stored.
+	for _, stored := range []string{"gent_centrum", "gent centrum"} {
+		for _, typed := range []string{"gent centrum", "gent_centrum", "GENT_CENTRUM"} {
+			removed, rest := under.RemoveAreas([]string{stored, "other"}, []string{typed})
+			if !slices.Equal(removed, []string{stored}) || !slices.Equal(rest, []string{"other"}) {
+				t.Errorf("RemoveAreas(stored %q, typed %q) removed=%v rest=%v", stored, typed, removed, rest)
+			}
+		}
 	}
 }

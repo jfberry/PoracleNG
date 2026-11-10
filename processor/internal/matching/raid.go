@@ -104,6 +104,7 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 		}
 
 		trackingData = append(trackingData, raidUserData{
+			RuleTable:             "raid",
 			HumanID:               r.ID,
 			ProfileNo:             r.ProfileNo,
 			Distance:              r.Distance,
@@ -178,6 +179,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 		}
 
 		trackingData = append(trackingData, raidUserData{
+			RuleTable:             "egg",
 			HumanID:               e.ID,
 			ProfileNo:             e.ProfileNo,
 			Distance:              e.Distance,

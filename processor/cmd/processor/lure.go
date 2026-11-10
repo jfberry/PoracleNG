@@ -79,6 +79,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokestop", raw, matchedAreas, matched)
 		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokestopID: lure.PokestopID})
+		applyDefaultEdit(matched, ps.cfg.Tracking, "lure")
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("lure").Inc()

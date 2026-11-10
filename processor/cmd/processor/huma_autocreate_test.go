@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordbot"
 )
 
 // newAutocreateTestAPI builds a gin engine with the shared huma instance and
@@ -132,6 +134,34 @@ func TestHumaAutocreateRunNoBot(t *testing.T) {
 				t.Fatalf("POST run %s = %d, want 503; body: %s", c.body, w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestHumaAutocreateRunBecomesAvailableAfterBotConnects(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	humaAPI := api.NewHumaAPI(r, r.Group("/api"), "test")
+	var connected atomic.Pointer[discordbot.Bot]
+	registerAutocreateHuma(humaAPI, &config.Config{}, connected.Load)
+
+	request := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/autocreate/run", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+	if w := request(); w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("before connection: %d: %s", w.Code, w.Body.String())
+	}
+	// With no autocreate rules, the handler needs only the presence of the bot.
+	connected.Store(&discordbot.Bot{})
+	w := request()
+	if w.Code != http.StatusOK {
+		t.Fatalf("after connection: %d: %s", w.Code, w.Body.String())
+	}
+	if got := decodeAutocreateBody(t, w)["status"]; got != "ok" {
+		t.Fatalf("after connection status = %v, want ok", got)
 	}
 }
 

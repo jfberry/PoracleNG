@@ -102,6 +102,7 @@ func NewLayeredView(
 	// *Enrichment without racing on weakness map writes.
 	lv.localOverrides = make(map[string]any, 2)
 	resolveWeaknessEmojis(vb.emoji, perLang, platform, lv.computed, lv.localOverrides)
+	resolveEvolutionEmojis(vb, perLang, platform, lv.localOverrides)
 
 	// Compose weatherChange text from forecast fields (needs resolved emoji + translated names)
 	composeWeatherChange(lv.computed, base, perLang, vb.emoji, platform)
@@ -293,6 +294,38 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang, perUser map[string]any, pl
 	return result
 }
 
+// evolutionListFields are the per-language lists whose entries carry
+// typeEmojiKeys and get a resolved per-platform "typeEmoji" string, so
+// templates ported from PoracleJS can write {{typeEmoji}} inside
+// {{#each evolutions}} / {{#each megaEvolutions}}.
+var evolutionListFields = []string{"evolutions", "megaEvolutions"}
+
+// resolveEvolutionEmojis copies each evolution list into localOverrides with
+// "emoji" ([]string) and "typeEmoji" (joined string) resolved per platform.
+// Like resolveWeaknessEmojis, the shared perLang maps are never mutated.
+func resolveEvolutionEmojis(vb *ViewBuilder, perLang map[string]any, platform string, localOverrides map[string]any) {
+	if perLang == nil || vb.emoji == nil {
+		return
+	}
+	for _, field := range evolutionListFields {
+		list, ok := perLang[field].([]map[string]any)
+		if !ok || len(list) == 0 {
+			continue
+		}
+		localList := make([]map[string]any, len(list))
+		for i, entry := range list {
+			entryCopy := make(map[string]any, len(entry)+2)
+			maps.Copy(entryCopy, entry)
+			if resolved := vb.resolveEmojiArray(entry["typeEmojiKeys"], platform); resolved != nil {
+				entryCopy["emoji"] = resolved
+				entryCopy["typeEmoji"] = strings.Join(resolved, "")
+			}
+			localList[i] = entryCopy
+		}
+		localOverrides[field] = localList
+	}
+}
+
 // resolveWeaknessEmojis resolves emoji keys inside weaknessList entries
 // and writes a flat {{weaknessEmoji}} string into the computed layer.
 //
@@ -375,9 +408,15 @@ func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, pla
 func buildComputedFields(templateType string, base, perLang map[string]any, emoji map[string]string, areas []webhook.MatchedArea) map[string]any {
 	m := make(map[string]any, 16)
 
-	// id = pokemon_id
+	// id = pokemon_id. Max battles carry the boss as pokemonId only, and their
+	// raw webhook `id` is the station — the pre-Go maxbattle view set
+	// id: data.pokemonId, so keep {{id}} meaning the pokemon there too.
 	if v, ok := base["pokemon_id"]; ok {
 		m["id"] = v
+	} else if templateType == "maxbattle" {
+		if v, ok := base["pokemonId"]; ok {
+			m["id"] = v
+		}
 	}
 
 	// time: for eggs = hatchTime (when egg hatches), for everything else = disappearTime

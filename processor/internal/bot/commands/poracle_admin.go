@@ -19,6 +19,11 @@ type PoracleAdminCommand struct{}
 func (c *PoracleAdminCommand) Name() string      { return "cmd.poracle_admin" }
 func (c *PoracleAdminCommand) Aliases() []string { return []string{"cmd.pa"} }
 
+// ExemptFromTargetLock: !pa acts on other humans or none (e.g. `reconcile`
+// runs the reconciler synchronously, which locks each user itself), so the
+// host must not lock the admin's own id around it or a sweep would deadlock.
+func (c *PoracleAdminCommand) ExemptFromTargetLock() {}
+
 // paSubgroup is the interface for a named admin subgroup.
 type paSubgroup struct {
 	run  func(ctx *bot.CommandContext, args []string) []bot.Reply

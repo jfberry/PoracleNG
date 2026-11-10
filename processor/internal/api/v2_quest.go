@@ -16,7 +16,7 @@ import (
 // because huma's min/max/enum can't express a sparse int set cleanly (matching
 // the v1 handler's validRewardTypes guard, surfaced as 422 in v2). The remaining
 // filter fields are optional pointers (omitted ⇒ documented default via
-// valueOr). ping is server-managed (not a caller input).
+// valueOr).
 //
 // summary opts a matched quest into the summary digest (clean bit 4) — the
 // distinguishing behaviour of quest tracking. quest also carries the clean/edit
@@ -29,31 +29,31 @@ type v2QuestRule struct {
 	Amount     *int  `json:"amount,omitempty" nullable:"true" doc:"Minimum reward amount, meaningful for reward_type 2/4/12. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
-	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
+	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Not supported for quest tracking — omit, or send null/false (true is rejected with 422). Always returned as null."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
-	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset."`
+	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). At most [tracking] max_areas names unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted (a rule already stored over it may keep or shrink its own list). Omit for none. Returned as null when unset."`
 }
 
 // translateV2Quest converts a strict v2 quest rule into the stored
 // QuestTrackingAPI, applying documented defaults, the clean bitmask (incl. the
 // summary bit), profile, and validated/normalized override fields. It rejects an
 // out-of-set reward_type with a 422 (matching the v1 handler's validRewardTypes
-// guard, which returns 400). ping is always stored "" (server-managed).
+// guard, which returns 400).
 func translateV2Quest(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2QuestRule) (db.QuestTrackingAPI, error) {
+	if err := rejectEdit("quest", req.Edit); err != nil {
+		return db.QuestTrackingAPI{}, err
+	}
 	if !validRewardTypes[req.RewardType] {
 		return db.QuestTrackingAPI{}, huma.Error422UnprocessableEntity("Unrecognised reward_type value")
 	}
 
-	distance := valueOr(req.Distance, 0)
-	const maxDistance = 40000000 // Earth circumference (metres)
-	if distance > maxDistance {
-		distance = maxDistance
-	}
+	distance := clampDistance(deps, oc.limitExempt, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {
@@ -63,17 +63,17 @@ func translateV2Quest(deps *TrackingDeps, humanID string, profileNo int, oc over
 	row := db.QuestTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
 		RewardType:            req.RewardType,
-		Reward:                valueOr(req.Reward, 0),
-		Form:                  valueOr(req.Form, 0),
+		Reward:                valueOr(req.Reward, wcQuestReward),
+		Form:                  valueOr(req.Form, wcForm),
 		Shiny:                 db.IntBool(valueOr(req.Shiny, false)),
-		Amount:                valueOr(req.Amount, 0),
-		Clean:                 packClean(valueOr(req.Clean, false), valueOr(req.Edit, false), valueOr(req.Summary, false)),
+		Amount:                valueOr(req.Amount, wcQuestAmount),
+		Clean:                 packClean(valueOr(req.Clean, false), false, valueOr(req.Summary, false)),
 		OverrideLocationLabel: overrideLabel,
-		OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+		OverrideAreas:         canonicalOverrideAreas(deps, req.OverrideAreas),
 	}
 	return row, nil
 }
@@ -83,14 +83,15 @@ func translateV2Quest(deps *TrackingDeps, humanID string, profileNo int, oc over
 func questRowToRule(row *db.QuestTrackingAPI) v2QuestRule {
 	return v2QuestRule{
 		RewardType:            row.RewardType, // required, always present
-		Reward:                ptrUnless(row.Reward, 0),
-		Form:                  ptrUnless(row.Form, 0),
+		Reward:                ptrUnless(row.Reward, wcQuestReward),
+		Form:                  ptrUnless(row.Form, wcForm),
 		Shiny:                 ptrUnless(bool(row.Shiny), false),
-		Amount:                ptrUnless(row.Amount, 0),
-		Distance:              ptrUnless(row.Distance, 0),
+		Amount:                ptrUnless(row.Amount, wcQuestAmount),
+		Distance:              ptrUnless(row.Distance, wcDistance),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
-		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
+		Edit:                  nil, // edit is not supported for this type; always null
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),

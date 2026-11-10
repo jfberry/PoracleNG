@@ -229,3 +229,27 @@ func TestIsTelegramCommunityAdmin_NoTelegramConfig(t *testing.T) {
 		}
 	}
 }
+
+// FilterAreas compares allowed_areas and the candidate areas by
+// NormalizeAreaKey, so underscores and spaces are interchangeable in both
+// directions, and returns the candidate entries exactly as passed in (v1's
+// area_restriction output spelling is unchanged).
+func TestFilterAreas_EitherSpellingBothDirections(t *testing.T) {
+	comms := []config.CommunityConfig{
+		{Name: "spaced", AllowedAreas: []string{"gent centrum"}},
+		{Name: "under", AllowedAreas: []string{"Brugge_Centrum"}},
+	}
+	got := FilterAreas(comms, []string{"spaced"}, []string{"gent_centrum", "other"})
+	if len(got) != 1 || got[0] != "gent_centrum" {
+		t.Errorf("spaced allowed vs underscored fence: got %v, want [gent_centrum]", got)
+	}
+	got = FilterAreas(comms, []string{"under"}, []string{"Brugge Centrum", "other"})
+	if len(got) != 1 || got[0] != "Brugge Centrum" {
+		t.Errorf("underscored allowed vs spaced area: got %v, want [Brugge Centrum] (original entry)", got)
+	}
+	// Plain matches keep their exact input spelling, as before.
+	got = FilterAreas(testCommunities, []string{"newyork"}, []string{"manhattan", "Bronx"})
+	if len(got) != 2 || got[0] != "manhattan" || got[1] != "Bronx" {
+		t.Errorf("output spelling changed: got %v, want [manhattan Bronx]", got)
+	}
+}

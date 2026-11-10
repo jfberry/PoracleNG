@@ -13,12 +13,15 @@ import (
 // location_fence against the loaded geofence set. A typo in config silently
 // contributes nothing at match time — this surfaces it at startup instead.
 //
-// Matches the lowercase-only normalisation used in community/community.go so
-// this log reflects what the runtime actually compares against.
+// allowed_areas resolve by geofence.NormalizeAreaKey and location_fence by
+// plain lowercase, matching what the runtime compares (community.FilterAreas
+// and bot.PermittedAreas key allowed_areas; location restrictions lowercase).
 func validateCommunityAreas(fences []geofence.Fence, communities []config.CommunityConfig) {
 	fenceSet := make(map[string]bool, len(fences))
+	fenceKeys := make(map[string]bool, len(fences))
 	for _, f := range fences {
 		fenceSet[strings.ToLower(f.Name)] = true
+		fenceKeys[geofence.NormalizeAreaKey(f.Name)] = true
 	}
 
 	for _, comm := range communities {
@@ -26,7 +29,7 @@ func validateCommunityAreas(fences []geofence.Fence, communities []config.Commun
 		// misses individually and a summary count; skip the per-area ✓ noise.
 		validAllowed := 0
 		for _, a := range comm.AllowedAreas {
-			if fenceSet[strings.ToLower(a)] {
+			if fenceKeys[geofence.NormalizeAreaKey(a)] {
 				validAllowed++
 			} else {
 				log.Warnf("config: community %s allowed_areas %q — NOT FOUND in loaded geofences", comm.Name, a)

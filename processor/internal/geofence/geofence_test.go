@@ -484,6 +484,48 @@ func TestParseGeoJSONCapturesExtraProperties(t *testing.T) {
 	}
 }
 
+func TestExemptFromAreaSecurity_Native(t *testing.T) {
+	path := writeTempFile(t, `[
+		{"name":"plain","path":[[0,0],[0,1],[1,1]]},
+		{"name":"drawn","userSelectable":false,"exemptFromAreaSecurity":true,"path":[[0,0],[0,1],[1,1]]}
+	]`)
+	fences, err := LoadGeofenceFile(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fences[0].ExemptFromAreaSecurity {
+		t.Error("absent exemptFromAreaSecurity must default to false")
+	}
+	if !fences[1].ExemptFromAreaSecurity {
+		t.Error("exemptFromAreaSecurity:true not read from native format")
+	}
+	if fences[1].UserSelectable {
+		t.Error("the flag must not imply userSelectable")
+	}
+}
+
+func TestExemptFromAreaSecurity_GeoJSON(t *testing.T) {
+	path := writeTempFile(t, `{"type":"FeatureCollection","features":[
+		{"type":"Feature","properties":{"name":"plain"},
+		 "geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}},
+		{"type":"Feature","properties":{"name":"drawn","exemptFromAreaSecurity":true},
+		 "geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}}
+	]}`)
+	fences, err := LoadGeofenceFile(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fences[0].ExemptFromAreaSecurity {
+		t.Error("absent exemptFromAreaSecurity must default to false")
+	}
+	if !fences[1].ExemptFromAreaSecurity {
+		t.Error("exemptFromAreaSecurity:true not read from GeoJSON properties")
+	}
+	if _, leaked := fences[1].Properties["exemptFromAreaSecurity"]; leaked {
+		t.Error("a named key must not also appear in Properties")
+	}
+}
+
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()

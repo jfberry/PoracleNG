@@ -6,27 +6,31 @@
   "template": {
     "embed": {
       "title": "!egg",
-      "description": "Alerts for raid eggs before they hatch — useful for knowing a raid boss is incoming so you can plan.",
+      "description": "Alerts for raid eggs before they hatch, so you know a raid is coming. Eggs are tracked by level. For hatched bosses, see `{{prefix}}help raid`.",
       "fields": [
         {
           "name": "By level",
-          "value": "`{{prefix}}egg level:5` — level 5 eggs\n`{{prefix}}egg level:3-6` — range\n`{{prefix}}egg legendary` — level:5\n`{{prefix}}egg mega` — level:6\n`{{prefix}}egg elite` — elite raid eggs\n`{{prefix}}egg primal` — level:10"
+          "value": "`{{prefix}}egg level:5` — level 5 eggs\n`{{prefix}}egg level:3-6` — a range of levels\n`{{prefix}}egg everything` — every level\nLevel names: `legendary` (5), `mega` (6), `mega_legendary` (7), `ultra_beast` (8), `elite` (9), `primal` (10), `shadow` (11-15), `shadow_legendary` (15)\n\nUse one level name per command; for more, use a pipe: `{{prefix}}egg legendary | mega`"
         },
         {
-          "name": "Team and gym filters",
-          "value": "`team:instinct` / `team:valor` / `team:mystic` / `team:harmony`\n`ex` — EX raid eligible gyms only\n\nExample: `{{prefix}}egg level:5 team:valor d:1500`"
+          "name": "Filters",
+          "value": "`valor` / `mystic` / `instinct` / `harmony` (or `red` / `blue` / `yellow` / `gray`) — team holding the gym\n`ex` — EX-eligible gyms only\n`\"gym:Town Hall\"` — one gym by name or id (quote names with spaces)\n\nExample: `{{prefix}}egg level:5 valor d:1500`"
         },
         {
-          "name": "Distance and area",
-          "value": "`d:1500` — within 1500m of your location\n`area:city_centre`"
+          "name": "RSVP updates",
+          "value": "By default you get one alert per egg.\n`rsvp` — also alert again when its RSVP counts change\n`rsvp_only` — only alert when the raid has RSVPs\n`no_rsvp` — the default (one alert, no RSVP updates)"
         },
         {
-          "name": "RSVP and message flags",
-          "value": "`rsvp` — include RSVP updates\n`rsvp_only` — only RSVP updates\n`clean` — auto-delete after hatch\n`edit` — single message edited in place\n`ping`"
+          "name": "Where",
+          "value": "`d:1500` — within 1500 m of your location\n`d:500 location:home` — measure from a saved location (`{{prefix}}help location`)\n`area:city_centre` — only in these areas instead of your `{{prefix}}area` list"
         },
         {
-          "name": "Remove",
-          "value": "`{{prefix}}egg remove level:5`\n`{{prefix}}egg remove everything`\n`{{prefix}}untrack id:<N>`"
+          "name": "Message options",
+          "value": "`clean` — delete the alert once the egg has hatched\n`edit` — keep one message and edit it as RSVP counts change\n`template:2` — use a different alert layout (`{{prefix}}info templates`){{#if userIsAdmin}}{{#if isDiscord}}\nAdmins: mention users or roles (@name) when tracking for a channel to ping them in each alert{{/if}}{{/if}}"
+        },
+        {
+          "name": "Remove and mute",
+          "value": "`{{prefix}}egg remove level:5` (or `remove legendary`)\n`{{prefix}}egg remove everything`\n`{{prefix}}egg remove id:7` — one rule by the id shown in `{{prefix}}tracked`\n`{{prefix}}egg mute id:7 duration:2h` — pause one rule without deleting it (`{{prefix}}help mute`)"
         },
         {
           "name": "Full manual",

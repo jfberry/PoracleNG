@@ -33,7 +33,7 @@
               "channel_types": null,
               "required": true,
               "options": null,
-              "autocomplete": false,
+              "autocomplete": true,
               "choices": null
             }
           ],

@@ -1,0 +1,26 @@
+[{
+  "id": "role",
+  "type": "help",
+  "platform": "discord",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!role",
+      "description": "Give yourself (or remove) the server roles your admins have made self-service. Works in a DM with the bot.",
+      "fields": [
+        {
+          "name": "See the roles",
+          "value": "`{{prefix}}role` or `{{prefix}}role list` — every role you can pick, with ☑️ next to the ones you have\n`{{prefix}}role membership` — only the roles you have"
+        },
+        {
+          "name": "Add or remove",
+          "value": "`{{prefix}}role add raids` — use the role name exactly as `{{prefix}}role list` shows it\n`{{prefix}}role add raids pvp` — several at once\n`{{prefix}}role remove raids`\n\nSome roles belong to a group where you can only hold one (a team, say). Adding one of those removes the others in its group."
+        },
+        {
+          "name": "{{#if userIsAdmin}}Admin{{/if}}",
+          "value": "{{#if userIsAdmin}}Add `user:<id>` to list or change another user's roles. The roles on offer come from `[[discord.role_subscriptions]]` in the config.{{/if}}"
+        }
+      ]
+    }
+  }
+}]

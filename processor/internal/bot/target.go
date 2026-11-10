@@ -3,6 +3,7 @@ package bot
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -37,8 +38,7 @@ func (e *TargetError) Localize(tr *i18n.Translator) string {
 // otherwise it returns err.Error(). Call sites that already have a translator
 // should prefer this over err.Error() so translatable errors are honoured.
 func LocalizeTargetError(tr *i18n.Translator, err error) string {
-	var te *TargetError
-	if errors.As(err, &te) {
+	if te, ok := errors.AsType[*TargetError](err); ok {
 		return te.Localize(tr)
 	}
 	return err.Error()
@@ -57,8 +57,11 @@ type Target struct {
 	ExecutionMessage string // shown to user when target is overridden (admin feature)
 }
 
+var userIDOverrideRe = regexp.MustCompile(`^:?-?\d{1,20}$`)
+
 // BuildTarget resolves who a command operates on from the args.
-// Admin users can override the target using name<webhookName> or user<userID>.
+// Admin users can override the target using name:<targetName> (or bare
+// name<targetName> when it names an existing target) or user<userID>.
 // Non-admin commands target the sender.
 // Returns the target, remaining args (with consumed target args removed), and any error.
 func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) {
@@ -71,16 +74,21 @@ func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) 
 			nameOverride = arg[5:]
 			continue
 		}
-		if strings.HasPrefix(arg, "name") && len(arg) > 4 {
-			nameOverride = arg[4:]
-			continue
+		// Bare name<X> (PoracleJS form, no colon) is only an override when X
+		// resolves to an existing named target; otherwise ordinary words
+		// starting with "name" (e.g. a gym "Namco Arcade") stay in the
+		// args (#313). The explicit name:<X> form above always overrides.
+		if rest, ok := strings.CutPrefix(arg, "name"); ok && rest != "" {
+			if id, err := ctx.Humans.LookupWebhookByName(rest); err == nil && id != "" {
+				nameOverride = rest
+				continue
+			}
 		}
-		if strings.HasPrefix(arg, "user:") && len(arg) > 5 {
-			userOverride = arg[5:]
-			continue
-		}
-		if strings.HasPrefix(arg, "user") && len(arg) > 4 {
-			userOverride = arg[4:]
+		// user<ID> / user:<ID> — the ID must be numeric (Telegram group IDs
+		// are negative), as in PoracleJS, so ordinary words that start with
+		// "user" aren't taken as a target override.
+		if id, ok := strings.CutPrefix(arg, "user"); ok && userIDOverrideRe.MatchString(id) {
+			userOverride = strings.TrimPrefix(id, ":")
 			continue
 		}
 		remaining = append(remaining, arg)

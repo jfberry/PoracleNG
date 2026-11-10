@@ -25,7 +25,7 @@ func (g *Generator) LureRowText(tr *i18n.Translator, lure *db.LureTracking) stri
 		s += " | " + tr.Tf("tracking.distance_fmt", lure.Distance)
 	}
 
-	s += " " + standardText(tr, lure.Template, g.DefaultTemplateName, lure.Clean)
+	s += " " + standardText(tr, lure.Template, g.DefaultTemplateName, lure.Clean, g.defaultEdit("lure"))
 	s = appendOverride(tr, s, lure.OverrideLocationLabel, lure.OverrideAreas)
 
 	return s

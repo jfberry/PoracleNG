@@ -135,6 +135,9 @@ func TestPokemonMatchBasic(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "pokemon" {
+		t.Errorf("RuleTable = %q, want pokemon", matched[0].RuleTable)
+	}
 	if len(matched) > 0 && matched[0].ID != "user1" {
 		t.Errorf("Expected user1, got %s", matched[0].ID)
 	}

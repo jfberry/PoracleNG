@@ -200,3 +200,21 @@ func TestNest_AcceptsAreaOverride(t *testing.T) {
 	require.Len(t, rules, 1)
 	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
 }
+
+// TestNest_EverythingWithGen — `!nest everything gen1` must apply the gen
+// filter (expanding over all species, as !track does) rather than silently
+// creating a catch-all rule (#277).
+func TestNest_EverythingWithGen(t *testing.T) {
+	ctx := nestCtx(t)
+	ctx.GameData.Util = &gamedata.UtilData{GenData: map[int]gamedata.GenInfo{
+		1: {Min: 1, Max: 151},
+		5: {Min: 494, Max: 649},
+	}}
+	replies := runNest(t, ctx, "everything gen1")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Nests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 25, rows[0].PokemonID)
+}

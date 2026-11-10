@@ -384,13 +384,17 @@ func RegisterResolve(api huma.API, deps ResolveDeps) {
 			return nil, huma.Error400BadRequest(err.Error())
 		}
 
+		requestDeps := deps
+		if requestDeps.DiscordSessionFunc != nil {
+			requestDeps.DiscordSession = requestDeps.DiscordSessionFunc()
+		}
 		result := resolveResult{Status: "ok"}
 
 		// Resolve unknown-type destinations by trying every category in turn.
 		if len(req.Destinations) > 0 {
 			destinations := make(map[string]any)
 			for _, id := range req.Destinations {
-				if resolved := resolveAnyDestination(ctx, deps, id); resolved != nil {
+				if resolved := resolveAnyDestination(ctx, requestDeps, id); resolved != nil {
 					destinations[id] = resolved
 				}
 			}
@@ -398,13 +402,13 @@ func RegisterResolve(api huma.API, deps ResolveDeps) {
 		}
 
 		// Discord resolution.
-		if req.Discord != nil && deps.DiscordSession != nil {
+		if req.Discord != nil && requestDeps.DiscordSession != nil {
 			discord := make(map[string]map[string]any)
 
 			if len(req.Discord.Users) > 0 {
 				users := make(map[string]any)
 				for _, id := range req.Discord.Users {
-					if resolved := resolveDiscordUser(deps, id); resolved != nil {
+					if resolved := resolveDiscordUser(requestDeps, id); resolved != nil {
 						users[id] = resolved
 					}
 				}
@@ -414,7 +418,7 @@ func RegisterResolve(api huma.API, deps ResolveDeps) {
 			if len(req.Discord.Roles) > 0 {
 				roles := make(map[string]any)
 				for _, id := range req.Discord.Roles {
-					if resolved := resolveDiscordRole(deps, id); resolved != nil {
+					if resolved := resolveDiscordRole(requestDeps, id); resolved != nil {
 						roles[id] = resolved
 					}
 				}
@@ -424,7 +428,7 @@ func RegisterResolve(api huma.API, deps ResolveDeps) {
 			if len(req.Discord.Channels) > 0 {
 				channels := make(map[string]any)
 				for _, id := range req.Discord.Channels {
-					if resolved := resolveDiscordChannel(deps, id); resolved != nil {
+					if resolved := resolveDiscordChannel(requestDeps, id); resolved != nil {
 						channels[id] = resolved
 					}
 				}
@@ -434,7 +438,7 @@ func RegisterResolve(api huma.API, deps ResolveDeps) {
 			if len(req.Discord.Guilds) > 0 {
 				guilds := make(map[string]any)
 				for _, id := range req.Discord.Guilds {
-					if resolved := resolveDiscordGuild(deps, id); resolved != nil {
+					if resolved := resolveDiscordGuild(requestDeps, id); resolved != nil {
 						guilds[id] = resolved
 					}
 				}
@@ -445,13 +449,13 @@ func RegisterResolve(api huma.API, deps ResolveDeps) {
 		}
 
 		// Telegram resolution.
-		if req.Telegram != nil && deps.TelegramAPI != nil {
+		if req.Telegram != nil && requestDeps.TelegramAPI != nil {
 			telegram := make(map[string]map[string]any)
 
 			if len(req.Telegram.Chats) > 0 {
 				chats := make(map[string]any)
 				for _, id := range req.Telegram.Chats {
-					if resolved := resolveTelegramChat(ctx, deps, id); resolved != nil {
+					if resolved := resolveTelegramChat(ctx, requestDeps, id); resolved != nil {
 						chats[id] = resolved
 					}
 				}

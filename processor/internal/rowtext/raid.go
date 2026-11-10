@@ -46,7 +46,7 @@ func (g *Generator) RaidRowText(tr *i18n.Translator, raid *db.RaidTracking) stri
 			s += " | " + tr.T("tracking.must_be_ex")
 		}
 
-		s += " " + standardText(tr, raid.Template, g.DefaultTemplateName, raid.Clean)
+		s += " " + standardText(tr, raid.Template, g.DefaultTemplateName, raid.Clean, g.defaultEdit("raid"))
 
 		if gymID != "" {
 			s += " " + tr.Tf("tracking.at_gym_fmt", gymNameText)
@@ -92,7 +92,7 @@ func (g *Generator) RaidRowText(tr *i18n.Translator, raid *db.RaidTracking) stri
 		s += " | " + tr.T("tracking.must_be_ex")
 	}
 
-	s += " " + standardText(tr, raid.Template, g.DefaultTemplateName, raid.Clean)
+	s += " " + standardText(tr, raid.Template, g.DefaultTemplateName, raid.Clean, g.defaultEdit("raid"))
 
 	if gymID != "" {
 		s += " " + tr.Tf("tracking.at_gym_fmt", gymNameText)
@@ -135,7 +135,7 @@ func (g *Generator) EggRowText(tr *i18n.Translator, egg *db.EggTracking) string 
 		s += " | " + tr.T("tracking.must_be_ex")
 	}
 
-	s += " " + standardText(tr, egg.Template, g.DefaultTemplateName, egg.Clean)
+	s += " " + standardText(tr, egg.Template, g.DefaultTemplateName, egg.Clean, g.defaultEdit("egg"))
 
 	if gymID != "" {
 		s += " " + tr.Tf("tracking.at_gym_fmt", gymNameText)

@@ -118,3 +118,53 @@ func TestLookupArea(t *testing.T) {
 		t.Fatal("nil mapper for /area")
 	}
 }
+
+func TestAreaMapperAddSplitsCommaList(t *testing.T) {
+	tokens, err := Area([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("add", sopt("area", "London,Paris")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(tokens, []string{"add", "London", "Paris"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
+func TestAreaMapperRemoveSplitsCommaList(t *testing.T) {
+	tokens, err := Area([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("remove", sopt("area", "London,Paris")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(tokens, []string{"remove", "London", "Paris"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
+// Area names keep their internal spaces; only the separators are stripped.
+func TestAreaMapperTrimsSegmentsAndDropsEmpties(t *testing.T) {
+	tokens, err := Area([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("add", sopt("area", " Gent Centrum , , London ")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(tokens, []string{"add", "Gent Centrum", "London"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
+func TestAreaMapperRejectsSeparatorsOnly(t *testing.T) {
+	_, err := Area([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("add", sopt("area", " , ")),
+	})
+	me, ok := err.(*MapperError)
+	if !ok {
+		t.Fatalf("expected MapperError, got %T", err)
+	}
+	if me.Key != "error.slash.area.no_area" {
+		t.Errorf("key=%q", me.Key)
+	}
+}

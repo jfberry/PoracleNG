@@ -37,7 +37,7 @@ func (g *Generator) GymRowText(tr *i18n.Translator, gym *db.GymTracking) string 
 		s += " | " + tr.T("tracking.including_battle_changes")
 	}
 
-	s += " " + standardText(tr, gym.Template, g.DefaultTemplateName, gym.Clean)
+	s += " " + standardText(tr, gym.Template, g.DefaultTemplateName, gym.Clean, false)
 
 	if gymID != "" {
 		s += " " + tr.Tf("tracking.at_gym_fmt", gymNameText)

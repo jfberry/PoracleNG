@@ -46,7 +46,7 @@ const (
 	ScopePokestop   = "pokestop"
 	ScopeStation    = "station"
 	ScopeEverything = "everything"
-	ScopeTracking   = "tracking" // Phase 2.5 — accepted by validator but no-op at runtime
+	ScopeTracking   = "tracking" // mutes the alert's own rule(s): one typed (table, uid) entry per snapshot TrackingUIDs
 )
 
 // AppliesTo values — controls which Snapshot.TargetType receives the button.

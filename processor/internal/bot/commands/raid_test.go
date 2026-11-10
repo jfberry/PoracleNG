@@ -166,11 +166,11 @@ func TestRaid_Remove(t *testing.T) {
 	assert.Len(t, rows, 0)
 }
 
-// TestRaid_RemoveByUID_IgnoresBadCostume verifies that `!raid remove id:N`
-// deletes the rule even when an unresolvable costume: arg is also present.
-// Remove-by-UID targets a specific rule directly and never consults the
-// costume filter, so a costume arg — valid or not — must not block it.
-func TestRaid_RemoveByUID_IgnoresBadCostume(t *testing.T) {
+// TestRaid_RemoveByUID_RefusesOtherArgs verifies that `!raid remove id:N`
+// stands alone: id:N names the exact rule, so any other argument beside it
+// (here a costume) would be ignored, and is refused instead. Nothing is
+// removed.
+func TestRaid_RemoveByUID_RefusesOtherArgs(t *testing.T) {
 	ctx := raidCtx(t)
 	runRaid(t, ctx, "25")
 	rows, _ := ctx.Tracking.Raids.SelectByIDProfile("user1", 1)
@@ -179,10 +179,11 @@ func TestRaid_RemoveByUID_IgnoresBadCostume(t *testing.T) {
 
 	replies := runRaid(t, ctx, fmt.Sprintf("remove id:%d costume:bogus", uid))
 	require.NotEmpty(t, replies)
-	assert.Equal(t, "✅", replies[0].React, "id: removal must not be blocked by an unresolvable costume arg, reply: %s", replies[0].Text)
+	assert.Equal(t, "🙅", replies[0].React)
+	assert.Contains(t, replies[0].Text, "costume:bogus")
 
 	rows, _ = ctx.Tracking.Raids.SelectByIDProfile("user1", 1)
-	assert.Len(t, rows, 0, "rule should have been removed by UID despite the bad costume arg")
+	assert.Len(t, rows, 1)
 }
 
 func TestRaid_InvalidTemplate_NonAdmin(t *testing.T) {
@@ -291,4 +292,27 @@ func TestRaid_Costume(t *testing.T) {
 	if len(rows2) != 1 || rows2[0].Costume != 9000 {
 		t.Fatalf("bare !raid genesect should store Costume=9000, got %+v", rows2)
 	}
+}
+
+// Arguments that are parsed but would have no effect must be rejected, not
+// silently dropped (#277): an unknown move used to become "any move", and
+// gen/type filters were accepted by !raid and ignored.
+func TestRaid_RejectsArgsWithNoEffect(t *testing.T) {
+	ctx := raidCtx(t)
+	ctx.GameData.Moves[85] = &gamedata.Move{}
+	ctx.Translations.AddTranslator(i18n.NewTranslator("en", map[string]string{"move_85": "Thunderbolt"}))
+
+	for _, input := range []string{"level5 move:thundrbolt", "level5 gen3"} {
+		replies := runRaid(t, ctx, input)
+		require.NotEmpty(t, replies)
+		assert.Equal(t, "🙅", replies[0].React, "%s: reply %s", input, replies[0].Text)
+	}
+	rows, _ := ctx.Tracking.Raids.SelectByIDProfile("user1", 1)
+	assert.Empty(t, rows)
+
+	replies := runRaid(t, ctx, "level5 move:thunderbolt")
+	assert.Equal(t, "✅", replies[0].React, "known move: %s", replies[0].Text)
+	rows, _ = ctx.Tracking.Raids.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 85, rows[0].Move)
 }

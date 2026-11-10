@@ -30,7 +30,7 @@ func TestAddRemoveMatch(t *testing.T) {
 	}
 
 	// Remove it.
-	if !s.Remove("u1", ScopeGym, "gym1") {
+	if !s.Remove("u1", ScopeGym, "", "gym1") {
 		t.Errorf("Remove: got false, want true")
 	}
 	if s.Match("u1", Event{GymID: "gym1"}, now) {
@@ -195,14 +195,14 @@ func TestConcurrentReadsWrites(t *testing.T) {
 func TestTrackingScopeMatchesRuleUID(t *testing.T) {
 	s := NewStore()
 	now := time.Now().Unix()
-	s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, ScopeValue: "45", ExpiresAt: now + 60})
+	s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, RuleTable: "raid", ScopeValue: "45", ExpiresAt: now + 60})
 
 	// Match when MatchedRuleUID equals the muted value.
-	if !s.Match("u1", Event{MatchedRuleUID: 45}, now) {
+	if !s.Match("u1", Event{MatchedRuleTable: "raid", MatchedRuleUID: 45}, now) {
 		t.Errorf("ScopeTracking with MatchedRuleUID=45 should match mute on '45'")
 	}
 	// No match for a different UID.
-	if s.Match("u1", Event{MatchedRuleUID: 46}, now) {
+	if s.Match("u1", Event{MatchedRuleTable: "raid", MatchedRuleUID: 46}, now) {
 		t.Errorf("ScopeTracking with MatchedRuleUID=46 should not match mute on '45'")
 	}
 	// No match when MatchedRuleUID is unset (avoid accidental "0" trip).
@@ -262,5 +262,107 @@ func TestListActive(t *testing.T) {
 	// Other users unaffected.
 	if got := s.ListActive("u2", now); got != nil {
 		t.Fatalf("u2: expected nil, got %v", got)
+	}
+}
+
+// !mute area stores the display-cased name; !unmute area arrives lowercased
+// from the tokenizer. Area removal must be case-insensitive, like matching
+// (#280).
+func TestRemoveAreaIsCaseInsensitive(t *testing.T) {
+	s := NewStore()
+	s.Add(Entry{HumanID: "u", ScopeType: ScopeArea, ScopeValue: "Downtown"})
+	if !s.Remove("u", ScopeArea, "", "downtown") {
+		t.Fatal("Remove(downtown) did not remove the Downtown area mute")
+	}
+	if n := len(s.List("u")); n != 0 {
+		t.Errorf("entries left = %d, want 0", n)
+	}
+}
+
+// Re-muting an area in a different case replaces the existing entry.
+func TestAddAreaReplacesCaseInsensitively(t *testing.T) {
+	s := NewStore()
+	s.Add(Entry{HumanID: "u", ScopeType: ScopeArea, ScopeValue: "Downtown"})
+	if !s.Add(Entry{HumanID: "u", ScopeType: ScopeArea, ScopeValue: "downtown"}) {
+		t.Error("second Add should replace the first")
+	}
+	if n := len(s.List("u")); n != 1 {
+		t.Errorf("entries = %d, want 1", n)
+	}
+}
+
+func TestTrackingMuteRequiresTable(t *testing.T) {
+	s := NewStore()
+	now := time.Now().Unix()
+	s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, RuleTable: "raid", ScopeValue: "60", ExpiresAt: now + 60})
+	if !s.Match("u1", Event{MatchedRuleTable: "raid", MatchedRuleUID: 60}, now) {
+		t.Error("raid/60 should match")
+	}
+	for _, tbl := range []string{"pokemon", "egg", ""} {
+		if s.Match("u1", Event{MatchedRuleTable: tbl, MatchedRuleUID: 60}, now) {
+			t.Errorf("table %q uid 60 must not match a raid mute", tbl)
+		}
+	}
+}
+
+// An untyped tracking mute (the #323 bug) matches nothing.
+func TestUntypedTrackingMuteMatchesNothing(t *testing.T) {
+	s := NewStore()
+	now := time.Now().Unix()
+	s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, ScopeValue: "60", ExpiresAt: now + 60})
+	for _, tbl := range []string{"", "raid", "pokemon"} {
+		if s.Match("u1", Event{MatchedRuleTable: tbl, MatchedRuleUID: 60}, now) {
+			t.Errorf("untyped mute matched table %q", tbl)
+		}
+	}
+}
+
+func TestAddKeepsDifferentTables(t *testing.T) {
+	s := NewStore()
+	now := time.Now().Unix()
+	if s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, RuleTable: "raid", ScopeValue: "60", ExpiresAt: now + 60}) {
+		t.Error("first add replaced")
+	}
+	if s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, RuleTable: "pokemon", ScopeValue: "60", ExpiresAt: now + 60}) {
+		t.Error("different table must not replace")
+	}
+	if n := len(s.List("u1")); n != 2 {
+		t.Fatalf("entries = %d, want 2", n)
+	}
+	if !s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, RuleTable: "raid", ScopeValue: "60", ExpiresAt: now + 120}) {
+		t.Error("same table should replace")
+	}
+	if s.Remove("u1", ScopeTracking, "egg", "60") {
+		t.Error("Remove with wrong table must fail")
+	}
+	if !s.Remove("u1", ScopeTracking, "raid", "60") || len(s.List("u1")) != 1 {
+		t.Error("Remove raid/60 should leave one entry")
+	}
+}
+
+func TestCanonicalRuleTable(t *testing.T) {
+	for _, n := range []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"} {
+		if got, ok := CanonicalRuleTable(n); !ok || got != n {
+			t.Errorf("%s -> %q,%v", n, got, ok)
+		}
+	}
+	if got, ok := CanonicalRuleTable("incident"); !ok || got != "invasion" {
+		t.Errorf("incident -> %q,%v", got, ok)
+	}
+	if _, ok := CanonicalRuleTable("bogus"); ok {
+		t.Error("bogus accepted")
+	}
+}
+
+// !mute area stores the canonical fence name; !unmute area arrives with
+// underscores turned into spaces by the tokenizer (#347).
+func TestRemoveAreaIgnoresUnderscoreVsSpace(t *testing.T) {
+	s := NewStore()
+	s.Add(Entry{HumanID: "u", ScopeType: ScopeArea, ScopeValue: "north_london"})
+	if !s.Remove("u", ScopeArea, "", "north london") {
+		t.Fatal("Remove(north london) did not remove the north_london area mute")
+	}
+	if n := len(s.List("u")); n != 0 {
+		t.Errorf("entries left = %d, want 0", n)
 	}
 }

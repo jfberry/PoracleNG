@@ -24,7 +24,7 @@ func (g *Generator) NestRowText(tr *i18n.Translator, nest *db.NestTracking) stri
 		s += " " + tr.Tf("tracking.min_avg_spawn", nest.MinSpawnAvg)
 	}
 
-	s += " " + standardText(tr, nest.Template, g.DefaultTemplateName, nest.Clean)
+	s += " " + standardText(tr, nest.Template, g.DefaultTemplateName, nest.Clean, false)
 	s = appendOverride(tr, s, nest.OverrideLocationLabel, nest.OverrideAreas)
 
 	return s

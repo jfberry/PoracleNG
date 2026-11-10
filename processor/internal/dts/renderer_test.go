@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -883,4 +884,39 @@ func TestLogInvalidRenderedJSON(t *testing.T) {
 			t.Errorf("log missing group identifier: %q", entries[0].Message)
 		}
 	})
+}
+
+// A pokestop name containing a double quote used to break the rendered
+// JSON because the {{#each quests}} entries bypassed user-content escaping.
+func TestRenderQuestSummary_QuotedPokestopNameProducesValidJSON(t *testing.T) {
+	entries := []DTSEntry{{
+		Type:     "questSummary",
+		ID:       "1",
+		Platform: "discord",
+		Default:  true,
+		Template: map[string]any{"embed": map[string]any{
+			"title":       "{{count}}× {{{rewardName}}}",
+			"description": "{{#each quests}}• [{{{pokestopName}}}]({{{googleMapUrl}}})\n{{/each}}",
+		}},
+	}}
+	r := newTestRenderer(t, entries)
+
+	view := BuildQuestSummaryView(QuestSummaryGroup{RewardType: 3, RewardID: 100, Quests: []map[string]any{{
+		"pokestopName": `The "Cliff"`,
+		"googleMapUrl": "https://maps.google.com/maps?q=8.080538,2.699681",
+		"latitude":     8.080538,
+		"longitude":    2.699681,
+	}}}, nil, i18n.NewBundle().For("en"))
+
+	users := []webhook.MatchedUser{{ID: "user1", Type: "discord:user", Template: "1", Language: "en"}}
+	jobs := r.RenderQuestSummary(view, users, nil, "test-ref", "")
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+
+	msg := parseMessage(t, jobs[0].Message)
+	embed, _ := msg["embed"].(map[string]any)
+	if desc, _ := embed["description"].(string); !strings.Contains(desc, "[The ''Cliff'']") {
+		t.Errorf("description = %q, want escaped pokestop name", desc)
+	}
 }

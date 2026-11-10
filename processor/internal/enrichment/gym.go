@@ -94,9 +94,10 @@ func (e *Enricher) GymTranslate(base map[string]any, lat, lon float64, teamID, o
 	// Previous controller's team (from webhook last_owner_id — may differ from old_team_id)
 	m["previousControlId"] = lastOwnerID
 	if lastOwnerID >= 0 {
-		if _, ok := e.GameData.Util.Teams[lastOwnerID]; ok {
+		if info, ok := e.GameData.Util.Teams[lastOwnerID]; ok {
 			m["previousControlName"] = translateTeamName(tr, lastOwnerID)
 			m["previousControlNameEng"] = translateTeamName(enTr, lastOwnerID)
+			m["previousControlTeamEmojiKey"] = info.Emoji
 		}
 	}
 

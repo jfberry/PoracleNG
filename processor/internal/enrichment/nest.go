@@ -46,11 +46,20 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 		m["stickerUrl"] = e.StickerUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false, 0)
 	}
 
-	// Autoposition from polygon paths
+	// Static map framing. The nest templates place the map centre at
+	// map_latitude/map_longitude with zoom, draw poly_path as the nest
+	// outline, and put the pokemon marker at latitude/longitude. The map
+	// fields are always set (nest position, zoom 16 when there is no usable
+	// polygon) because the templates emit them unquoted: missing values
+	// would make the tileserver reject the template as invalid JSON.
+	m["map_latitude"] = nest.Lat
+	m["map_longitude"] = nest.Lon
+	m["zoom"] = float64(16)
+	var rawPolygons [][][2]float64
 	if nest.PolyPath != "" {
-		var rawPolygons [][][2]float64
 		if err := json.Unmarshal([]byte(nest.PolyPath), &rawPolygons); err != nil {
 			log.Debugf("[%d] nest: failed to parse poly_path: %s", nest.NestID, err)
+			rawPolygons = nil
 		} else {
 			var polygons [][]staticmap.LatLon
 			for _, rawPoly := range rawPolygons {
@@ -82,18 +91,17 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 	// Reverse geocoding
 	e.addLocationFields(m, nest.Lat, nest.Lon)
 
-	// Static map tile — use autopositioned center if available, else original coords
-	mapLat, mapLon := nest.Lat, nest.Lon
-	if autoLat, ok := m["map_latitude"].(float64); ok {
-		mapLat = autoLat
-		mapLon = m["map_longitude"].(float64)
-	}
-	// Static map tile
-	pending := e.addStaticMap(m, "nest", mapLat, mapLon, map[string]any{
+	// Static map tile. latitude/longitude stay the nest's own position (the
+	// marker); map_latitude/map_longitude/zoom reach the payload from m.
+	webhookFields := map[string]any{
 		"pokemon_id":      nest.PokemonID,
 		"form":            nest.Form,
 		"pokemonSpawnAvg": nest.PokemonAvg,
-	}, tileMode, strconv.FormatInt(nest.NestID, 10))
+	}
+	if len(rawPolygons) > 0 {
+		webhookFields["poly_path"] = rawPolygons
+	}
+	pending := e.addStaticMap(m, "nest", nest.Lat, nest.Lon, webhookFields, tileMode, strconv.FormatInt(nest.NestID, 10))
 
 	// Pokemon identity
 	m["pokemonId"] = nest.PokemonID

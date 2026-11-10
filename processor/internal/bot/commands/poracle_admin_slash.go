@@ -21,6 +21,7 @@ import (
 //	clear-global  — remove all globally-registered Discord commands
 //	clear-guild <guild_id>  — remove guild-scoped commands from one guild
 //	status        — show last sync timestamp + short fingerprint per scope
+//	list          — list registered commands as Discord command mentions
 
 // paSlash wires the real implementation into the dispatch table in
 // poracle_admin.go. The stub that used to live there has been removed.
@@ -35,7 +36,7 @@ func paSlashHelp(ctx *bot.CommandContext) []bot.Reply {
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.slash.help.intro"))
 	sb.WriteString("\n")
-	for _, sub := range []string{"sync", "force-resync", "clear-global", "clear-guild", "status"} {
+	for _, sub := range []string{"sync", "force-resync", "clear-global", "clear-guild", "status", "list"} {
 		key := "cmd.poracle_admin.slash." + strings.ReplaceAll(sub, "-", "_") + ".desc"
 		sb.WriteString("\n  **")
 		sb.WriteString(sub)
@@ -69,6 +70,8 @@ func paSlashRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return runSlashClearGuild(ctx, tr, args[1:])
 	case "status":
 		return runSlashStatus(ctx, tr)
+	case "list":
+		return runSlashList(ctx, tr)
 	default:
 		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.unknown_sub", "slash")}}
 	}
@@ -140,6 +143,60 @@ func runSlashClearGuild(ctx *bot.CommandContext, tr *i18n.Translator, args []str
 		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.slash.clear_guild.error", err.Error())}}
 	}
 	return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.slash.clear_guild.success", guildID)}}
+}
+
+// runSlashList renders every registered command as a Discord command mention
+// alongside its raw syntax. Both forms are deliberate: the rendered mention
+// proves the id actually resolves, while the fenced copy is the only way to
+// get the syntax back out of Discord for reuse in an announcement or a DTS
+// template (a rendered mention cannot be copied as text).
+func runSlashList(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
+	if ctx.Admin == nil || ctx.Admin.SlashList == nil {
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
+	}
+	scopes, err := ctx.Admin.SlashList(ctx.GuildID)
+	if err != nil {
+		if errors.Is(err, slash.ErrSlashNotConfigured) {
+			return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
+		}
+		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.slash.list.error", err.Error())}}
+	}
+
+	var sb strings.Builder
+	total := 0
+	for _, scope := range scopes {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(tr.Tf("cmd.poracle_admin.slash.list.scope_header",
+			scope.Name, fmt.Sprintf("%d", len(scope.Commands))))
+		sb.WriteString("\n")
+		if len(scope.Commands) == 0 {
+			sb.WriteString(tr.T("cmd.poracle_admin.slash.list.scope_empty"))
+			sb.WriteString("\n")
+			continue
+		}
+		for _, c := range scope.Commands {
+			total++
+			mention := c.Mention()
+			// Rendered mention, then the same string fenced so it survives
+			// as copyable text.
+			fmt.Fprintf(&sb, "%s  `%s`\n", mention, mention)
+		}
+	}
+
+	if total == 0 && len(scopes) == 0 {
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.list.none")}}
+	}
+
+	// A full command set runs to ~37 mentions rendered twice over, which
+	// comfortably exceeds Discord's per-message limit — fall back to a file
+	// the same way !tracked does.
+	return bot.SplitOrAttachReply(
+		strings.TrimRight(sb.String(), "\n"),
+		"slash-commands.txt",
+		tr.Tf("cmd.poracle_admin.slash.list.attached", fmt.Sprintf("%d", total)),
+	)
 }
 
 func runSlashStatus(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {

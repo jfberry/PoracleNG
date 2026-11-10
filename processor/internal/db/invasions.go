@@ -1,7 +1,6 @@
 package db
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -47,9 +46,7 @@ func LoadInvasions(db *sqlx.DB) ([]*InvasionTracking, error) {
 	result := make([]*InvasionTracking, len(invasions))
 	for i := range invasions {
 		invasions[i].GruntType = normaliseInvasionGruntType(invasions[i].GruntType)
-		if invasions[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(invasions[i].OverrideAreasRaw), &invasions[i].OverrideAreas)
-		}
+		invasions[i].OverrideAreas = loadOverrideKeys(invasions[i].OverrideAreasRaw)
 		result[i] = &invasions[i]
 	}
 	return result, nil

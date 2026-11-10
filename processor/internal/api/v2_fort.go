@@ -40,18 +40,18 @@ type v2FortRule struct {
 	ChangeTypes  []string `json:"change_types,omitempty" doc:"Edit kinds to alert on; subset of: location|new|removal|image_url|name|description. Omit (or empty) to match ANY change type (stored as the empty array [] = any). Returned as null when unset (any)."`
 
 	// Common fields. fort has NO clean column ⇒ no clean/edit/summary here.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
-	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset."`
+	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). At most [tracking] max_areas names unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted (a rule already stored over it may keep or shrink its own list). Omit for none. Returned as null when unset."`
 }
 
 // translateV2Fort converts a strict v2 fort rule into the stored FortTrackingAPI.
 // fort_type is validated to its canonical STRING form and stored as-is;
 // include_empty defaults TRUE; change_types each validated then JSON-encoded as
-// the stored varchar array; no clean bitmask (fort has no clean column). ping is
-// always stored "" (server-managed).
+// the stored varchar array; no clean bitmask (fort has no clean column).
 func translateV2Fort(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2FortRule) (db.FortTrackingAPI, error) {
 	// fort_type: store the canonical string. huma's enum schema already rejects
 	// unknown strings (incl. `station`); canonical is defence-in-depth and also
@@ -68,7 +68,7 @@ func translateV2Fort(deps *TrackingDeps, humanID string, profileNo int, oc overr
 
 	// include_empty defaults TRUE on omission (DB column default; signed-off
 	// behaviour change vs v1). CHANGELOG note required (Phase 5).
-	includeEmpty := db.IntBool(valueOr(req.IncludeEmpty, true))
+	includeEmpty := db.IntBool(valueOr(req.IncludeEmpty, wcFortIncludeEmpty))
 
 	// change_types: validate each value against the accepted set, then JSON-encode
 	// the array as the stored varchar (empty ⇒ "[]", matching v1 + the bot).
@@ -88,11 +88,7 @@ func translateV2Fort(deps *TrackingDeps, humanID string, profileNo int, oc overr
 		changeTypes = string(b)
 	}
 
-	distance := valueOr(req.Distance, 0)
-	const maxDistance = 40000000 // Earth circumference (metres)
-	if distance > maxDistance {
-		distance = maxDistance
-	}
+	distance := clampDistance(deps, oc.limitExempt, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {
@@ -102,14 +98,14 @@ func translateV2Fort(deps *TrackingDeps, humanID string, profileNo int, oc overr
 	row := db.FortTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
 		FortType:              fortType,
 		IncludeEmpty:          includeEmpty,
 		ChangeTypes:           changeTypes,
 		OverrideLocationLabel: overrideLabel,
-		OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+		OverrideAreas:         canonicalOverrideAreas(deps, req.OverrideAreas),
 	}
 	return row, nil
 }
@@ -126,10 +122,11 @@ func fortRowToRule(row *db.FortTrackingAPI) v2FortRule {
 		// fort_type wildcard is the catch-all "everything" (its documented default);
 		// include_empty defaults TRUE (DB column default) so true is hidden as null.
 		FortType:              ptrUnless(row.FortType, fortTypeEnum.defValue),
-		IncludeEmpty:          ptrUnless(bool(row.IncludeEmpty), true),
+		IncludeEmpty:          ptrUnless(bool(row.IncludeEmpty), wcFortIncludeEmpty),
 		ChangeTypes:           ptrUnlessSlice(changeTypes),
-		Distance:              ptrUnless(row.Distance, 0),
+		Distance:              ptrUnless(row.Distance, wcDistance),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),
 	}

@@ -396,6 +396,74 @@ func TestCapitalize(t *testing.T) {
 	}
 }
 
+func TestCapitalizeAll(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"the big gym", "The Big Gym"},
+		{"already Capitalised words", "Already Capitalised Words"},
+		{"  spaced   out  ", "  Spaced   Out  "},
+		{"(old) church", "(Old) Church"},
+		{"st. mary's park-gate", "St. Mary's Park-gate"},
+		{"über église", "Über Église"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := render(t, `{{capitalizeAll s}}`, map[string]any{"s": tc.in}); got != tc.want {
+			t.Errorf("capitalizeAll(%q): got %q, want %q", tc.in, got, tc.want)
+		}
+	}
+	// A missing field renders empty rather than "[]"
+	if got := render(t, `[{{capitalizeAll missing}}]`, map[string]any{}); got != "[]" {
+		t.Errorf("capitalizeAll missing: got %q", got)
+	}
+}
+
+func TestEllipsis(t *testing.T) {
+	ctx := map[string]any{"s": "foo bar baz", "u": "Église Saint-Pierre"}
+	tests := []struct{ tmpl, want string }{
+		{`{{ellipsis s 7}}`, "foo bar…"},
+		{`{{ellipsis s 11}}`, "foo bar baz"},
+		{`{{ellipsis s 50}}`, "foo bar baz"},
+		{`{{ellipsis u 6}}`, "Église…"}, // counts characters, not bytes
+		{`{{ellipsis s 0}}`, "…"},
+	}
+	for _, tc := range tests {
+		if got := render(t, tc.tmpl, ctx); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.tmpl, got, tc.want)
+		}
+	}
+}
+
+func TestStartsWith(t *testing.T) {
+	ctx := map[string]any{"s": "Hello, world!"}
+	tests := []struct{ tmpl, want string }{
+		{`{{#startsWith "Hello" s}}yes{{else}}no{{/startsWith}}`, "yes"},
+		{`{{#startsWith "Goodbye" s}}yes{{else}}no{{/startsWith}}`, "no"},
+		{`{{#startsWith "Goodbye" s}}yes{{/startsWith}}`, ""},
+		{`{{#if (startsWith "Hello" s)}}yes{{else}}no{{/if}}`, "yes"},
+		{`{{#if (startsWith "hello" s)}}yes{{else}}no{{/if}}`, "no"}, // case-sensitive
+	}
+	for _, tc := range tests {
+		if got := render(t, tc.tmpl, ctx); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.tmpl, got, tc.want)
+		}
+	}
+}
+
+func TestRemove(t *testing.T) {
+	ctx := map[string]any{"s": "a b a b a b", "g": "Gym Name (EX)"}
+	tests := []struct{ tmpl, want string }{
+		{`{{remove s "a "}}`, "b b b"},
+		{`{{remove g " (EX)"}}`, "Gym Name"},
+		{`{{remove g "zzz"}}`, "Gym Name (EX)"},
+		{`{{remove g ""}}`, "Gym Name (EX)"},
+	}
+	for _, tc := range tests {
+		if got := render(t, tc.tmpl, ctx); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.tmpl, got, tc.want)
+		}
+	}
+}
+
 func TestReplace(t *testing.T) {
 	ctx := map[string]any{"s": "foo bar foo"}
 	if got := render(t, `{{replace s "foo" "baz"}}`, ctx); got != "baz bar baz" {

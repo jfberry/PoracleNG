@@ -82,6 +82,9 @@ type RenderJob struct {
 	IsPokemon         bool // true = RenderPokemon, false = RenderAlert
 	LogReference      string
 	EditKey           string
+	// EditMaxAge is copied onto every delivery.Job; see delivery.Job.EditMaxAge.
+	// Pokemon only (from [tracking] pokemon_edit_window_mins); 0 elsewhere.
+	EditMaxAge time.Duration
 	// ReplyKey indexes the sent message for reply chaining. Copied verbatim
 	// onto every constructed delivery.Job. For pokemon, this is the encounter
 	// ID so subsequent change events can find prior messages via the
@@ -194,24 +197,9 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 			} else {
 				tth = tthFromMap(j.TTH)
 			}
-			ps.dispatcher.Dispatch(&delivery.Job{
-				Target:        j.Target,
-				Type:          j.Type,
-				Message:       j.Message,
-				TTH:           tth,
-				Clean:         j.Clean,
-				Name:          j.Name,
-				LogReference:  j.LogReference,
-				Lat:           parseCoordFloat(j.Lat),
-				Lon:           parseCoordFloat(j.Lon),
-				EditKey:       j.EditKey,
-				ReplyKey:      job.ReplyKey,
-				MsgType:       job.AlertType,
-				StaticMapData: tileBytesForMessage(j.Message, job.TileImageData, tileURL),
-				Language:      j.Language,
-				Template:      j.TemplateRequested,
-				SnapshotData:  ps.buildSnapshot(job, j, tth),
-			})
+			ps.dispatcher.Dispatch(buildDeliveryJob(job, j, tth,
+				tileBytesForMessage(j.Message, job.TileImageData, tileURL),
+				ps.buildSnapshot(job, j, tth)))
 		}
 	}
 
@@ -471,5 +459,28 @@ func snapshotTargetType(jobType string) string {
 		return "webhook"
 	default:
 		return ""
+	}
+}
+
+// buildDeliveryJob assembles the delivery.Job for one rendered message.
+func buildDeliveryJob(rj RenderJob, dj webhook.DeliveryJob, tth delivery.TTH, tileBytes []byte, snap *snapshots.Snapshot) *delivery.Job {
+	return &delivery.Job{
+		Target:        dj.Target,
+		Type:          dj.Type,
+		Message:       dj.Message,
+		TTH:           tth,
+		Clean:         dj.Clean,
+		Name:          dj.Name,
+		LogReference:  dj.LogReference,
+		Lat:           parseCoordFloat(dj.Lat),
+		Lon:           parseCoordFloat(dj.Lon),
+		EditKey:       dj.EditKey,
+		EditMaxAge:    rj.EditMaxAge,
+		ReplyKey:      rj.ReplyKey,
+		MsgType:       rj.AlertType,
+		StaticMapData: tileBytes,
+		Language:      dj.Language,
+		Template:      dj.TemplateRequested,
+		SnapshotData:  snap,
 	}
 }

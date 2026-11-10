@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 type telegramCall struct {
@@ -141,6 +143,202 @@ func TestTelegramSendOrder(t *testing.T) {
 	// All sent message IDs in send order
 	if result.ID != "999|sticker=1|photo=2|text=3" {
 		t.Errorf("expected sentID '999|sticker=1|photo=2|text=3', got %q", result.ID)
+	}
+}
+
+func TestTelegramSendPhotoCaption(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		msg        string
+		wantCalls  []string
+		wantSilent bool
+	}{
+		{
+			// Photo-only alert: the caption is the alert, so it notifies.
+			name:       "caption only",
+			msg:        `{"photo":{"url":"https://example.com/p.png","caption":"<b>Pikachu</b>"},"content":"","parse_mode":"HTML"}`,
+			wantCalls:  []string{"sendPhoto"},
+			wantSilent: false,
+		},
+		{
+			// A text message is also sent, so that is the notifying message.
+			name:       "caption with text",
+			msg:        `{"photo":{"url":"https://example.com/p.png","caption":"<b>Pikachu</b>"},"content":"full text","parse_mode":"HTML"}`,
+			wantCalls:  []string{"sendPhoto", "sendMessage"},
+			wantSilent: true,
+		},
+		{
+			// Text precedes the photo — still only one notification.
+			name:       "caption with earlier text",
+			msg:        `{"photo":{"url":"https://example.com/p.png","caption":"<b>Pikachu</b>"},"content":"full text","parse_mode":"HTML","send_order":["text","photo"]}`,
+			wantCalls:  []string{"sendMessage", "sendPhoto"},
+			wantSilent: true,
+		},
+		{
+			// Content present but text not in the order: nothing else notifies.
+			name:       "caption with text excluded from order",
+			msg:        `{"photo":{"url":"https://example.com/p.png","caption":"<b>Pikachu</b>"},"content":"full text","parse_mode":"HTML","send_order":["photo"]}`,
+			wantCalls:  []string{"sendPhoto"},
+			wantSilent: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+				return okResponse(12)
+			})
+			defer server.Close()
+
+			job := &Job{Target: "999", Type: "telegram:user", Message: json.RawMessage(tc.msg)}
+			if _, err := sender.Send(context.Background(), job); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			c := *calls
+			if len(c) != len(tc.wantCalls) {
+				t.Fatalf("expected calls %v, got %#v", tc.wantCalls, c)
+			}
+			for i, m := range tc.wantCalls {
+				if c[i].Method != m {
+					t.Fatalf("call %d: expected %s, got %s", i, m, c[i].Method)
+				}
+			}
+			var photo telegramCall
+			for _, call := range c {
+				if call.Method == "sendPhoto" {
+					photo = call
+				}
+			}
+			if photo.Body["caption"] != "<b>Pikachu</b>" {
+				t.Errorf("expected caption, got %v", photo.Body["caption"])
+			}
+			if photo.Body["parse_mode"] != "HTML" {
+				t.Errorf("expected caption parse_mode HTML, got %v", photo.Body["parse_mode"])
+			}
+			if photo.Body["disable_notification"] != tc.wantSilent {
+				t.Errorf("expected disable_notification %v, got %v", tc.wantSilent, photo.Body["disable_notification"])
+			}
+		})
+	}
+}
+
+func TestTelegramSendPhotoWithoutCaption(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  string
+	}{
+		{"string form", `{"photo":"https://example.com/p.png","send_order":["photo"]}`},
+		{"object form", `{"photo":{"url":"https://example.com/p.png"},"send_order":["photo"]}`},
+		{"blank caption", `{"photo":{"url":"https://example.com/p.png","caption":"  null  "},"send_order":["photo"]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+				return okResponse(14)
+			})
+			defer server.Close()
+
+			job := &Job{Target: "999", Type: "telegram:user", Message: json.RawMessage(tc.msg)}
+			if _, err := sender.Send(context.Background(), job); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			c := *calls
+			if len(c) != 1 || c[0].Method != "sendPhoto" {
+				t.Fatalf("expected one sendPhoto call, got %#v", c)
+			}
+			if c[0].Body["photo"] != "https://example.com/p.png" {
+				t.Errorf("expected photo url, got %v", c[0].Body["photo"])
+			}
+			if _, ok := c[0].Body["caption"]; ok {
+				t.Errorf("expected caption to be omitted, got %v", c[0].Body["caption"])
+			}
+			if _, ok := c[0].Body["parse_mode"]; ok {
+				t.Errorf("expected parse_mode to be omitted without caption, got %v", c[0].Body["parse_mode"])
+			}
+			if c[0].Body["disable_notification"] != true {
+				t.Errorf("expected uncaptioned photo to stay silent, got %v", c[0].Body["disable_notification"])
+			}
+		})
+	}
+}
+
+func TestTelegramSendPhotoCaptionTruncated(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(15)
+	})
+	defer server.Close()
+
+	long := strings.Repeat("é", maxTelegramCaption+50)
+	msg, _ := json.Marshal(map[string]any{
+		"photo":      map[string]any{"url": "https://example.com/p.png", "caption": long},
+		"send_order": []string{"photo"},
+	})
+	job := &Job{Target: "999", Type: "telegram:user", Message: msg}
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	caption, _ := (*calls)[0].Body["caption"].(string)
+	if n := utf8.RuneCountInString(caption); n > maxTelegramCaption {
+		t.Errorf("caption has %d runes, want <= %d", n, maxTelegramCaption)
+	}
+}
+
+func TestTelegramEditPhotoCaption(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		sentID    string
+		msg       string
+		wantCalls []string
+	}{
+		{
+			name:      "caption only",
+			sentID:    "12345|photo=5",
+			msg:       `{"photo":{"url":"https://example.com/p.png","caption":"new caption"},"parse_mode":"HTML"}`,
+			wantCalls: []string{"editMessageCaption"},
+		},
+		{
+			name:      "caption and text",
+			sentID:    "12345|photo=5|text=6",
+			msg:       `{"photo":{"url":"https://example.com/p.png","caption":"new caption"},"content":"new text","parse_mode":"HTML"}`,
+			wantCalls: []string{"editMessageCaption", "editMessageText"},
+		},
+		{
+			name:      "uncaptioned photo edits text only",
+			sentID:    "12345|photo=5|text=6",
+			msg:       `{"photo":"https://example.com/p.png","content":"new text","parse_mode":"HTML"}`,
+			wantCalls: []string{"editMessageText"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+				return http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"message_id": 5}}
+			})
+			defer server.Close()
+
+			if err := sender.Edit(context.Background(), tc.sentID, json.RawMessage(tc.msg), nil); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			c := *calls
+			if len(c) != len(tc.wantCalls) {
+				t.Fatalf("expected calls %v, got %#v", tc.wantCalls, c)
+			}
+			for i, call := range c {
+				if call.Method != tc.wantCalls[i] {
+					t.Fatalf("call %d: expected %s, got %s", i, tc.wantCalls[i], call.Method)
+				}
+				switch call.Method {
+				case "editMessageCaption":
+					if call.Body["message_id"] != float64(5) || call.Body["caption"] != "new caption" || call.Body["parse_mode"] != "HTML" {
+						t.Errorf("unexpected caption edit body: %v", call.Body)
+					}
+				case "editMessageText":
+					if call.Body["message_id"] != float64(6) || call.Body["text"] != "new text" {
+						t.Errorf("unexpected text edit body: %v", call.Body)
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -694,5 +892,193 @@ func TestTelegram_SetConcurrencyClampsToOne(t *testing.T) {
 	ts2.SetConcurrency(-3)
 	if cap(ts2.sem) != 1 {
 		t.Errorf("negative concurrency not clamped: sem cap=%d, want 1", cap(ts2.sem))
+	}
+}
+
+func TestTelegramEdit_NotModifiedIsSuccess(t *testing.T) {
+	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusBadRequest, map[string]any{
+			"ok":          false,
+			"error_code":  400,
+			"description": "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+		}
+	})
+	defer server.Close()
+
+	editMsg := json.RawMessage(`{"content":"same","parse_mode":"HTML"}`)
+	if err := sender.Edit(context.Background(), "12345:99", editMsg, nil); err != nil {
+		t.Fatalf("message is not modified must be treated as success, got %v", err)
+	}
+}
+
+func TestTelegramEdit_OtherBadRequestStillFails(t *testing.T) {
+	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusBadRequest, map[string]any{
+			"ok":          false,
+			"error_code":  400,
+			"description": "Bad Request: message to edit not found",
+		}
+	})
+	defer server.Close()
+
+	editMsg := json.RawMessage(`{"content":"x","parse_mode":"HTML"}`)
+	if err := sender.Edit(context.Background(), "12345:99", editMsg, nil); err == nil {
+		t.Fatal("a different 400 must still return an error")
+	}
+}
+
+func TestTelegramSend_StickerFailureStillSendsText(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		if method == "sendSticker" {
+			return http.StatusBadRequest, map[string]any{
+				"ok":          false,
+				"error_code":  400,
+				"description": "Bad Request: failed to get HTTP URL content",
+			}
+		}
+		return okResponse(42)
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{"content":"Gengar","sticker":"https://example.com/94_c58.webp"}`)
+	job := &Job{Target: "-1000000000", Type: "telegram:channel", Message: msg}
+
+	sent, err := sender.Send(context.Background(), job)
+	if err != nil {
+		t.Fatalf("expected text to be delivered despite sticker failure, got %v", err)
+	}
+	if sent.ID != "-1000000000|text=42" {
+		t.Errorf("sentID = %q, want only the text component", sent.ID)
+	}
+	var stickerCalls, textCalls int
+	for _, c := range *calls {
+		switch c.Method {
+		case "sendSticker":
+			stickerCalls++
+		case "sendMessage":
+			textCalls++
+		}
+	}
+	if stickerCalls != 1 {
+		t.Errorf("sendSticker called %d times, want 1 (4xx must not be retried)", stickerCalls)
+	}
+	if textCalls != 1 {
+		t.Errorf("sendMessage called %d times, want 1", textCalls)
+	}
+}
+
+func TestTelegramSend_StickerOnlyFailureReturnsError(t *testing.T) {
+	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusBadRequest, map[string]any{"ok": false, "description": "Bad Request: failed to get HTTP URL content"}
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{"sticker":"https://example.com/x.webp"}`)
+	job := &Job{Target: "555", Type: "telegram:user", Message: msg}
+	if _, err := sender.Send(context.Background(), job); err == nil || !strings.Contains(err.Error(), "sendSticker") {
+		t.Fatalf("expected the sticker error, got %v", err)
+	}
+}
+
+func TestTelegramSend_StickerPermanentErrorAborts(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusForbidden, map[string]any{"ok": false, "description": "Forbidden: bot was blocked by the user"}
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{"content":"hi","sticker":"https://example.com/x.webp"}`)
+	job := &Job{Target: "555", Type: "telegram:user", Message: msg}
+	_, err := sender.Send(context.Background(), job)
+	var permErr *PermanentError
+	if !errors.As(err, &permErr) {
+		t.Fatalf("expected PermanentError, got %T %v", err, err)
+	}
+	if len(*calls) != 1 {
+		t.Errorf("expected send to stop after the permanent error, got %d calls", len(*calls))
+	}
+}
+
+func TestTelegramEdit_HonoursWebpagePreview(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(99)
+	})
+	defer server.Close()
+
+	editMsg := json.RawMessage(`{"content":"[ ](https://tiles.example/map.png) Updated","parse_mode":"Markdown","webpage_preview":true}`)
+	if err := sender.Edit(context.Background(), "12345|text=99", editMsg, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := *calls
+	if len(c) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(c))
+	}
+	if c[0].Body["disable_web_page_preview"] != false {
+		t.Errorf("edit must keep link previews enabled when the template asks for them, got disable_web_page_preview=%v", c[0].Body["disable_web_page_preview"])
+	}
+}
+
+func TestTelegramSend_CaptionedPhotoFailureSendsCaptionAsText(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		if method == "sendPhoto" {
+			return http.StatusBadRequest, map[string]any{"ok": false, "description": "Bad Request: wrong file identifier/HTTP URL specified"}
+		}
+		return okResponse(77)
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{"photo":{"url":"https://tiles.example/map.png","caption":"<b>Gengar</b>"},"parse_mode":"HTML","send_order":["photo"]}`)
+	job := &Job{Target: "555", Type: "telegram:user", Message: msg}
+
+	sent, err := sender.Send(context.Background(), job)
+	if err != nil {
+		t.Fatalf("expected caption fallback to deliver, got %v", err)
+	}
+	if sent.ID != "555|text=77" {
+		t.Errorf("sentID = %q, want text component only", sent.ID)
+	}
+	c := *calls
+	if len(c) != 2 || c[1].Method != "sendMessage" || c[1].Body["text"] != "<b>Gengar</b>" || c[1].Body["parse_mode"] != "HTML" {
+		t.Fatalf("expected sendPhoto then sendMessage carrying the caption, got %+v", c)
+	}
+}
+
+func TestTelegramSend_CaptionedPhotoFailureWithTextDoesNotDuplicate(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		if method == "sendPhoto" {
+			return http.StatusBadRequest, map[string]any{"ok": false, "description": "Bad Request"}
+		}
+		return okResponse(78)
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{"content":"full text","photo":{"url":"https://tiles.example/map.png","caption":"short"},"send_order":["photo","text"]}`)
+	job := &Job{Target: "555", Type: "telegram:user", Message: msg}
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var texts []any
+	for _, c := range *calls {
+		if c.Method == "sendMessage" {
+			texts = append(texts, c.Body["text"])
+		}
+	}
+	if len(texts) != 1 || texts[0] != "full text" {
+		t.Errorf("expected only the template text to be sent, got %v", texts)
+	}
+}
+
+func TestTelegramEdit_CaptionFallbackTextEditedFromCaption(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(77)
+	})
+	defer server.Close()
+
+	editMsg := json.RawMessage(`{"photo":{"url":"https://tiles.example/map.png","caption":"Gengar 98%"},"send_order":["photo"]}`)
+	if err := sender.Edit(context.Background(), "555|text=77", editMsg, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := *calls
+	if len(c) != 1 || c[0].Method != "editMessageText" || c[0].Body["text"] != "Gengar 98%" {
+		t.Fatalf("expected editMessageText with the caption, got %+v", c)
 	}
 }

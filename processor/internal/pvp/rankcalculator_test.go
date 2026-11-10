@@ -1,7 +1,11 @@
 package pvp
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -304,3 +308,63 @@ func TestCapsContain(t *testing.T) {
 		t.Error("Expected caps to not contain 45")
 	}
 }
+
+// TestCalculateWarnsOnceForUnconfiguredCap ports PoracleJs's "PVP configuration
+// mismatch" warning: Golbat ranks for a cap missing from level_caps are dropped,
+// which silently breaks PVP tracking, so log it — but only once per cap rather
+// than on every encounter.
+func TestCalculateWarnsOnceForUnconfiguredCap(t *testing.T) {
+	resetWarnedCaps()
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	pokemon := &webhook.PokemonWebhook{
+		PokemonID: 322,
+		PVP: map[string][]webhook.PVPRankEntry{
+			"ultra": {
+				{Pokemon: 323, Form: 1520, Cap: 51, Rank: 5, CP: 2494},
+				{Pokemon: 323, Form: 1520, Cap: 50, Rank: 1432, CP: 2484, Capped: true, Evolution: 1},
+			},
+		},
+	}
+	cfg := &Config{LevelCaps: []int{50}, PVPFilterMaxRank: 100}
+
+	Calculate(pokemon, cfg)
+	Calculate(pokemon, cfg)
+
+	var warnings []string
+	for _, e := range hook.AllEntries() {
+		if e.Level == logrus.WarnLevel {
+			warnings = append(warnings, e.Message)
+		}
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("expected exactly one warning across two webhooks, got %d: %v", len(warnings), warnings)
+	}
+	if !strings.Contains(warnings[0], "51") || !strings.Contains(warnings[0], "level_caps") {
+		t.Errorf("warning should name the cap and level_caps, got %q", warnings[0])
+	}
+}
+
+func TestCalculateNoWarningWhenCapsConfigured(t *testing.T) {
+	resetWarnedCaps()
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	pokemon := &webhook.PokemonWebhook{
+		PokemonID: 322,
+		PVP: map[string][]webhook.PVPRankEntry{
+			"ultra": {{Pokemon: 323, Cap: 51, Rank: 5, CP: 2494}},
+			"great": {{Pokemon: 323, Cap: 50, Rank: 2564, CP: 1472, Capped: true}},
+		},
+	}
+	Calculate(pokemon, &Config{LevelCaps: []int{50, 51}, PVPFilterMaxRank: 100})
+
+	for _, e := range hook.AllEntries() {
+		if e.Level == logrus.WarnLevel {
+			t.Errorf("unexpected warning: %s", e.Message)
+		}
+	}
+}
+
+func resetWarnedCaps() { warnedCaps.Clear() }

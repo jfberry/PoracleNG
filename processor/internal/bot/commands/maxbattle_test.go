@@ -203,3 +203,40 @@ func TestMaxbattle_AcceptsAreaOverride(t *testing.T) {
 	require.Len(t, rules, 1)
 	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
 }
+
+// `!maxbattle remove level:N` used to reply 👌 and remove nothing, because
+// only the pokemon set was consulted (#278). It must remove the level rule
+// and leave pokemon-specific rules alone.
+func TestMaxbattle_RemoveByLevel(t *testing.T) {
+	ctx := maxbattleCtx(t)
+	runMaxbattle(t, ctx, "level3")
+	runMaxbattle(t, ctx, "level5")
+	runMaxbattle(t, ctx, "25")
+	rows, _ := ctx.Tracking.Maxbattles.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 3)
+
+	replies := runMaxbattle(t, ctx, "remove level3")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ = ctx.Tracking.Maxbattles.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 2)
+	for _, r := range rows {
+		assert.NotEqual(t, 3, r.Level, "level 3 rule should be gone")
+	}
+}
+
+// TestMaxbattle_EverythingWithGenRejected — gen/type filters only narrow
+// named pokemon for max battles; `!maxbattle everything gen1` used to
+// silently track every level. It must now be rejected (#277).
+func TestMaxbattle_EverythingWithGenRejected(t *testing.T) {
+	ctx := maxbattleCtx(t)
+	ctx.GameData.Util = &gamedata.UtilData{GenData: map[int]gamedata.GenInfo{1: {Min: 1, Max: 151}}}
+	replies := runMaxbattle(t, ctx, "everything gen1")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React, "reply: %s", replies[0].Text)
+	assert.NotEqual(t, "msg.maxbattle.gen_type_needs_pokemon", replies[0].Text, "key must be translated")
+
+	rows, _ := ctx.Tracking.Maxbattles.SelectByIDProfile("user1", 1)
+	assert.Empty(t, rows)
+}

@@ -35,10 +35,13 @@ func (dc *DuplicateCache) Close() {
 }
 
 // CheckPokemon returns true if this pokemon was already seen (duplicate).
-// Key: {encounter_id}:{verified}:{cp}
-func (dc *DuplicateCache) CheckPokemon(encounterID string, verified bool, cp int, disappearTime int64) bool {
+// Key: {encounter_id}:{pokemon_id}:{verified}:{cp}
+//
+// The species is in the key so a species change on the same encounter (e.g.
+// a Ditto reveal) reaches change detection even when the CP is unchanged.
+func (dc *DuplicateCache) CheckPokemon(encounterID string, pokemonID int, verified bool, cp int, disappearTime int64) bool {
 	k := dc.seen.newKey()
-	k.Str(encounterID).Bool(verified).Int(int64(cp))
+	k.Str(encounterID).Int(int64(pokemonID)).Bool(verified).Int(int64(cp))
 
 	// TTL based on disappear time
 	now := time.Now().Unix()

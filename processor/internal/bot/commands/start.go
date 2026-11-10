@@ -15,6 +15,7 @@ func (c *StartCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if err := ctx.Humans.SetEnabledWithFails(ctx.TargetID); err != nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
+	clearRateLimitBan(ctx, ctx.TargetID)
 	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.T("msg.start.success")}}
 }

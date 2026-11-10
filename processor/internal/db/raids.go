@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"encoding/json"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -65,9 +64,7 @@ func LoadRaids(db *sqlx.DB) ([]*RaidTracking, error) {
 
 	result := make([]*RaidTracking, len(raids))
 	for i := range raids {
-		if raids[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(raids[i].OverrideAreasRaw), &raids[i].OverrideAreas)
-		}
+		raids[i].OverrideAreas = loadOverrideKeys(raids[i].OverrideAreasRaw)
 		result[i] = &raids[i]
 	}
 	return result, nil
@@ -88,9 +85,7 @@ func LoadEggs(db *sqlx.DB) ([]*EggTracking, error) {
 
 	result := make([]*EggTracking, len(eggs))
 	for i := range eggs {
-		if eggs[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(eggs[i].OverrideAreasRaw), &eggs[i].OverrideAreas)
-		}
+		eggs[i].OverrideAreas = loadOverrideKeys(eggs[i].OverrideAreasRaw)
 		result[i] = &eggs[i]
 	}
 	return result, nil

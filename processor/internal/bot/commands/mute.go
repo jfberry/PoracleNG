@@ -54,12 +54,8 @@ func routeMuteOrUnmute(ctx *bot.CommandContext, cmdKey, typeName string, rest []
 // rest of the command vocabulary (`!raid gym:"X"` style is for filters
 // inside a tracking command, not the scope of a !mute call).
 //
-// Tracking-UID mutes (`!mute id:N`, `!mute raid id:N`) are documented in
-// the design but not accepted by this command in v1 — they require
-// MatchedUser to carry the rule UID for the matcher to enforce them,
-// which is deferred to a follow-up (Phase 2.5). Accepting commands we
-// can't enforce would be a worse UX than the current "not yet supported"
-// message.
+// Tracking-UID mutes (`!mute id:N`, `!mute raid id:N`) mute a single
+// rule; the matcher compares them against mute.Event.MatchedRuleUID.
 type MuteCommand struct{}
 
 func (c *MuteCommand) Name() string      { return "cmd.mute" }
@@ -105,21 +101,17 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅", Text: inlineUsage(ctx, "msg.mute.usage")}}
 	}
 
+	typeHint := ruleTypeHint(positional)
+	positional = stripMuteTypePrefix(positional)
 	scopeNoun := strings.ToLower(positional[0])
 
-	// `!mute id:N` and `!mute <type> id:N` route through the tracking-UID
-	// scope. Both forms come through here: `id:N` directly, or with a
-	// tracking-type prefix that we strip before recursing into the UID
-	// parse. The tracking type itself is informational — the UID is
-	// unique across the user's tracking, so we don't need to scope to a
-	// type at the mute level. (The render-side filter still gates by
-	// MatchedRuleUID, so muting UID 12 only suppresses alerts from that
-	// specific rule.)
+	// `!mute id:N` (and `!mute <type> id:N`, whose type prefix was just
+	// stripped) route through the tracking-UID scope. uids are per table
+	// (#323), so the mute is typed: the type comes from the alias that was
+	// used (`!raid mute id:N`) or, for a bare `!mute id:N`, from the one
+	// table of the target's current profile holding that uid.
 	if strings.HasPrefix(scopeNoun, "id:") {
-		return runMuteTrackingUID(ctx, scopeNoun[len("id:"):], duration)
-	}
-	if isTrackingTypeToken(scopeNoun) && len(positional) >= 2 && strings.HasPrefix(strings.ToLower(positional[1]), "id:") {
-		return runMuteTrackingUID(ctx, positional[1][len("id:"):], duration)
+		return runMuteTrackingUID(ctx, scopeNoun[len("id:"):], typeHint, duration)
 	}
 
 	scopeType, knownScope := muteScopeNouns[scopeNoun]
@@ -187,38 +179,116 @@ func parseDurationFlex(raw string) (time.Duration, error) {
 	return time.ParseDuration(raw)
 }
 
-// isTrackingTypeToken — set used to reject !mute <type> id:N (deferred).
-// Mirror of validUntrackTypes in untrack.go.
+// isTrackingTypeToken reports whether s is a tracking type a per-type
+// alias can prepend: validUntrackTypes in untrack.go, plus "pokemon",
+// which !track routes as.
 func isTrackingTypeToken(s string) bool {
 	switch s {
-	case "raid", "egg", "quest", "invasion", "incident",
+	case "pokemon", "raid", "egg", "quest", "invasion", "incident",
 		"lure", "nest", "gym", "fort", "maxbattle":
 		return true
 	}
 	return false
 }
 
+// stripMuteTypePrefix drops the tracking-type token that the per-type
+// aliases prepend (`!raid mute gym X` runs `!mute raid gym X`), so the
+// rest parses exactly like a direct !mute / !unmute. The type is kept
+// when it is itself the scope: `!mute gym X` and `!mute pokemon pikachu`
+// (also what `!gym mute X` and `!track mute pikachu` become).
+func stripMuteTypePrefix(positional []string) []string {
+	if len(positional) < 2 || !isTrackingTypeToken(strings.ToLower(positional[0])) {
+		return positional
+	}
+	second := strings.ToLower(positional[1])
+	if strings.HasPrefix(second, "id:") {
+		return positional[1:]
+	}
+	if _, ok := muteScopeNouns[second]; ok {
+		return positional[1:]
+	}
+	if _, ok := muteScopeNouns[strings.ToLower(positional[0])]; ok {
+		return positional
+	}
+	// `!raid mute pikachu` — positional pokemon shorthand after the type.
+	return positional[1:]
+}
+
+// ruleTypeHint returns the canonical rule table named by a leading
+// tracking-type token directly before an id: argument (`raid id:5`, as left
+// by the per-type `!raid mute id:5` alias), or "" when there is none.
+func ruleTypeHint(positional []string) string {
+	if len(positional) < 2 || !strings.HasPrefix(strings.ToLower(positional[1]), "id:") {
+		return ""
+	}
+	table, _ := mute.CanonicalRuleTable(strings.ToLower(positional[0]))
+	return table
+}
+
+// ruleCommandName is the command that addresses a rule table (`!track` for
+// pokemon rules, `!<table>` otherwise), for the "use e.g. ..." hint.
+func ruleCommandName(table string) string {
+	if table == "pokemon" {
+		return "track"
+	}
+	return table
+}
+
 // runMuteTrackingUID: !mute id:N. Mutes a single tracking rule by UID.
-// The filterMuted step (with mute.Event.MatchedRuleUID populated)
-// suppresses alerts whose matched rule UID equals this value.
-func runMuteTrackingUID(ctx *bot.CommandContext, raw string, duration time.Duration) []bot.Reply {
+// The filterMuted step (with mute.Event.MatchedRuleUID/Table populated)
+// suppresses alerts whose matched rule is exactly this (table, uid).
+//
+// table is the alias-supplied rule table, or "" for a bare `!mute id:N`, in
+// which case the uid is looked up in the target's CURRENT profile (like
+// `!untrack id:`) and refused when it is missing or matches several tables.
+func runMuteTrackingUID(ctx *bot.CommandContext, raw, table string, duration time.Duration) []bot.Reply {
 	tr := ctx.Tr()
 	raw = strings.TrimSpace(raw)
 	uid, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || uid <= 0 {
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.bad_uid", raw)}}
 	}
+	var tables []string
+	if ctx.Tracking != nil {
+		tables = ctx.Tracking.TablesWithUID(ctx.TargetID, ctx.ProfileNo, uid)
+	}
+	if table != "" {
+		// An alias named the table: the rule must be there. (Without
+		// tracking stores wired the claim cannot be checked; trust it.)
+		if ctx.Tracking != nil && !containsString(tables, table) {
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.uid_not_found", uid)}}
+		}
+	} else {
+		switch len(tables) {
+		case 0:
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.uid_not_found", uid)}}
+		case 1:
+			table = tables[0]
+		default:
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.uid_ambiguous", uid, strings.Join(tables, ", "), ruleCommandName(tables[0]))}}
+		}
+	}
 	entry := mute.Entry{
 		HumanID:    ctx.TargetID,
 		ScopeType:  mute.ScopeTracking,
+		RuleTable:  table,
 		ScopeValue: strconv.FormatInt(uid, 10),
 		ExpiresAt:  time.Now().Add(duration).Unix(),
 	}
 	ctx.MuteStore.Add(entry)
 	return []bot.Reply{{
 		React: "🔇",
-		Text:  tr.Tf("msg.mute.added", fmt.Sprintf("rule id:%d", uid), formatDuration(duration)),
+		Text:  tr.Tf("msg.mute.added", tr.Tf("msg.mute.rule_label", table, uid), formatDuration(duration)),
 	}}
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // runMuteEverything: self-mute all alerts.
@@ -428,6 +498,9 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		return []bot.Reply{{React: "🙅", Text: inlineUsage(ctx, "msg.unmute.usage")}}
 	}
 
+	typeHint := ruleTypeHint(args)
+	args = stripMuteTypePrefix(args)
+
 	// Special tokens that drop everything for this user.
 	first := strings.ToLower(args[0])
 	if first == "all" {
@@ -454,10 +527,7 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 
 	// `!unmute id:N` / `!unmute <type> id:N`: remove the tracking-UID mute.
 	if strings.HasPrefix(scopeNoun, "id:") {
-		return runUnmuteTrackingUID(ctx, scopeNoun[len("id:"):])
-	}
-	if isTrackingTypeToken(scopeNoun) && len(args) >= 2 && strings.HasPrefix(strings.ToLower(args[1]), "id:") {
-		return runUnmuteTrackingUID(ctx, args[1][len("id:"):])
+		return runUnmuteTrackingUID(ctx, scopeNoun[len("id:"):], typeHint)
 	}
 
 	scopeType, knownScope := muteScopeNouns[scopeNoun]
@@ -483,7 +553,7 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		}}
 	}
 
-	removed := ctx.MuteStore.Remove(ctx.TargetID, scopeType, value)
+	removed := ctx.MuteStore.Remove(ctx.TargetID, scopeType, "", value)
 	if !removed {
 		return []bot.Reply{{
 			React: "👌",
@@ -497,15 +567,37 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 }
 
 // runUnmuteTrackingUID: !unmute id:N. Symmetric with runMuteTrackingUID.
-func runUnmuteTrackingUID(ctx *bot.CommandContext, raw string) []bot.Reply {
+// With a type (`!raid unmute id:N`) it removes that table's mute. Bare, it
+// resolves the table from the target's existing tracking mutes for that uid:
+// exactly one is removed, none is "no active mute", several are refused (name
+// the type). This reads the mute store rather than the rule tables so a mute
+// whose rule has since been deleted can still be lifted.
+func runUnmuteTrackingUID(ctx *bot.CommandContext, raw, table string) []bot.Reply {
 	tr := ctx.Tr()
 	raw = strings.TrimSpace(raw)
 	uid, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || uid <= 0 {
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.bad_uid", raw)}}
 	}
-	label := fmt.Sprintf("rule id:%d", uid)
-	if ok := ctx.MuteStore.Remove(ctx.TargetID, mute.ScopeTracking, strconv.FormatInt(uid, 10)); !ok {
+	value := strconv.FormatInt(uid, 10)
+	if table == "" {
+		var muted []string
+		for _, e := range ctx.MuteStore.List(ctx.TargetID) {
+			if e.ScopeType == mute.ScopeTracking && e.ScopeValue == value && e.RuleTable != "" {
+				muted = append(muted, e.RuleTable)
+			}
+		}
+		switch len(muted) {
+		case 0:
+			return []bot.Reply{{React: "👌", Text: tr.Tf("msg.mute.none_found", fmt.Sprintf("rule id:%d", uid))}}
+		case 1:
+			table = muted[0]
+		default:
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.unmute.uid_ambiguous", uid, strings.Join(muted, ", "), ruleCommandName(muted[0]))}}
+		}
+	}
+	label := tr.Tf("msg.mute.rule_label", table, uid)
+	if ok := ctx.MuteStore.Remove(ctx.TargetID, mute.ScopeTracking, table, value); !ok {
 		return []bot.Reply{{React: "👌", Text: tr.Tf("msg.mute.none_found", label)}}
 	}
 	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.mute.removed", label)}}

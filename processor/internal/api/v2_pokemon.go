@@ -19,58 +19,65 @@ import (
 // Defaults documented in each field's doc string come from the field audit
 // pokemon table.
 type v2PokemonRule struct {
-	PokemonID int `json:"pokemon_id" required:"true" doc:"Pokédex id (required)"`
+	// Omitted/null is the catch-all: the matcher keeps a pokemon_id=0 bucket
+	// that it checks before the by-id lookup, so such a rule matches every
+	// spawn. That is a first-class feature — !track everything creates it and
+	// everything_flag_permissions governs who may — and blank-means-wildcard
+	// is how v2 expresses it, as on invasion. A required minimum:1 made the
+	// rule unwritable while the read still emitted it (#227).
+	PokemonID *int `json:"pokemon_id,omitempty" nullable:"true" minimum:"0" doc:"Pokédex id. Omit (or null) for the catch-all that matches EVERY pokemon — stored as 0. Returned as null for the catch-all."`
 
-	Form *int `json:"form,omitempty" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
+	Form *int `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
 
-	Costume *int `json:"costume,omitempty" nullable:"true" doc:"Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume."`
+	Costume *int `json:"costume,omitempty" minimum:"0" nullable:"true" doc:"Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume."`
 
-	MinIV *int `json:"min_iv,omitempty" nullable:"true" doc:"Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard."`
-	MaxIV *int `json:"max_iv,omitempty" nullable:"true" doc:"Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MinIV *int `json:"min_iv,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard."`
+	MaxIV *int `json:"max_iv,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	MinCP *int `json:"min_cp,omitempty" nullable:"true" doc:"Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
-	MaxCP *int `json:"max_cp,omitempty" nullable:"true" doc:"Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard."`
+	MinCP *int `json:"min_cp,omitempty" minimum:"0" maximum:"9000" nullable:"true" doc:"Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
+	MaxCP *int `json:"max_cp,omitempty" minimum:"0" maximum:"9000" nullable:"true" doc:"Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	MinLevel *int `json:"min_level,omitempty" nullable:"true" doc:"Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
-	MaxLevel *int `json:"max_level,omitempty" nullable:"true" doc:"Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MinLevel *int `json:"min_level,omitempty" minimum:"0" maximum:"55" nullable:"true" doc:"Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
+	MaxLevel *int `json:"max_level,omitempty" minimum:"0" maximum:"55" nullable:"true" doc:"Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	ATK *int `json:"atk,omitempty" nullable:"true" doc:"Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
-	DEF *int `json:"def,omitempty" nullable:"true" doc:"Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
-	STA *int `json:"sta,omitempty" nullable:"true" doc:"Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	ATK *int `json:"atk,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	DEF *int `json:"def,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	STA *int `json:"sta,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
 
-	MaxATK *int `json:"max_atk,omitempty" nullable:"true" doc:"Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
-	MaxDEF *int `json:"max_def,omitempty" nullable:"true" doc:"Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
-	MaxSTA *int `json:"max_sta,omitempty" nullable:"true" doc:"Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MaxATK *int `json:"max_atk,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MaxDEF *int `json:"max_def,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MaxSTA *int `json:"max_sta,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
 
 	Gender *string `json:"gender,omitempty" nullable:"true" enum:"any,male,female,genderless" doc:"Gender filter: any|male|female|genderless. Omit to match any gender (defaults to 'any', stored as 0). Returned as null when 'any'."`
 
-	MinWeight *int `json:"min_weight,omitempty" nullable:"true" doc:"Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
-	MaxWeight *int `json:"max_weight,omitempty" nullable:"true" doc:"Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard."`
+	MinWeight *int `json:"min_weight,omitempty" minimum:"0" nullable:"true" doc:"Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
+	MaxWeight *int `json:"max_weight,omitempty" minimum:"0" nullable:"true" doc:"Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard."`
 
-	MinTime *int `json:"min_time,omitempty" nullable:"true" doc:"Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard."`
+	MinTime *int `json:"min_time,omitempty" minimum:"0" nullable:"true" doc:"Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard."`
 
-	Rarity    *int `json:"rarity,omitempty" nullable:"true" doc:"Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard."`
-	MaxRarity *int `json:"max_rarity,omitempty" nullable:"true" doc:"Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
+	Rarity    *int `json:"rarity,omitempty" minimum:"1" maximum:"6" nullable:"true" doc:"Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard."`
+	MaxRarity *int `json:"max_rarity,omitempty" minimum:"1" maximum:"6" nullable:"true" doc:"Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	Size    *int `json:"size,omitempty" nullable:"true" doc:"Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard."`
-	MaxSize *int `json:"max_size,omitempty" nullable:"true" doc:"Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
+	Size    *int `json:"size,omitempty" minimum:"1" maximum:"5" nullable:"true" doc:"Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard."`
+	MaxSize *int `json:"max_size,omitempty" minimum:"1" maximum:"5" nullable:"true" doc:"Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
 
 	PVPRankingLeague    *int `json:"pvp_ranking_league,omitempty" nullable:"true" enum:"0,500,1500,2500" doc:"PVP league CP cap (the stored int IS the cap): 0 | 500 | 1500 | 2500. Omit (or 0) for IV-mode tracking with no PVP filter (stored as 0 = none/IV mode). Returned as null when at its wildcard."`
-	PVPRankingBest      *int `json:"pvp_ranking_best,omitempty" nullable:"true" doc:"Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard."`
-	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard."`
-	PVPRankingMinCP     *int `json:"pvp_ranking_min_cp,omitempty" nullable:"true" doc:"PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
-	PVPRankingCap       *int `json:"pvp_ranking_cap,omitempty" nullable:"true" doc:"PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard."`
-	PVPRankingEvolution *int `json:"pvp_ranking_evolution,omitempty" nullable:"true" doc:"Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0)."`
+	PVPRankingBest      *int `json:"pvp_ranking_best,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard."`
+	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard."`
+	PVPRankingMinCP     *int `json:"pvp_ranking_min_cp,omitempty" minimum:"0" nullable:"true" doc:"PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	PVPRankingCap       *int `json:"pvp_ranking_cap,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard."`
+	PVPRankingEvolution *int `json:"pvp_ranking_evolution,omitempty" minimum:"0" maximum:"3" nullable:"true" doc:"Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0)."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
-	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
+	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Edit the original alert in place when the same encounter is re-sent (IV reveal, weather boost, species/form change), while the alert is within the server's pokemon_edit_window_mins (default 5); later updates arrive as threaded replies. The operator can disable pokemon edit ([tracking] pokemon_edit). Clean bitmask bit 2. Omit to disable (default false). Returned as null when false."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
-	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset."`
+	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). At most [tracking] max_areas names unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted (a rule already stored over it may keep or shrink its own list). Omit for none. Returned as null when unset."`
 }
 
 // valueOr returns *p when p is non-nil, else def. The strict-default helper.
@@ -99,14 +106,10 @@ func packClean(clean, edit, summary bool) int {
 
 // translateV2Pokemon converts a strict v2 pokemon rule into the stored
 // MonsterTrackingAPI, applying documented defaults, gender enum→int, the clean
-// bitmask, profile, and validated/normalized override fields. ping is always
-// stored "" (server-managed). Returns an huma error on override-field violation.
+// bitmask, profile, and validated/normalized override fields.
+// Returns an huma error on override-field violation.
 func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2PokemonRule) (db.MonsterTrackingAPI, error) {
-	distance := valueOr(req.Distance, 0)
-	const maxDistance = 40000000 // Earth circumference (metres)
-	if distance > maxDistance {
-		distance = maxDistance
-	}
+	distance := clampDistance(deps, oc.limitExempt, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {
@@ -118,41 +121,41 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 	row := db.MonsterTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              template,
 		Distance:              distance,
-		PokemonID:             req.PokemonID,
-		Form:                  valueOr(req.Form, 0),
-		Costume:               valueOr(req.Costume, 9000),
-		MinIV:                 valueOr(req.MinIV, -1),
-		MaxIV:                 valueOr(req.MaxIV, 100),
-		MinCP:                 valueOr(req.MinCP, 0),
-		MaxCP:                 valueOr(req.MaxCP, 9000),
-		MinLevel:              valueOr(req.MinLevel, 0),
-		MaxLevel:              valueOr(req.MaxLevel, 55),
-		ATK:                   valueOr(req.ATK, 0),
-		DEF:                   valueOr(req.DEF, 0),
-		STA:                   valueOr(req.STA, 0),
-		MaxATK:                valueOr(req.MaxATK, 15),
-		MaxDEF:                valueOr(req.MaxDEF, 15),
-		MaxSTA:                valueOr(req.MaxSTA, 15),
+		PokemonID:             valueOr(req.PokemonID, wcAnyPokemonID),
+		Form:                  valueOr(req.Form, wcForm),
+		Costume:               valueOr(req.Costume, wcAnyID),
+		MinIV:                 valueOr(req.MinIV, wcPokemonMinIV),
+		MaxIV:                 valueOr(req.MaxIV, wcPokemonMaxIV),
+		MinCP:                 valueOr(req.MinCP, wcPokemonMinCP),
+		MaxCP:                 valueOr(req.MaxCP, wcPokemonMaxCP),
+		MinLevel:              valueOr(req.MinLevel, wcPokemonMinLevel),
+		MaxLevel:              valueOr(req.MaxLevel, wcPokemonMaxLevel),
+		ATK:                   valueOr(req.ATK, wcPokemonMinStat),
+		DEF:                   valueOr(req.DEF, wcPokemonMinStat),
+		STA:                   valueOr(req.STA, wcPokemonMinStat),
+		MaxATK:                valueOr(req.MaxATK, wcPokemonMaxStat),
+		MaxDEF:                valueOr(req.MaxDEF, wcPokemonMaxStat),
+		MaxSTA:                valueOr(req.MaxSTA, wcPokemonMaxStat),
 		Gender:                genderEnum.resolveStored(req.Gender),
-		MinWeight:             valueOr(req.MinWeight, 0),
-		MaxWeight:             valueOr(req.MaxWeight, 9000000),
-		MinTime:               valueOr(req.MinTime, 0),
-		Rarity:                valueOr(req.Rarity, -1),
-		MaxRarity:             valueOr(req.MaxRarity, 6),
-		Size:                  valueOr(req.Size, -1),
-		MaxSize:               valueOr(req.MaxSize, 5),
-		PVPRankingLeague:      valueOr(req.PVPRankingLeague, 0),
-		PVPRankingBest:        valueOr(req.PVPRankingBest, 1),
-		PVPRankingWorst:       valueOr(req.PVPRankingWorst, 4096),
-		PVPRankingMinCP:       valueOr(req.PVPRankingMinCP, 0),
-		PVPRankingCap:         valueOr(req.PVPRankingCap, 0),
-		PVPRankingEvolution:   valueOr(req.PVPRankingEvolution, 0),
+		MinWeight:             valueOr(req.MinWeight, wcPokemonMinWeight),
+		MaxWeight:             valueOr(req.MaxWeight, wcPokemonMaxWeight),
+		MinTime:               valueOr(req.MinTime, wcPokemonMinTime),
+		Rarity:                valueOr(req.Rarity, wcPokemonRarity),
+		MaxRarity:             valueOr(req.MaxRarity, wcPokemonMaxRarity),
+		Size:                  valueOr(req.Size, wcPokemonSize),
+		MaxSize:               valueOr(req.MaxSize, wcPokemonMaxSize),
+		PVPRankingLeague:      valueOr(req.PVPRankingLeague, wcPokemonPVPLeague),
+		PVPRankingBest:        valueOr(req.PVPRankingBest, wcPokemonPVPBest),
+		PVPRankingWorst:       valueOr(req.PVPRankingWorst, wcPokemonPVPWorst),
+		PVPRankingMinCP:       valueOr(req.PVPRankingMinCP, wcPokemonPVPMinCP),
+		PVPRankingCap:         valueOr(req.PVPRankingCap, wcPokemonPVPCap),
+		PVPRankingEvolution:   valueOr(req.PVPRankingEvolution, wcPokemonPVPEvolution),
 		Clean:                 packClean(valueOr(req.Clean, false), valueOr(req.Edit, false), valueOr(req.Summary, false)),
 		OverrideLocationLabel: overrideLabel,
-		OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+		OverrideAreas:         canonicalOverrideAreas(deps, req.OverrideAreas),
 	}
 	return row, nil
 }
@@ -166,37 +169,38 @@ func translateV2Pokemon(deps *TrackingDeps, humanID string, profileNo int, oc ov
 func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 	gender := genderEnum.fromStored(row.Gender)
 	return v2PokemonRule{
-		PokemonID:             row.PokemonID,
-		Form:                  ptrUnless(row.Form, 0),
-		Costume:               ptrUnless(row.Costume, 9000),
-		MinIV:                 ptrUnless(row.MinIV, -1),
-		MaxIV:                 ptrUnless(row.MaxIV, 100),
-		MinCP:                 ptrUnless(row.MinCP, 0),
-		MaxCP:                 ptrUnless(row.MaxCP, 9000),
-		MinLevel:              ptrUnless(row.MinLevel, 0),
-		MaxLevel:              ptrUnless(row.MaxLevel, 55),
-		ATK:                   ptrUnless(row.ATK, 0),
-		DEF:                   ptrUnless(row.DEF, 0),
-		STA:                   ptrUnless(row.STA, 0),
-		MaxATK:                ptrUnless(row.MaxATK, 15),
-		MaxDEF:                ptrUnless(row.MaxDEF, 15),
-		MaxSTA:                ptrUnless(row.MaxSTA, 15),
+		PokemonID:             ptrUnless(row.PokemonID, wcAnyPokemonID),
+		Form:                  ptrUnless(row.Form, wcForm),
+		Costume:               ptrUnless(row.Costume, wcAnyID),
+		MinIV:                 ptrUnless(row.MinIV, wcPokemonMinIV),
+		MaxIV:                 ptrUnless(row.MaxIV, wcPokemonMaxIV),
+		MinCP:                 ptrUnless(row.MinCP, wcPokemonMinCP),
+		MaxCP:                 ptrUnless(row.MaxCP, wcPokemonMaxCP),
+		MinLevel:              ptrUnless(row.MinLevel, wcPokemonMinLevel),
+		MaxLevel:              ptrUnless(row.MaxLevel, wcPokemonMaxLevel),
+		ATK:                   ptrUnless(row.ATK, wcPokemonMinStat),
+		DEF:                   ptrUnless(row.DEF, wcPokemonMinStat),
+		STA:                   ptrUnless(row.STA, wcPokemonMinStat),
+		MaxATK:                ptrUnless(row.MaxATK, wcPokemonMaxStat),
+		MaxDEF:                ptrUnless(row.MaxDEF, wcPokemonMaxStat),
+		MaxSTA:                ptrUnless(row.MaxSTA, wcPokemonMaxStat),
 		Gender:                ptrUnless(gender, "any"),
-		MinWeight:             ptrUnless(row.MinWeight, 0),
-		MaxWeight:             ptrUnless(row.MaxWeight, 9000000),
-		MinTime:               ptrUnless(row.MinTime, 0),
-		Rarity:                ptrUnless(row.Rarity, -1),
-		MaxRarity:             ptrUnless(row.MaxRarity, 6),
-		Size:                  ptrUnless(row.Size, -1),
-		MaxSize:               ptrUnless(row.MaxSize, 5),
-		PVPRankingLeague:      ptrUnless(row.PVPRankingLeague, 0),
-		PVPRankingBest:        ptrUnless(row.PVPRankingBest, 1),
-		PVPRankingWorst:       ptrUnless(row.PVPRankingWorst, 4096),
-		PVPRankingMinCP:       ptrUnless(row.PVPRankingMinCP, 0),
-		PVPRankingCap:         ptrUnless(row.PVPRankingCap, 0),
-		PVPRankingEvolution:   ptrUnless(row.PVPRankingEvolution, 0),
-		Distance:              ptrUnless(row.Distance, 0),
+		MinWeight:             ptrUnless(row.MinWeight, wcPokemonMinWeight),
+		MaxWeight:             ptrUnless(row.MaxWeight, wcPokemonMaxWeight),
+		MinTime:               ptrUnless(row.MinTime, wcPokemonMinTime),
+		Rarity:                ptrUnlessAny(row.Rarity, wcPokemonRarity, wcLegacyUnset),
+		MaxRarity:             ptrUnless(row.MaxRarity, wcPokemonMaxRarity),
+		Size:                  ptrUnlessAny(row.Size, wcPokemonSize, wcLegacyUnset),
+		MaxSize:               ptrUnless(row.MaxSize, wcPokemonMaxSize),
+		PVPRankingLeague:      ptrUnless(row.PVPRankingLeague, wcPokemonPVPLeague),
+		PVPRankingBest:        ptrUnlessAny(row.PVPRankingBest, wcPokemonPVPBest, wcLegacyUnset),
+		PVPRankingWorst:       ptrUnlessAny(row.PVPRankingWorst, wcPokemonPVPWorst, wcLegacyUnset),
+		PVPRankingMinCP:       ptrUnless(row.PVPRankingMinCP, wcPokemonPVPMinCP),
+		PVPRankingCap:         ptrUnless(row.PVPRankingCap, wcPokemonPVPCap),
+		PVPRankingEvolution:   ptrUnless(row.PVPRankingEvolution, wcPokemonPVPEvolution),
+		Distance:              ptrUnless(row.Distance, wcDistance),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
 		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
@@ -204,9 +208,6 @@ func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),
 	}
 }
-
-// ptr returns a pointer to v (response builder helper).
-func ptr[T any](v T) *T { return &v }
 
 // ptrUnless is the response-projection helper that hides a wildcard/default value
 // as JSON null (Part B of #138). It returns nil when v equals wildcard (the
@@ -240,12 +241,48 @@ func RegisterV2TrackingPokemon(api huma.API, deps *TrackingDeps) {
 		Store: func(d *TrackingDeps) store.TrackingStore[db.MonsterTrackingAPI] {
 			return d.Tracking.Monsters
 		},
-		Translate: translateV2Pokemon,
-		ToRule:    pokemonRowToRule,
-		GetUID:    store.MonsterGetUID,
-		SetUID:    store.MonsterSetUID,
+		Translate:    translateV2Pokemon,
+		Canonicalize: canonicalizePokemonRow,
+		ToRule:       pokemonRowToRule,
+		GetUID:       store.MonsterGetUID,
+		SetUID:       store.MonsterSetUID,
 		RowText: func(d *TrackingDeps, tr *i18n.Translator, row *db.MonsterTrackingAPI) string {
 			return d.RowText.MonsterRowText(tr, toMonsterTracking(row))
 		},
 	})
+}
+
+// canonicalizePokemonRow maps the alias wildcards that pokemonRowToRule
+// projects to null (ptrUnlessAny) onto the value translateV2Pokemon stores
+// for null, so diffing treats them as the same rule.
+func canonicalizePokemonRow(row *db.MonsterTrackingAPI) {
+	if row.Rarity == wcLegacyUnset {
+		row.Rarity = wcPokemonRarity
+	}
+	if row.Size == wcLegacyUnset {
+		row.Size = wcPokemonSize
+	}
+	if row.PVPRankingBest == wcLegacyUnset {
+		row.PVPRankingBest = wcPokemonPVPBest
+	}
+	if row.PVPRankingWorst == wcLegacyUnset {
+		row.PVPRankingWorst = wcPokemonPVPWorst
+	}
+}
+
+// ptrUnlessAny is ptrUnless for fields with more than one "no filter" value.
+//
+// It exists for legacy rows. pvp_ranking_best, pvp_ranking_worst, rarity and
+// size each have a canonical wildcard, but rows predating it hold a 0, which
+// is not a valid rank or tier and which the schema bounds refuse. Emitting
+// that 0 gave a client a rule it could read and render but not save. Reporting
+// the wildcard instead round-trips, and writing it back stores the canonical
+// value — a repair rather than a preservation (#227).
+func ptrUnlessAny[T comparable](v T, wildcards ...T) *T {
+	for _, w := range wildcards {
+		if v == w {
+			return nil
+		}
+	}
+	return &v
 }

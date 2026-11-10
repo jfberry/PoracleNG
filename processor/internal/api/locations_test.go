@@ -27,7 +27,7 @@ func newTestLocationDeps(t *testing.T) (*TrackingDeps, *store.MockHumanStore) {
 
 func TestLocations_List(t *testing.T) {
 	deps, mock := newTestLocationDeps(t)
-	if err := mock.SetLocation("u1", 0, 51.5, -0.1); err != nil {
+	if err := mock.SetLocation("u1", 1, 51.5, -0.1); err != nil {
 		t.Fatalf("SetLocation: %v", err)
 	}
 	if _, err := mock.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1}); err != nil {

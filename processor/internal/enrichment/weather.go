@@ -114,13 +114,17 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 			}
 			enrichedPokemon[i] = entry
 		}
+		// activePokemons is the key DTS templates iterate (PoracleJS name);
+		// enrichedActivePokemons is kept as an alias. Both are set whenever
+		// there is affected-pokemon data — only the tile below depends on
+		// show_altered_pokemon_static_map.
+		m["activePokemons"] = enrichedPokemon
 		m["enrichedActivePokemons"] = enrichedPokemon
 
 		// Generate per-user tile with active pokemon data when configured.
 		// Pass base enrichment so addStaticMap has access to imgUrl and
 		// all other base fields for the tileserver payload.
 		if showAlteredPokemonStaticMap {
-			m["activePokemons"] = enrichedPokemon
 			pending = e.addStaticMap(m, "weather", lat, lon, base, tileMode, ref)
 		}
 	}

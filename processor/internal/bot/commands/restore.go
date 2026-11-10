@@ -1,13 +1,17 @@
 package commands
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"sort"
 	"strings"
 
+	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -80,49 +84,142 @@ func (c *RestoreCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	// Restore each table
-	for table, rows := range backup {
-		// Set id and profile_no on each row
-		for _, row := range rows {
-			row["id"] = ctx.TargetID
-			row["profile_no"] = ctx.ProfileNo
-		}
-
-		if len(rows) == 0 {
-			continue
-		}
-
-		// Delete existing tracking for this profile
-		_, err := ctx.DB.Exec(
-			fmt.Sprintf("DELETE FROM `%s` WHERE id = ? AND profile_no = ?", table),
-			ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("restore: delete from %s: %v", table, err)
-			continue
-		}
-
-		// Insert rows one at a time using column names from the row map
-		for _, row := range rows {
-			// Remove uid if present
-			delete(row, "uid")
-
-			var cols []string
-			var placeholders []string
-			var vals []any
-			for k, v := range row {
-				cols = append(cols, fmt.Sprintf("`%s`", k))
-				placeholders = append(placeholders, "?")
-				vals = append(vals, v)
-			}
-
-			query := fmt.Sprintf("INSERT INTO `%s` (%s) VALUES (%s)",
-				table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
-			if _, err := ctx.DB.Exec(query, vals...); err != nil {
-				log.Warnf("restore: insert into %s: %v", table, err)
-			}
-		}
+	// The transaction is deliberately kept (spec §8): the per-human lock taken
+	// by bot.RunLocked serialises this against API/reconciler writes, and the
+	// transaction keeps the multi-table replace atomic.
+	if err := restoreBackup(sqlxRestoreDB{ctx.DB}, backup, ctx.TargetID, ctx.ProfileNo); err != nil {
+		log.Errorf("restore %s for %s: %v", name, ctx.TargetID, err)
+		return []bot.Reply{{Text: tr.Tf("msg.restore.failed", name, err.Error())}}
 	}
 
 	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅"}}
+}
+
+// restoreIdent is the strict identifier shape accepted for column names read
+// from a backup file before they are interpolated into SQL.
+var restoreIdent = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+
+// restoreTx is the subset of *sqlx.Tx used by restoreBackup.
+type restoreTx interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Commit() error
+	Rollback() error
+}
+
+// restoreDB abstracts the database for restoreBackup so it can be tested
+// without MySQL.
+type restoreDB interface {
+	// TableColumns returns the set of columns the table actually has.
+	TableColumns(table string) (map[string]bool, error)
+	Begin() (restoreTx, error)
+}
+
+type sqlxRestoreDB struct{ db *sqlx.DB }
+
+func (d sqlxRestoreDB) TableColumns(table string) (map[string]bool, error) {
+	var cols []string
+	if err := d.db.Select(&cols,
+		"SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+		table); err != nil {
+		return nil, err
+	}
+	if len(cols) == 0 {
+		return nil, fmt.Errorf("table %s not found", table)
+	}
+	set := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		set[strings.ToLower(c)] = true
+	}
+	return set, nil
+}
+
+func (d sqlxRestoreDB) Begin() (restoreTx, error) { return d.db.Beginx() }
+
+// restoreBackup REPLACES the target's tracking rules for profileNo with the
+// contents of backup. Every table and column name in the file is validated
+// against backupTables and the table's real columns before anything is
+// changed; any unknown name rejects the whole restore (legacyBackupTables
+// keys from older files are ignored). Then, in a single
+// transaction, every table in backupTables (whether present, empty or absent
+// in the file) has the target's rows for the profile deleted and the
+// backup's rows inserted with id/profile_no overwritten to the target.
+func restoreBackup(db restoreDB, backup map[string][]map[string]any, targetID string, profileNo int) error {
+	// Validate first — nothing is touched if anything is wrong.
+	var unknown []string
+	for table := range backup {
+		if !slices.Contains(backupTables, table) && !slices.Contains(legacyBackupTables, table) {
+			unknown = append(unknown, table)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return fmt.Errorf("unknown table(s) in backup: %s", strings.Join(unknown, ", "))
+	}
+	for _, table := range backupTables {
+		rows := backup[table]
+		if len(rows) == 0 {
+			continue
+		}
+		cols, err := db.TableColumns(table)
+		if err != nil {
+			return fmt.Errorf("reading columns of %s: %w", table, err)
+		}
+		for _, row := range rows {
+			for k := range row {
+				if !restoreIdent.MatchString(k) || !cols[k] {
+					return fmt.Errorf("unknown column %q in table %s", k, table)
+				}
+			}
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	for _, table := range backupTables {
+		if _, err := tx.Exec(
+			fmt.Sprintf("DELETE FROM `%s` WHERE id = ? AND profile_no = ?", table),
+			targetID, profileNo); err != nil {
+			return fmt.Errorf("clearing %s: %w", table, err)
+		}
+		for _, row := range backup[table] {
+			delete(row, "uid")
+			row["id"] = targetID
+			row["profile_no"] = profileNo
+
+			keys := make([]string, 0, len(row))
+			for k := range row {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			cols := make([]string, len(keys))
+			placeholders := make([]string, len(keys))
+			vals := make([]any, len(keys))
+			for i, k := range keys {
+				cols[i] = "`" + k + "`"
+				placeholders[i] = "?"
+				vals[i] = row[k]
+			}
+			query := fmt.Sprintf("INSERT INTO `%s` (%s) VALUES (%s)",
+				table, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+			if _, err := tx.Exec(query, vals...); err != nil {
+				return fmt.Errorf("inserting into %s: %w", table, err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	committed = true
+	return nil
 }

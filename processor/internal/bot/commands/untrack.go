@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"slices"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -43,6 +45,13 @@ func validUntrackType(s string) bool {
 	return validUntrackTypes[s]
 }
 
+// untrackRemoveSpec: pokemon rules are removed by species, gen: or type
+// (which add to each other); a costume narrows the selection.
+var untrackRemoveSpec = removeSpec{
+	selectors: []bot.ParamDef{pokemonParam, genParam, typeNameParam},
+	filters:   []bot.ParamDef{costumeParam},
+}
+
 var untrackParams = []bot.ParamDef{
 	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
@@ -74,17 +83,16 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	tr := ctx.Tr()
 	parsed := ctx.ArgMatcher.Match(args, untrackParams, ctx.Language)
 
-	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
-		return []bot.Reply{*warn}
+	if reply := checkRemoveArgs(ctx, parsed, untrackRemoveSpec, nil); reply != nil {
+		return []bot.Reply{*reply}
 	}
 
 	// Costume filter: when present, narrows removal to rules with this
 	// exact costume ID, in addition to whatever pokemon/gen/type/everything
-	// selection matched below. Unlike form (which untrack treats as
-	// species-wide — see rejectFormOnRemove for the other tracking types),
+	// selection matched below. Unlike form (which isn't accepted here),
 	// costume participates directly in the match so
 	// `!untrack pikachu costume:1` removes only the costume-1 rule.
-	var costumeFilter *int
+	var keep func(*db.MonsterTrackingAPI) bool
 	if costumeArg, ok := parsed.Strings["costume"]; ok {
 		id, resolved := ctx.ArgMatcher.ResolveCostume(costumeArg, ctx.Language)
 		if !resolved {
@@ -95,15 +103,17 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 					bot.CommandPrefix(ctx)),
 			}}
 		}
-		costumeFilter = &id
+		keep = func(r *db.MonsterTrackingAPI) bool { return r.Costume == id }
 	}
 
-	// Direct UID removal — bypasses pokemon/gen/type matching
-	if len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Monsters, parsed.RemoveUIDs,
-			store.MonsterGetUID,
-			func(r *db.MonsterTrackingAPI) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(r)) },
-		)
+	remover := ruleRemover[db.MonsterTrackingAPI]{
+		store:    ctx.Tracking.Monsters,
+		getUID:   store.MonsterGetUID,
+		describe: func(r *db.MonsterTrackingAPI) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(r)) },
+		logName:  "untrack",
+	}
+	if len(parsed.RemoveUIDs) > 0 || parsed.HasKeyword("arg.everything") {
+		return remover.run(ctx, parsed, nil, keep)
 	}
 
 	tracked, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
@@ -112,21 +122,14 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	// Build set of pokemon IDs to remove
+	// Species to remove: those named, plus every tracked species in the
+	// gen: and every tracked species of a type given. These add to each
+	// other (`!untrack pikachu gen1` removes pikachu and all of gen 1).
 	removeIDs := make(map[int]bool)
-
-	if parsed.HasKeyword("arg.everything") {
-		for _, existing := range tracked {
-			removeIDs[existing.PokemonID] = true
-		}
-	} else {
-		for _, mon := range parsed.Pokemon {
-			removeIDs[mon.PokemonID] = true
-		}
+	for _, mon := range parsed.Pokemon {
+		removeIDs[mon.PokemonID] = true
 	}
-
-	// Generation filter — if gen is specified without pokemon, remove all pokemon in that gen
-	if gen, ok := parsed.Singles["gen"]; ok && ctx.GameData != nil {
+	if gen, ok := parsed.Singles["gen"]; ok && ctx.GameData != nil && ctx.GameData.Util != nil {
 		genInfo := ctx.GameData.Util.GenData[gen]
 		if genInfo.Min > 0 && genInfo.Max > 0 {
 			for _, existing := range tracked {
@@ -136,20 +139,14 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 			}
 		}
 	}
-
-	// Type filter — remove all pokemon of the given type(s)
 	if len(parsed.Types) > 0 && ctx.GameData != nil {
-		typeSet := make(map[int]bool)
-		for _, t := range parsed.Types {
-			typeSet[t] = true
-		}
 		for _, existing := range tracked {
 			m := ctx.GameData.GetMonster(existing.PokemonID, existing.Form)
 			if m == nil {
 				continue
 			}
 			for _, t := range m.Types {
-				if typeSet[t] {
+				if slices.Contains(parsed.Types, t) {
 					removeIDs[existing.PokemonID] = true
 					break
 				}
@@ -157,40 +154,5 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		}
 	}
 
-	if len(removeIDs) == 0 {
-		if parsed.HasKeyword("arg.everything") || len(parsed.Pokemon) > 0 || len(parsed.Types) > 0 {
-			return []bot.Reply{{React: "👌", Text: tr.T("msg.nothing_to_remove")}}
-		}
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_pokemon")}}
-	}
-
-	var uidsToDelete []int64
-	var removed []db.MonsterTrackingAPI
-	for _, existing := range tracked {
-		if !removeIDs[existing.PokemonID] {
-			continue
-		}
-		if costumeFilter != nil && existing.Costume != *costumeFilter {
-			continue
-		}
-		uidsToDelete = append(uidsToDelete, existing.UID)
-		removed = append(removed, existing)
-	}
-
-	if len(uidsToDelete) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-
-	if err := ctx.Tracking.Monsters.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
-		log.Errorf("untrack command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	ctx.TriggerReload()
-
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&removed[i])))
-	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	return remover.run(ctx, parsed, func(r *db.MonsterTrackingAPI) bool { return removeIDs[r.PokemonID] }, keep)
 }

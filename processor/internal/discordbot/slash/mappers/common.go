@@ -105,7 +105,7 @@ func emitFlag(opt *discordgo.ApplicationCommandInteractionDataOption, keyword st
 	return ""
 }
 
-// appendCommonTail emits the distance / clean / template / location / areas
+// appendCommonTail emits the distance / clean / edit / template / location / areas
 // tokens that every tracking-style mapper accepts as its tail. Equivalent
 // to the inline block
 //
@@ -126,6 +126,10 @@ func appendCommonTail(tokens *[]string, o map[string]*discordgo.ApplicationComma
 	if tok := emitFlag(o["clean"], "clean"); tok != "" {
 		*tokens = append(*tokens, tok)
 	}
+	// Only edit-capable commands (track, raid, egg, lure) define this option.
+	if tok := emitFlag(o["edit"], "edit"); tok != "" {
+		*tokens = append(*tokens, tok)
+	}
 	if v, ok := o["template"]; ok && v.StringValue() != "" {
 		*tokens = append(*tokens, "template:"+v.StringValue())
 	}
@@ -134,13 +138,18 @@ func appendCommonTail(tokens *[]string, o map[string]*discordgo.ApplicationComma
 
 // fortTypeName maps the /fort fort_type choice integer to the canonical
 // English fort-type keyword expected by the text bot. Values are aligned
-// with the strings the bot's arg matcher accepts (`pokestop` / `gym`).
+// with the strings the bot's arg matcher accepts (`pokestop` / `gym` /
+// `station` / `everything`).
 func fortTypeName(v int) string {
 	switch v {
 	case 0:
 		return "pokestop"
 	case 1:
 		return "gym"
+	case 2:
+		return "station"
+	case 3:
+		return "everything"
 	}
 	return ""
 }

@@ -5,6 +5,7 @@ package discordbot
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -83,8 +84,9 @@ type Config struct {
 	ClearGuildSlash bool
 }
 
-// New creates and starts a Discord bot. Returns the bot (for shutdown) or an error.
-func New(cfg Config) (*Bot, error) {
+// New creates and starts a Discord bot, retrying transient gateway failures until
+// connected or ctx is cancelled. Returns the bot (for shutdown) or an error.
+func New(ctx context.Context, cfg Config) (*Bot, error) {
 	session, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
 		return nil, err
@@ -146,7 +148,8 @@ func New(cfg Config) (*Bot, error) {
 		log.Info("slash: dispatcher disabled ([discord.slash_commands] enabled=false)")
 	}
 
-	if err := session.Open(); err != nil {
+	if err := openWithRetry(ctx, session.Open); err != nil {
+		session.Close()
 		return nil, err
 	}
 
@@ -191,7 +194,7 @@ func New(cfg Config) (*Bot, error) {
 
 	// Initialize reconciliation if check_role is enabled.
 	if cfg.Cfg.Discord.CheckRole && cfg.DTS != nil {
-		b.reconciliation = NewReconciliation(session, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS)
+		b.reconciliation = NewReconciliation(session, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS, b.StateMgr)
 		go b.reconciliationLoop()
 	}
 
@@ -552,9 +555,9 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			// Channel context — use the message's current guild.
 			// Gateway state cache first, REST fallback.
 			if member, err := s.State.Member(guildID, m.Author.ID); err == nil && member != nil {
-				userRoles = member.Roles
+				userRoles = discordroles.MemberRoleIDs(guildID, member.Roles)
 			} else if member, err := s.GuildMember(guildID, m.Author.ID); err == nil && member != nil {
-				userRoles = member.Roles
+				userRoles = discordroles.MemberRoleIDs(guildID, member.Roles)
 			}
 		} else if len(b.Cfg.Discord.Guilds) > 0 {
 			// DM context — Discord doesn't tell us the user's guild
@@ -680,7 +683,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		roles := fetchRoles()
 		ctx.UserRoles = roles
 		ctx.Permissions.ChannelTracking = bot.CalculateChannelPermissions(
-			b.Cfg, m.Author.ID, roles, channelID, guildID, "")
+			b.Cfg, m.Author.ID, roles, channelID, guildID, channelAncestors(s, channelID)...)
 		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "discord", m.Author.ID, roles)
 
 		// Set language hint from available_languages (e.g. !dasporacle → "de")
@@ -716,7 +719,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			}
 		}
 
-		replies := handler.Run(ctx, remainingArgs)
+		replies := bot.RunLocked(handler, ctx, remainingArgs)
 		replies = bot.ApplyMaintenanceSuffix(replies, b.Dispatcher, tr.T("cmd.maintenance.active_suffix"))
 		b.sendReplies(s, m, replies)
 	}

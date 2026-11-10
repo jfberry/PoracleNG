@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
 
 // Override holds the resolved per-rule override fields ready to drop onto a
@@ -78,24 +79,55 @@ func parseOverride(ctx *bot.CommandContext, locationLabel string, areas []string
 		communities := humanCommunities(ctx, h)
 		available := ctx.AreaLogic.GetAvailableAreas(communities, ctx.IsAdmin)
 
-		// Build a lowercase set for O(1) membership test.
-		permitted := make(map[string]bool, len(available))
+		// Key the permitted fences by NormalizeAreaKey so either spelling of
+		// a fence name resolves (the parser has already turned unquoted
+		// underscores into spaces), and remember each fence's own spelling,
+		// which is what gets stored.
+		canonical := make(map[string]string, len(available))
 		for _, a := range available {
-			permitted[strings.ToLower(a.Name)] = true
+			canonical[geofence.NormalizeAreaKey(a.Name)] = strings.ToLower(a.Name)
 		}
 
 		for _, a := range areas {
-			if !permitted[strings.ToLower(a)] {
+			if _, ok := canonical[geofence.NormalizeAreaKey(a)]; !ok {
 				return Override{}, &bot.Reply{
 					React: "🙅",
 					Text:  tr.Tf("msg.override.area_not_permitted", a, bot.CommandPrefix(ctx)),
 				}
 			}
 		}
+		// Repeated `area:` params and comma lists both accumulate, so the
+		// same area can arrive twice ("area:london area:paris,london").
+		// Store each one once, in the order the user first named it.
+		seen := make(map[string]bool, len(areas))
 		for _, a := range areas {
-			out.Areas = append(out.Areas, strings.ToLower(strings.ReplaceAll(a, "_", " ")))
+			key := geofence.NormalizeAreaKey(a)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out.Areas = append(out.Areas, canonical[key])
 		}
 	}
 
 	return out, nil
+}
+
+// limitExempt reports whether [tracking] max_distance / max_areas are lifted
+// for this command: the sender is an admin, or the target is a channel,
+// webhook, group or thread (destinations only admins configure).
+func limitExempt(ctx *bot.CommandContext) bool {
+	return bot.LimitExempt(ctx.IsAdmin, ctx.TargetType)
+}
+
+// overrideLimitReply refuses a tracking write whose area: list breaks
+// [tracking] max_areas, judged on the diff the write is about to apply (see
+// bot.OverrideAreaLimitBreached). Call it just before store.ApplyDiff with
+// the same rows. Returns nil when the write may go ahead.
+func overrideLimitReply[T any](ctx *bot.CommandContext, tracked, insert []T,
+	getUID func(*T) int64, setUID func(*T, int64)) []bot.Reply {
+	if !bot.OverrideAreaLimitBreached(ctx.Config, limitExempt(ctx), tracked, insert, getUID, setUID) {
+		return nil
+	}
+	return []bot.Reply{{React: "🙅", Text: ctx.Tr().Tf("msg.override.too_many_areas", ctx.Config.Tracking.MaxAreas)}}
 }

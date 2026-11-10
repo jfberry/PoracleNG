@@ -52,6 +52,9 @@ func TestGymMatchTeamChange(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for team change, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "gym" {
+		t.Errorf("RuleTable = %q, want gym", matched[0].RuleTable)
+	}
 }
 
 func TestGymMatchTeamAny(t *testing.T) {

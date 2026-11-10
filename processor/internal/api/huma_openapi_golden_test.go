@@ -108,6 +108,7 @@ func registerAllHumaOpsForTest(humaAPI huma.API) {
 	RegisterStatsShiny(humaAPI, func() map[int]tracker.ShinyStats { return nil })
 	RegisterStatsShinyPossible(humaAPI, func() map[string]any { return nil })
 	RegisterGeocode(humaAPI, nil)
+	RegisterGeocodeReverse(humaAPI, nil)
 
 	// poracle-test.
 	RegisterTest(humaAPI, bot.TestProcessor(nil))
@@ -164,7 +165,9 @@ func registerAllHumaOpsForTest(humaAPI huma.API) {
 	RegisterConfigSave(humaAPI, ConfigDeps{})
 	RegisterConfigValidate(humaAPI, ConfigDeps{})
 	RegisterMasterdataMonsters(humaAPI, nil, nil)
-	RegisterMasterdataGrunts(humaAPI, nil)
+	RegisterMasterdataGrunts(humaAPI, nil, nil)
+	RegisterMasterdataCostumes(humaAPI, nil, nil)
+	RegisterV2Activity(humaAPI, nil)
 
 	// Snapshot inspection + button actions.
 	RegisterSnapshotGet(humaAPI, nil)

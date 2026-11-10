@@ -46,7 +46,7 @@ func TestV2Locations_List(t *testing.T) {
 	if _, err := humans.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1}); err != nil {
 		t.Fatalf("seed AddLocation: %v", err)
 	}
-	if err := humans.SetLocation("u1", 0, 10, 20); err != nil {
+	if err := humans.SetLocation("u1", 1, 10, 20); err != nil {
 		t.Fatalf("seed SetLocation: %v", err)
 	}
 
@@ -119,7 +119,7 @@ func TestV2Locations_Get_NotFound(t *testing.T) {
 func TestV2Locations_Add_OK(t *testing.T) {
 	r, humans, reloads := newV2LocationsTestAPI(t)
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/locations",
-		`{"label":"Gym","lat":3.5,"lon":4.5}`)
+		`{"label":"Gym","latitude":3.5,"longitude":4.5}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -139,7 +139,7 @@ func TestV2Locations_Add_Duplicate(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/locations",
-		`{"label":"Dup","lat":2,"lon":2}`)
+		`{"label":"Dup","latitude":2,"longitude":2}`)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for duplicate, got %d: %s", w.Code, w.Body.String())
 	}
@@ -151,7 +151,7 @@ func TestV2Locations_Add_Duplicate(t *testing.T) {
 func TestV2Locations_Add_StrictRejectsUnknownField(t *testing.T) {
 	r, _, _ := newV2LocationsTestAPI(t)
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/locations",
-		`{"label":"X","lat":1,"lon":1,"bogus":true}`)
+		`{"label":"X","latitude":1,"longitude":1,"bogus":true}`)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for unknown field, got %d: %s", w.Code, w.Body.String())
 	}
@@ -160,7 +160,7 @@ func TestV2Locations_Add_StrictRejectsUnknownField(t *testing.T) {
 func TestV2Locations_Add_StrictRejectsUnknownQuery(t *testing.T) {
 	r, _, _ := newV2LocationsTestAPI(t)
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/locations?bogus=1",
-		`{"label":"X","lat":1,"lon":1}`)
+		`{"label":"X","latitude":1,"longitude":1}`)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for unknown query, got %d: %s", w.Code, w.Body.String())
 	}
@@ -183,7 +183,7 @@ func TestV2Locations_Update_OK(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/locations/home",
-		`{"lat":9.9,"lon":8.8}`)
+		`{"latitude":9.9,"longitude":8.8}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -203,7 +203,7 @@ func TestV2Locations_Update_OK(t *testing.T) {
 func TestV2Locations_Update_NotFound(t *testing.T) {
 	r, humans, reloads := newV2LocationsTestAPI(t)
 	w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/locations/missing",
-		`{"lat":1,"lon":1}`)
+		`{"latitude":1,"longitude":1}`)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing label, got %d: %s", w.Code, w.Body.String())
 	}
@@ -222,7 +222,7 @@ func TestV2Locations_Update_StrictRejectsUnknownField(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	w := v2DoReq(t, r, http.MethodPut, "/api/v2/humans/u1/locations/home",
-		`{"lat":1,"lon":1,"label":"x"}`)
+		`{"latitude":1,"longitude":1,"label":"x"}`)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for unknown field, got %d: %s", w.Code, w.Body.String())
 	}

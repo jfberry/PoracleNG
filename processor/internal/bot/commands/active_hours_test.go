@@ -201,15 +201,21 @@ func TestSettimeErrorMessage_LocalizesViaTranslator(t *testing.T) {
 	}
 }
 
-func TestParseSettime_UnknownTokenReturnsNilNoError(t *testing.T) {
-	// Junk that matches neither form should return (nil, nil) so the
-	// caller silently skips it (preserves the existing settime UX
-	// where extra junk is ignored).
+func TestParseSettime_UnknownTokenIsRejected(t *testing.T) {
+	// This previously returned (nil, nil) so callers would silently skip
+	// junk. That tolerance was the wrong trade for a scheduling feature:
+	// `settime mon07:30 garbage` applied a Monday-only schedule and said
+	// nothing, and a comma-separated list — the only shape the slash
+	// surface can send — matched neither form and so set nothing at all,
+	// silently. Unrecognised input is now an error naming the offender.
 	got, err := ParseSettimeArg("not-a-time-token", allDays)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected an error for unknown token, got %+v", got)
+	}
+	if !strings.Contains(err.Error(), "not-a-time-token") {
+		t.Errorf("error should name the offending token, got %q", err.Error())
 	}
 	if got != nil {
-		t.Errorf("expected nil entries for unknown token, got %+v", got)
+		t.Errorf("expected no entries alongside the error, got %+v", got)
 	}
 }

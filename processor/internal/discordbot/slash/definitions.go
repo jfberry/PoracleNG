@@ -216,7 +216,7 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 // untrackOptions exposes one sub-command per tracking type. Each sub-command
 // has a single autocomplete-backed "tracking" option whose value is the
 // database UID of the rule the user wants to remove. The sub-command name
-// IS the tracking subtype — both the slash dispatcher (findUntrackSubtype)
+// IS the tracking subtype — both the slash dispatcher (subCommandName)
 // and the autocomplete lister read it directly to scope the choice list.
 func untrackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	subs := []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"}
@@ -275,16 +275,17 @@ func infoOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	}
 }
 
-// areaOptions exposes /area add, /area remove, /area list (every area the
+// areaOptions exposes /area add, /area remove (both take a comma-separated
+// list — the picker composes one), /area list (every area the
 // user could subscribe to, with ✓ marks for the ones they already have),
 // /area overview (overview map of selected areas), and /area show (list of
 // selected area names).
 func areaOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
 		subCommand(bundle, "area.add", "add", "Add an area to your tracking",
-			stringOpt(bundle, "area.add.area", "area", "Area to add", true, true)),
+			stringOpt(bundle, "area.add.area", "area", "Areas to add (comma-separated)", true, true)),
 		subCommand(bundle, "area.remove", "remove", "Remove an area from your tracking",
-			stringOpt(bundle, "area.remove.area", "area", "Area to remove", true, true)),
+			stringOpt(bundle, "area.remove.area", "area", "Areas to remove (comma-separated)", true, true)),
 		subCommand(bundle, "area.show", "show", "Show your selected areas"),
 		subCommand(bundle, "area.list", "list", "List every area available to you (✓ = already added)"),
 		subCommand(bundle, "area.overview", "overview", "Map overview of every area available to you"),
@@ -360,9 +361,21 @@ func boolOpt(bundle *i18n.Bundle, key, canonName, canonDesc string) *discordgo.A
 // canonDesc is the per-command English description ("Auto-delete the alert
 // when the pokemon despawns" etc.); each call site supplies its own wording.
 func cleanOpt(bundle *i18n.Bundle, cmdKey, canonDesc string) *discordgo.ApplicationCommandOption {
-	name, nameLoc := optName(bundle, cmdKey+".clean", "clean")
-	desc, descLoc := optDesc(bundle, cmdKey+".clean", canonDesc)
-	yesName, yesLoc := choiceName(bundle, cmdKey+".clean.yes", "Yes")
+	return yesOpt(bundle, cmdKey, "clean", canonDesc)
+}
+
+// editOpt builds the "edit" choice option (single Yes choice). Only offered on
+// commands whose text form honours the edit keyword (track, raid, egg, lure).
+func editOpt(bundle *i18n.Bundle, cmdKey, canonDesc string) *discordgo.ApplicationCommandOption {
+	return yesOpt(bundle, cmdKey, "edit", canonDesc)
+}
+
+// yesOpt builds a string option with a single "Yes" choice, used for keyword
+// flags. Keys: slash.opt.<cmdKey>.<opt>[.desc], slash.choice.<cmdKey>.<opt>.yes.
+func yesOpt(bundle *i18n.Bundle, cmdKey, opt, canonDesc string) *discordgo.ApplicationCommandOption {
+	name, nameLoc := optName(bundle, cmdKey+"."+opt, opt)
+	desc, descLoc := optDesc(bundle, cmdKey+"."+opt, canonDesc)
+	yesName, yesLoc := choiceName(bundle, cmdKey+"."+opt+".yes", "Yes")
 	return &discordgo.ApplicationCommandOption{
 		Type:                     discordgo.ApplicationCommandOptionString,
 		Name:                     name,
@@ -416,7 +429,7 @@ func profileOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		subCommand(bundle, "profile.delete", "delete", "Delete a profile",
 			stringOpt(bundle, "profile.delete.name", "name", "Profile name", true, true)),
 		subCommand(bundle, "profile.settime", "settime", "Set active-hours for the current profile",
-			stringOpt(bundle, "profile.settime.times", "times", "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)", true, false)),
+			stringOpt(bundle, "profile.settime.times", "times", "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)", true, true)),
 		subCommand(bundle, "profile.cleartime", "cleartime", "Clear active-hours from the current profile"),
 		subCommand(bundle, "profile.copyto", "copyto", "Copy this profile's tracking to another profile",
 			stringOpt(bundle, "profile.copyto.profile", "profile", "Target profile name or number", true, true)),
@@ -450,7 +463,7 @@ func summaryOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 			Options: []*discordgo.ApplicationCommandOption{
 				subCommand(bundle, "summary.quest.show", "show", "Show schedule and current buffer count"),
 				subCommand(bundle, "summary.quest.settime", "settime", "Set the active-hours schedule for the quest summary",
-					stringOpt(bundle, "summary.quest.settime.times", "times", "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)", true, false)),
+					stringOpt(bundle, "summary.quest.settime.times", "times", "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)", true, true)),
 				subCommand(bundle, "summary.quest.cleartime", "cleartime", "Clear the active-hours schedule"),
 				subCommand(bundle, "summary.quest.now", "now", "Force-dispatch the currently-buffered quests"),
 			},
@@ -496,6 +509,7 @@ func trackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		intOpt(bundle, "track.ultra_rank", "ultra_rank", "Top PVP rank in the Ultra League", false),
 		intOpt(bundle, "track.little_rank", "little_rank", "Top PVP rank in the Little League", false),
 		cleanOpt(bundle, "track", "Auto-delete the alert when the pokemon despawns"),
+		editOpt(bundle, "track", "Update the alert in place when the pokemon changes"),
 		templateOpt(bundle, "track"),
 		stringOpt(bundle, "track.form", "form", "Pokemon form", false, true),
 		stringOpt(bundle, "track.costume", "costume", "Pokemon costume", false, true),
@@ -539,6 +553,7 @@ func raidOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		},
 		distanceOpt(bundle, "raid"),
 		cleanOpt(bundle, "raid", "Auto-delete the alert when the raid expires"),
+		editOpt(bundle, "raid", "Update the alert in place (e.g. RSVP changes)"),
 		templateOpt(bundle, "raid"),
 		stringOpt(bundle, "raid.form", "form", "Raid boss form", false, true),
 		stringOpt(bundle, "raid.costume", "costume", "Raid boss costume", false, true),
@@ -572,6 +587,7 @@ func eggOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		},
 		distanceOpt(bundle, "egg"),
 		cleanOpt(bundle, "egg", "Auto-delete the alert when the egg hatches"),
+		editOpt(bundle, "egg", "Update the alert in place (e.g. RSVP changes)"),
 		templateOpt(bundle, "egg"),
 	}
 	return append(opts, trackerLocationAreaOpts(bundle)...)
@@ -686,6 +702,7 @@ func lureOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		},
 		distanceOpt(bundle, "lure"),
 		cleanOpt(bundle, "lure", "Auto-delete the alert when the lure expires"),
+		editOpt(bundle, "lure", "Update the alert in place when the lure changes"),
 		templateOpt(bundle, "lure"),
 	}
 	return append(opts, trackerLocationAreaOpts(bundle)...)
@@ -764,7 +781,8 @@ func fortOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		},
 		boolOpt(bundle, "fort.include_empty", "include_empty", "Alert on empty/unowned forts"),
 		distanceOpt(bundle, "fort"),
-		cleanOpt(bundle, "fort", "Auto-delete the alert when the fort changes again"),
+		// No clean option: fort rules have no clean column and fort
+		// updates have no expiry to clean up at.
 		templateOpt(bundle, "fort"),
 	}
 	return append(opts, trackerLocationAreaOpts(bundle)...)
@@ -826,6 +844,8 @@ func fortTypeChoices(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOptionC
 	return choiceList(bundle, "fort.fort_type", []choiceDef{
 		{0, "Pokestop"},
 		{1, "Gym"},
+		{2, "Station"},
+		{3, "Everything"},
 	})
 }
 

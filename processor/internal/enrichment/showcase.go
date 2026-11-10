@@ -49,7 +49,7 @@ func (e *Enricher) ShowcaseFocusTranslate(focusRaw json.RawMessage, lang string)
 	out["showcaseFocusCategory"] = tr.T("showcase_focus_" + ft)
 	if e.GameData != nil && e.GameData.Util != nil {
 		if info, ok := e.GameData.Util.ShowcaseFocus[ft]; ok {
-			out["showcaseFocusEmoji"] = info.Emoji
+			out["showcaseFocusEmojiKey"] = info.Emoji
 		}
 	}
 	out["showcaseFocusName"] = e.showcaseFocusValue(ft, focus, tr)

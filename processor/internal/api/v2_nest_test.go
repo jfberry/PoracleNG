@@ -160,10 +160,10 @@ func TestV2Nest_CleanEditSummaryBitmask(t *testing.T) {
 	r, ns, _, restore := newV2NestTestAPI(t)
 	defer restore()
 
-	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/nest", `[{"pokemon_id":25,"clean":true,"edit":true,"summary":true}]`)
+	v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/nest", `[{"pokemon_id":25,"clean":true,"summary":true}]`)
 	rows := ns.AllRows()
-	if len(rows) != 1 || rows[0].Clean != 7 {
-		t.Fatalf("expected clean bitmask 7, got %+v", rows)
+	if len(rows) != 1 || rows[0].Clean != 5 {
+		t.Fatalf("expected clean bitmask 5 (clean+summary; edit unsupported), got %+v", rows)
 	}
 }
 
@@ -247,7 +247,7 @@ func TestV2Nest_BulkDelete(t *testing.T) {
 
 // --- PUT full-replace -------------------------------------------------------
 
-func TestV2Nest_PutFullReplace_NewUID(t *testing.T) {
+func TestV2Nest_PutFullReplace_KeepsUID(t *testing.T) {
 	r, ns, _, restore := newV2NestTestAPI(t)
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/nest", `[{"pokemon_id":25,"min_spawn_avg":5}]`)
@@ -260,8 +260,8 @@ func TestV2Nest_PutFullReplace_NewUID(t *testing.T) {
 	}
 	updated := v2RulesArray(t, v2DecodeBody(t, w), "updated")
 	newUID := int64(updated[0]["uid"].(float64))
-	if newUID == oldUID {
-		t.Fatalf("PUT must yield a NEW uid; got same %d", newUID)
+	if newUID != oldUID {
+		t.Fatalf("PUT must keep the rule uid: was %d, now %d", oldUID, newUID)
 	}
 	rows := ns.AllRows()
 	if len(rows) != 1 || rows[0].MinSpawnAvg != 0 {

@@ -273,8 +273,10 @@ func renderDeliverySection(ctx *bot.CommandContext, tr translator, verbose bool)
 	}
 
 	// Cumulative queue depth visible across all platforms — useful to
-	// see backpressure even when the per-platform in-flight counts
-	// look fine. Capacity is internal to the dispatcher.
+	// see lane saturation even when the per-platform in-flight counts
+	// look fine. Capacity is internal to the dispatcher. Note a full
+	// lane sheds its oldest message rather than blocking, so depth near
+	// capacity means loss is imminent, not merely delay.
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.delivery_queue_depth",
 		totalQueueDepth))

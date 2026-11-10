@@ -84,6 +84,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 		}
 
 		trackings = append(trackings, trackingUserData{
+			RuleTable:             "maxbattle",
 			HumanID:               mb.ID,
 			ProfileNo:             mb.ProfileNo,
 			Distance:              mb.Distance,

@@ -39,7 +39,7 @@ type summarySetRequest struct {
 // round-trips with the stored value and the scheduler. Step>0 marks a range
 // entry (with end_hours/end_mins); step absent/0 is a single-fire entry.
 type activeHourEntry struct {
-	Day      int `json:"day" doc:"Day of week (0=Sunday … 6=Saturday)"`
+	Day      int `json:"day" doc:"ISO day of week (1=Monday … 7=Sunday), as the scheduler reads it"`
 	Hours    int `json:"hours" doc:"Start hour (0–23)"`
 	Mins     int `json:"mins" doc:"Start minute (0–59)"`
 	EndHours int `json:"end_hours,omitempty" doc:"End hour (0–23); present on range entries (step>0)"`

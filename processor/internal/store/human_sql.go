@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -115,6 +116,17 @@ func (s *SQLHumanStore) Get(id string) (*Human, error) {
 	return rowToHuman(&r), nil
 }
 
+// profileNoOrDefault maps an unset (0) profile number to the default profile 1.
+// Create names current_profile_no in its INSERT, so the column default never
+// applies; without this a caller that leaves it unset puts the human on a
+// profile 0 that has no profiles row (CreateDefaultProfile inserts profile 1).
+func profileNoOrDefault(n int) int {
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
 func (s *SQLHumanStore) Create(h *Human) error {
 	_, err := s.db.Exec(
 		`INSERT INTO humans (id, name, type, enabled, area, latitude, longitude,
@@ -124,7 +136,7 @@ func (s *SQLHumanStore) Create(h *Human) error {
 		h.ID, h.Name, h.Type, boolToInt(h.Enabled),
 		marshalStringSlice(h.Area), h.Latitude, h.Longitude,
 		boolToInt(h.AdminDisable), nullIfEmpty(h.Language),
-		h.CurrentProfileNo, marshalStringSlice(h.CommunityMembership),
+		profileNoOrDefault(h.CurrentProfileNo), marshalStringSlice(h.CommunityMembership),
 		nullStringSlice(h.AreaRestriction), h.Notes)
 	if err != nil {
 		return fmt.Errorf("insert human %s: %w", h.ID, err)
@@ -185,10 +197,14 @@ func (s *SQLHumanStore) SetAdminDisable(id string, disable bool) error {
 	return nil
 }
 
+// SetLocation writes the profile's location, and the humans row only when
+// profileNo is the active profile: the matcher reads humans.latitude/longitude,
+// and SwitchProfile copies the profile's value in on the next switch, so writing
+// an inactive profile's location to humans would move the live location.
 func (s *SQLHumanStore) SetLocation(id string, profileNo int, lat, lon float64) error {
 	if _, err := s.db.Exec(
-		`UPDATE humans SET latitude = ?, longitude = ? WHERE id = ?`,
-		lat, lon, id); err != nil {
+		`UPDATE humans SET latitude = ?, longitude = ? WHERE id = ? AND current_profile_no = ?`,
+		lat, lon, id, profileNo); err != nil {
 		return fmt.Errorf("update human location %s: %w", id, err)
 	}
 	if _, err := s.db.Exec(
@@ -199,10 +215,12 @@ func (s *SQLHumanStore) SetLocation(id string, profileNo int, lat, lon float64) 
 	return nil
 }
 
+// SetArea writes the profile's areas, and the humans row only when profileNo
+// is the active profile (see SetLocation).
 func (s *SQLHumanStore) SetArea(id string, profileNo int, areas []string) error {
 	areaJSON := marshalStringSlice(areas)
 	if _, err := s.db.Exec(
-		`UPDATE humans SET area = ? WHERE id = ?`, areaJSON, id); err != nil {
+		`UPDATE humans SET area = ? WHERE id = ? AND current_profile_no = ?`, areaJSON, id, profileNo); err != nil {
 		return fmt.Errorf("update human areas %s: %w", id, err)
 	}
 	if _, err := s.db.Exec(
@@ -358,6 +376,21 @@ func (s *SQLHumanStore) GetProfiles(id string) ([]Profile, error) {
 	return profiles, nil
 }
 
+func (s *SQLHumanStore) RuleProfileNos(id string) ([]int, error) {
+	parts := make([]string, len(trackingTables))
+	args := make([]any, len(trackingTables))
+	for i, table := range trackingTables {
+		parts[i] = fmt.Sprintf("SELECT profile_no FROM `%s` WHERE id = ?", table)
+		args[i] = id
+	}
+	var nos []int
+	query := strings.Join(parts, " UNION ") + " ORDER BY profile_no"
+	if err := s.db.Select(&nos, query, args...); err != nil {
+		return nil, fmt.Errorf("select rule profile numbers for %s: %w", id, err)
+	}
+	return nos, nil
+}
+
 func (s *SQLHumanStore) SwitchProfile(id string, profileNo int) (bool, error) {
 	var profile profileRow
 	err := s.db.Get(&profile, `SELECT * FROM profiles WHERE id = ? AND profile_no = ?`, id, profileNo)
@@ -376,15 +409,15 @@ func (s *SQLHumanStore) SwitchProfile(id string, profileNo int) (bool, error) {
 	return true, nil
 }
 
-func (s *SQLHumanStore) AddProfile(id string, name string, activeHours string) error {
+func (s *SQLHumanStore) AddProfile(id string, name string, activeHours string) (int, error) {
 	var profiles []profileRow
 	if err := s.db.Select(&profiles, `SELECT * FROM profiles WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("select profiles for %s: %w", id, err)
+		return 0, fmt.Errorf("select profiles for %s: %w", id, err)
 	}
 
 	var human humanRow
 	if err := s.db.Get(&human, `SELECT `+humanRowColumns+` FROM humans WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("select human %s for add profile: %w", id, err)
+		return 0, fmt.Errorf("select human %s for add profile: %w", id, err)
 	}
 
 	newProfileNo := 1
@@ -411,9 +444,9 @@ func (s *SQLHumanStore) AddProfile(id string, name string, activeHours string) e
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		id, newProfileNo, name, human.Area, human.Latitude, human.Longitude, activeHours)
 	if err != nil {
-		return fmt.Errorf("insert profile %s/%d: %w", id, newProfileNo, err)
+		return 0, fmt.Errorf("insert profile %s/%d: %w", id, newProfileNo, err)
 	}
-	return nil
+	return newProfileNo, nil
 }
 
 func (s *SQLHumanStore) DeleteProfile(id string, profileNo int) error {
@@ -535,6 +568,15 @@ func (s *SQLHumanStore) UpdateProfileHours(id string, profileNo int, activeHours
 	return nil
 }
 
+func (s *SQLHumanStore) UpdateProfileName(id string, profileNo int, name string) error {
+	_, err := s.db.Exec(
+		`UPDATE profiles SET name = ? WHERE id = ? AND profile_no = ?`, name, id, profileNo)
+	if err != nil {
+		return fmt.Errorf("update profile name %s/%d: %w", id, profileNo, err)
+	}
+	return nil
+}
+
 // --- Tracking tables list ---
 
 // trackingTables lists the per-profile tracking tables. Used by
@@ -644,4 +686,58 @@ func nullIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// StripUserAreas implements HumanStore. It is idempotent (re-running with the
+// same denied set removes nothing further) and runs without a transaction:
+// callers hold humanlock for the human, so no row lock is needed.
+func (s *SQLHumanStore) StripUserAreas(humanID string, denied map[string]bool) (removed []string, err error) {
+	seen := map[string]bool{}
+	prune := func(raw string) (kept []string, changed bool) {
+		areas := unmarshalStringSlice(raw)
+		kept = make([]string, 0, len(areas))
+		for _, a := range areas {
+			low := strings.ToLower(a)
+			if !denied[low] {
+				kept = append(kept, a)
+				continue
+			}
+			changed = true
+			if !seen[low] {
+				seen[low] = true
+				removed = append(removed, low)
+			}
+		}
+		return kept, changed
+	}
+
+	var humanArea sql.NullString
+	if err = s.db.Get(&humanArea, `SELECT area FROM humans WHERE id = ?`, humanID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("prune user areas %s: select human: %w", humanID, err)
+	}
+	if kept, changed := prune(humanArea.String); changed {
+		if _, err = s.db.Exec(`UPDATE humans SET area = ? WHERE id = ?`, marshalStringSlice(kept), humanID); err != nil {
+			return nil, fmt.Errorf("prune user areas %s: update human: %w", humanID, err)
+		}
+	}
+
+	var profiles []struct {
+		ProfileNo int            `db:"profile_no"`
+		Area      sql.NullString `db:"area"`
+	}
+	if err = s.db.Select(&profiles, `SELECT profile_no, area FROM profiles WHERE id = ? ORDER BY profile_no`, humanID); err != nil {
+		return nil, fmt.Errorf("prune user areas %s: select profiles: %w", humanID, err)
+	}
+	for _, p := range profiles {
+		if kept, changed := prune(p.Area.String); changed {
+			if _, err = s.db.Exec(`UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?`,
+				marshalStringSlice(kept), humanID, p.ProfileNo); err != nil {
+				return nil, fmt.Errorf("prune user areas %s/%d: update profile: %w", humanID, p.ProfileNo, err)
+			}
+		}
+	}
+	return removed, nil
 }

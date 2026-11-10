@@ -1,8 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-
 	"github.com/jmoiron/sqlx"
 )
 
@@ -40,9 +38,7 @@ func LoadGyms(db *sqlx.DB) ([]*GymTracking, error) {
 
 	result := make([]*GymTracking, len(gyms))
 	for i := range gyms {
-		if gyms[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(gyms[i].OverrideAreasRaw), &gyms[i].OverrideAreas)
-		}
+		gyms[i].OverrideAreas = loadOverrideKeys(gyms[i].OverrideAreasRaw)
 		result[i] = &gyms[i]
 	}
 	return result, nil

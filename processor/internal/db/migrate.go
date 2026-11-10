@@ -48,6 +48,12 @@ func DropForeignKeys(db *sql.DB) {
 	}
 }
 
+// retrySafeMigrations are re-run, rather than refused, when a previous attempt
+// left them dirty. 000009 is idempotent and commits its data changes in one
+// transaction; its original SQL failed on mixed collations before moving any
+// rules, and anything it did change is repeated identically.
+var retrySafeMigrations = map[uint]bool{9: true}
+
 // RunMigrations runs all pending database migrations.
 func RunMigrations(db *sql.DB) error {
 	source, err := iofs.New(migrations.FS, ".")
@@ -71,8 +77,14 @@ func RunMigrations(db *sql.DB) error {
 	}
 
 	if dirty {
-		log.Warnf("Database migration state is dirty at version %d, attempting force", version)
-		if err := m.Force(int(version)); err != nil {
+		// A failed multi-statement migration may be only partially applied, so
+		// forcing it clean would skip the unfinished statements. Only a
+		// migration known to be safe to re-run is retried.
+		if !retrySafeMigrations[version] {
+			return fmt.Errorf("database migration %d is dirty: inspect the failed migration and repair it before retrying; see docs/migration-collations.md", version)
+		}
+		log.Warnf("Database migration %d failed previously, retrying it", version)
+		if err := m.Force(int(version) - 1); err != nil {
 			return fmt.Errorf("force migration version: %w", err)
 		}
 	}

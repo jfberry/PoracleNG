@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 )
@@ -204,9 +206,8 @@ func TestHelpPicksUserCustomWhenCallerHasEmptyLanguage(t *testing.T) {
 		out.WriteString(r.Text)
 	}
 
-	// The help renderer blanks title/description intentionally, so we
-	// search for the custom FIELD name — unique enough to distinguish
-	// from the shipped help/index.
+	// The help renderer blanks the title, so we search for the custom
+	// FIELD name — unique enough to distinguish from the shipped help/index.
 	if !strings.Contains(out.String(), "Area tracking") {
 		t.Errorf("expected user's custom help fields to be rendered, got:\n%s", out.String())
 	}
@@ -214,5 +215,177 @@ func TestHelpPicksUserCustomWhenCallerHasEmptyLanguage(t *testing.T) {
 	// which has distinctive field name "Tracking commands".
 	if strings.Contains(out.String(), "Tracking commands") {
 		t.Errorf("user's custom help was shadowed by shipped help/index:\n%s", out.String())
+	}
+}
+
+// helpReplyText flattens a help reply (Discord embed JSON or Telegram text)
+// into one string for substring checks.
+func helpReplyText(replies []bot.Reply) string {
+	var sb strings.Builder
+	for _, r := range replies {
+		if r.Embed != nil {
+			sb.Write(r.Embed)
+		}
+		sb.WriteString(r.Text)
+	}
+	return sb.String()
+}
+
+// TestHelpTopicShowsDescription — help templates put the topic overview
+// in the embed description. Discord keeps it in the embed; Telegram prints
+// it ahead of the fields. The title is still dropped on both.
+func TestHelpTopicShowsDescription(t *testing.T) {
+	configDir := t.TempDir()
+	topic := `[{
+		"type": "help",
+		"id": "widget",
+		"platform": "",
+		"language": "",
+		"template": {
+			"embed": {
+				"title": "!widget",
+				"description": "Widget overview text",
+				"fields": [{"name": "Status", "value": "widget status"}]
+			}
+		}
+	}]`
+	if err := os.WriteFile(filepath.Join(configDir, "dts.json"), []byte(topic), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := dts.LoadTemplates(configDir, t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+	const overview = "Widget overview text"
+
+	t.Run("discord", func(t *testing.T) {
+		ctx, _ := testCtx(t)
+		ctx.DTS = ts
+		replies := (&HelpCommand{}).Run(ctx, []string{"widget"})
+		if len(replies) != 1 || replies[0].Embed == nil {
+			t.Fatalf("expected one embed reply, got %+v", replies)
+		}
+		var msg struct {
+			Embed struct {
+				Title       string `json:"title"`
+				Description string `json:"description"`
+			} `json:"embed"`
+		}
+		if err := json.Unmarshal(replies[0].Embed, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if msg.Embed.Title != "" {
+			t.Errorf("title should be blanked, got %q", msg.Embed.Title)
+		}
+		if msg.Embed.Description != overview {
+			t.Errorf("description should be kept, got %q", msg.Embed.Description)
+		}
+	})
+
+	t.Run("telegram", func(t *testing.T) {
+		ctx, _ := testCtx(t)
+		ctx.DTS = ts
+		ctx.TargetType = bot.TypeTelegramUser
+		replies := (&HelpCommand{}).Run(ctx, []string{"widget"})
+		if len(replies) == 0 || replies[0].Text == "" {
+			t.Fatalf("expected text replies, got %+v", replies)
+		}
+		first := replies[0].Text
+		if !strings.Contains(first, overview) {
+			t.Fatalf("first reply should open with the description, got:\n%s", first)
+		}
+		if i := strings.Index(first, "Status"); i >= 0 && i < strings.Index(first, overview) {
+			t.Errorf("description should come before the fields, got:\n%s", first)
+		}
+	})
+}
+
+// TestHelpGreetingFallbackDropsDescription — with no help/index installed,
+// !help falls back to the greeting template, whose description is the
+// "thank you for registering" text. That stays hidden; the fields show.
+func TestHelpGreetingFallbackDropsDescription(t *testing.T) {
+	configDir := t.TempDir()
+	greeting := `[{
+		"type": "greeting",
+		"id": "1",
+		"platform": "",
+		"language": "",
+		"default": true,
+		"template": {
+			"embed": {
+				"title": "Welcome",
+				"description": "Thank you for registering",
+				"fields": [{"name": "General commands", "value": "help"}]
+			}
+		}
+	}]`
+	if err := os.WriteFile(filepath.Join(configDir, "dts.json"), []byte(greeting), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := dts.LoadTemplates(configDir, t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+
+	for _, targetType := range []string{bot.TypeDiscordUser, bot.TypeTelegramUser} {
+		t.Run(targetType, func(t *testing.T) {
+			ctx, _ := testCtx(t)
+			ctx.DTS = ts
+			ctx.TargetType = targetType
+			got := helpReplyText((&HelpCommand{}).Run(ctx, nil))
+			if !strings.Contains(got, "General commands") {
+				t.Fatalf("expected the greeting fields, got:\n%s", got)
+			}
+			if strings.Contains(got, "Thank you for registering") {
+				t.Errorf("greeting description should not appear in !help, got:\n%s", got)
+			}
+		})
+	}
+}
+
+// TestHelpRoleIsDiscordOnly — !role only exists on Discord, so its help
+// topic is a Discord-only entry and the index lists it only on Discord
+// when role_subscriptions are configured.
+func TestHelpRoleIsDiscordOnly(t *testing.T) {
+	ts := helpTestDTS(t)
+	withRoles := &config.Config{}
+	withRoles.Discord.RoleSubscriptions = []config.RoleSubscriptionEntry{{}}
+
+	t.Run("discord topic", func(t *testing.T) {
+		ctx, _ := testCtx(t)
+		ctx.DTS = ts
+		replies := (&HelpCommand{}).Run(ctx, []string{"role"})
+		if len(replies) == 0 || replies[0].Embed == nil {
+			t.Fatalf("expected the role help embed, got %+v", replies)
+		}
+	})
+
+	t.Run("telegram topic", func(t *testing.T) {
+		ctx, _ := testCtx(t)
+		ctx.DTS = ts
+		ctx.TargetType = bot.TypeTelegramUser
+		replies := (&HelpCommand{}).Run(ctx, []string{"role"})
+		if len(replies) == 0 || replies[0].React != "🙅" {
+			t.Fatalf("telegram !help role should be an unknown topic, got %+v", replies)
+		}
+	})
+
+	index := func(targetType string, cfg *config.Config) string {
+		ctx, _ := testCtx(t)
+		ctx.DTS = ts
+		ctx.TargetType = targetType
+		if cfg != nil {
+			ctx.Config = cfg
+		}
+		return helpReplyText((&HelpCommand{}).Run(ctx, nil))
+	}
+	if got := index(bot.TypeDiscordUser, withRoles); !strings.Contains(got, "help role") {
+		t.Errorf("discord index with role_subscriptions should list role:\n%s", got)
+	}
+	if got := index(bot.TypeDiscordUser, &config.Config{}); strings.Contains(got, "help role") {
+		t.Errorf("discord index without role_subscriptions should not list role:\n%s", got)
+	}
+	if got := index(bot.TypeTelegramUser, withRoles); strings.Contains(got, "help role") {
+		t.Errorf("telegram index should never list role:\n%s", got)
 	}
 }

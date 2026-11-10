@@ -25,7 +25,12 @@ type Config struct {
 	// FormattedAddress. Defaults to false — the country tends to be noise
 	// for single-country operator audiences.
 	IncludeCountry bool
-	Timeout        int // HTTP timeout in ms (default 5000)
+	// LocalLanguage is the language of the provider's native place names.
+	// Lookups in it are sent without a language so the provider returns its
+	// default (local) names - Photon's prebuilt indexes reject anything
+	// outside default/en/de/fr with HTTP 400.
+	LocalLanguage string
+	Timeout       int // HTTP timeout in ms (default 5000)
 
 	// Circuit breaker
 	FailureThreshold int // consecutive errors before circuit opens (default 5)
@@ -146,6 +151,9 @@ func (g *Geocoder) GetAddressForLanguage(lat, lon float64, language string) *Add
 		return unknownAddress()
 	}
 	language = normalizeLanguage(language)
+	if language == normalizeLanguage(g.config.LocalLanguage) {
+		language = ""
+	}
 
 	// Cache lookup
 	var cacheKey string

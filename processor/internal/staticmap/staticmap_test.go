@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-func boolPtr(v bool) *bool { return &v }
-
 func TestLimits(t *testing.T) {
 	// Test the Web Mercator bounds calculation at a known location
 	// Canterbury, UK: 51.28, 1.08
@@ -154,7 +152,7 @@ func TestGetConfigForTileType(t *testing.T) {
 	r := New(Config{
 		Provider: "tileservercache",
 		TileserverSettings: map[string]TileTypeConfig{
-			"default": {Type: "staticMap", Width: 600, Height: 300, Zoom: 14, Pregenerate: boolPtr(true)},
+			"default": {Type: "staticMap", Width: 600, Height: 300, Zoom: 14, Pregenerate: new(true)},
 			"raid":    {Width: 800, Height: 400},
 		},
 	})
@@ -251,7 +249,7 @@ func TestRampardosProviderAliasesTileserverCache(t *testing.T) {
 				Provider:    provider,
 				ProviderURL: "https://tiles.example.com",
 				TileserverSettings: map[string]TileTypeConfig{
-					"default": {Type: "staticMap", Pregenerate: boolPtr(true)},
+					"default": {Type: "staticMap", Pregenerate: new(true)},
 				},
 			})
 			target := map[string]any{}

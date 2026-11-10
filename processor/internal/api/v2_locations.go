@@ -44,11 +44,14 @@ type v2DefaultLocation struct {
 // optional default. Mirrors v1's locationsPayload, wrapped in {locations}.
 type v2LocationsOutput struct {
 	Body struct {
-		Locations struct {
-			Default *v2DefaultLocation `json:"default,omitempty"`
-			Named   []v2LocationItem   `json:"named"`
-		} `json:"locations"`
+		Locations v2Locations `json:"locations"`
 	}
+}
+
+// v2Locations is a human's saved locations plus their default location.
+type v2Locations struct {
+	Default *v2DefaultLocation `json:"default,omitempty" doc:"The human's default location; omitted when none is set."`
+	Named   []v2LocationItem   `json:"named" doc:"Saved named locations. [] when none."`
 }
 
 // v2LocationOutput is the GET one response: {location:{...}}.
@@ -70,7 +73,7 @@ func registerV2LocationsList(api huma.API, deps *TrackingDeps, tag []string, sec
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-list-human-locations", Method: "GET", Path: "/v2/humans/{id}/locations",
 		Summary:     "List a human's saved locations",
-		Description: "Returns every named saved location plus the human's default (humans-table) lat/lon when set.",
+		Description: "Returns every named saved location plus the human's default (humans-table) latitude/longitude when set.",
 		Tags:        tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2HumanIDInput) (*v2LocationsOutput, error) {
 		locs, err := deps.Humans.ListLocations(in.ID)
@@ -128,11 +131,11 @@ func registerV2LocationsGet(api huma.API, deps *TrackingDeps, tag []string, sec 
 // --- create -----------------------------------------------------------------
 
 // v2AddLocationBody is the strict create body. v1 accepted a single object or an
-// array and a deferred `place` field; v2 takes exactly one {label,lat,lon}.
+// array and a deferred `place` field; v2 takes exactly one {label,latitude,longitude}.
 type v2AddLocationBody struct {
 	Label     string  `json:"label" required:"true" doc:"Unique saved-location label"`
-	Latitude  float64 `json:"lat" required:"true" doc:"Latitude"`
-	Longitude float64 `json:"lon" required:"true" doc:"Longitude"`
+	Latitude  float64 `json:"latitude" required:"true" doc:"Latitude"`
+	Longitude float64 `json:"longitude" required:"true" doc:"Longitude"`
 }
 
 type v2AddLocationInput struct {
@@ -172,8 +175,8 @@ func registerV2LocationsAdd(api huma.API, deps *TrackingDeps, tag []string, sec 
 
 // v2UpdateLocationBody carries the new coords for an existing label.
 type v2UpdateLocationBody struct {
-	Latitude  float64 `json:"lat" required:"true" doc:"New latitude"`
-	Longitude float64 `json:"lon" required:"true" doc:"New longitude"`
+	Latitude  float64 `json:"latitude" required:"true" doc:"New latitude"`
+	Longitude float64 `json:"longitude" required:"true" doc:"New longitude"`
 }
 
 type v2UpdateLocationInput struct {
@@ -186,7 +189,7 @@ func registerV2LocationsUpdate(api huma.API, deps *TrackingDeps, tag []string, s
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-update-human-location", Method: "PUT", Path: "/v2/humans/{id}/locations/{label}",
 		Summary:     "Update a saved location's coords",
-		Description: "Overwrites the lat/lon of an existing saved location (matched case-insensitively by label). 404 if the label does not exist. Triggers a state reload. This capability is new in v2 (v1 had add/delete only).",
+		Description: "Overwrites the latitude/longitude of an existing saved location (matched case-insensitively by label). 404 if the label does not exist. Triggers a state reload. This capability is new in v2 (v1 had add/delete only).",
 		Tags:        tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2UpdateLocationInput) (*statusOKOutput, error) {
 		// Verify the label exists first so a missing label is a clean 404 rather
@@ -238,11 +241,9 @@ func newLocationRefsConflict(refs []store.ReferencingRule) *v2LocationReferenced
 		mapped = append(mapped, v2RefRule{Type: r.Type, UID: r.UID})
 	}
 	return &v2LocationReferencedError{
-		ErrorModel: huma.ErrorModel{
-			Status: 409,
-			Title:  "Conflict",
-			Detail: "location is referenced by one or more tracking rules",
-		},
+		Status:           409,
+		Title:            "Conflict",
+		Detail:           "location is referenced by one or more tracking rules",
 		ReferencingRules: mapped,
 	}
 }

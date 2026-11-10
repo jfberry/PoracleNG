@@ -12,6 +12,10 @@ import (
 // extracted into an interface for testability.
 type commandsAPI interface {
 	ApplicationCommandBulkOverwrite(appID, guildID string, cmds []*discordgo.ApplicationCommand, opts ...discordgo.RequestOption) ([]*discordgo.ApplicationCommand, error)
+	// ApplicationCommands reads back what Discord currently has registered,
+	// including the ids assigned to each command (which the bulk-overwrite
+	// path discards). Used by ListRegistered.
+	ApplicationCommands(appID, guildID string, opts ...discordgo.RequestOption) ([]*discordgo.ApplicationCommand, error)
 }
 
 // SyncCommands pushes the current command set to Discord. Idempotent via a

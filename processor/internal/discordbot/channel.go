@@ -3,20 +3,25 @@ package discordbot
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 var (
 	// nameRe matches name<value>, name:value, or namevalue (case-insensitive).
-	nameRe = regexp.MustCompile(`(?i)^name[:<]?(\S+?)>?$`)
-	// areaRe matches area<value>, area:value (case-insensitive).
-	areaRe = regexp.MustCompile(`(?i)^area[:<]?(\S+?)>?$`)
+	// The value may contain spaces: the parser turns unquoted underscores into
+	// spaces inside a single token, so `name:my_hook` arrives as "name:my hook".
+	nameRe = regexp.MustCompile(`(?i)^name[:<]?(.+?)>?$`)
+	// areaRe matches area<value>, area:value (case-insensitive). Spaces are
+	// allowed for the same reason as nameRe (`area:gent_centrum`).
+	areaRe = regexp.MustCompile(`(?i)^area[:<]?(.+?)>?$`)
 	// languageRe matches language<value>, language:value (case-insensitive).
 	languageRe = regexp.MustCompile(`(?i)^language[:<]?(\S+?)>?$`)
 	// webhookURLRe matches a Discord webhook URL or similar HTTP(S) URL in the raw message.
@@ -32,19 +37,13 @@ func (b *Bot) handleChannel(s *discordgo.Session, m *discordgo.MessageCreate, ar
 	isDM := m.GuildID == ""
 	tr := b.Translations.For(b.Cfg.General.Locale)
 
-	// Parse name<value>, area<name>, language<code> from args
-	var webhookName, areaName, language string
-	for _, arg := range args {
-		if match := nameRe.FindStringSubmatch(arg); match != nil {
-			webhookName = match[1]
-		}
-		if match := areaRe.FindStringSubmatch(arg); match != nil {
-			areaName = match[1]
-		}
-		if match := languageRe.FindStringSubmatch(arg); match != nil {
-			language = match[1]
+	var fences []geofence.Fence
+	if b.StateMgr != nil {
+		if st := b.StateMgr.Get(); st != nil {
+			fences = st.Fences
 		}
 	}
+	webhookName, areaName, language := parseChannelArgs(args, fences)
 
 	// Parse webhook URL from the raw message content
 	var webhookURL string
@@ -68,6 +67,39 @@ func (b *Bot) handleChannel(s *discordgo.Session, m *discordgo.MessageCreate, ar
 	} else if hasRemove {
 		b.handleChannelRemove(s, m, isDM, webhookName, tr)
 	}
+}
+
+// parseChannelArgs extracts name<value>, area<name> and language<code> from
+// !channel args. An area matching a configured fence — directly or with its
+// spaces restored to underscores (the parser converts unquoted underscores to
+// spaces) — is stored as that fence's lowercased name; an unknown area is kept
+// as typed.
+//
+// The webhook name is deliberately stored as it arrives, so `name:my_hook`
+// is stored as "my hook" (unlike areas, there is no canonical list to map
+// back to). This is intentional and consistent: every later reference goes
+// through the same parser — `name:my_hook` overrides in BuildTarget,
+// `!channel remove name:my_hook`, `!enable`/`!disable` — and so also looks
+// up "my hook". Keeping the underscore here would make the stored name
+// unreachable from commands.
+func parseChannelArgs(args []string, fences []geofence.Fence) (webhookName, areaName, language string) {
+	for _, arg := range args {
+		if match := nameRe.FindStringSubmatch(arg); match != nil {
+			webhookName = match[1]
+		}
+		if match := areaRe.FindStringSubmatch(arg); match != nil {
+			areaName = match[1]
+		}
+		if match := languageRe.FindStringSubmatch(arg); match != nil {
+			language = match[1]
+		}
+	}
+	if areaName != "" {
+		if f := bot.NewAreaLogic(fences, nil).FindFence(areaName); f != nil {
+			areaName = strings.ToLower(f.Name)
+		}
+	}
+	return webhookName, areaName, language
 }
 
 func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate, isDM bool, webhookName, webhookURL, areaName, language string, tr interface {

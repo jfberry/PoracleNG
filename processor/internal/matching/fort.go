@@ -60,6 +60,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedU
 		}
 
 		trackings = append(trackings, trackingUserData{
+			RuleTable:             "fort",
 			HumanID:               f.ID,
 			ProfileNo:             f.ProfileNo,
 			Distance:              f.Distance,

@@ -21,6 +21,12 @@ type Fence struct {
 	Description      string         `json:"description"`
 	UserSelectable   bool           `json:"userSelectable"`
 	DisplayInMatches bool           `json:"displayInMatches"`
+	// ExemptFromAreaSecurity marks a fence as outside the community system: it is
+	// in no community's allowed_areas by construction (a user-drawn fence), so the
+	// community filter can only reject it and the prune can only delete it.
+	// Default false. Does NOT affect strict_locations / area_restriction, and
+	// does NOT imply UserSelectable (#243).
+	ExemptFromAreaSecurity bool `json:"exemptFromAreaSecurity"`
 	// Properties holds user-defined keys from the source's properties block
 	// that aren't mapped to a named field above. Used by the bulk-autocreate
 	// runner's filter/params Handlebars expressions. Populated by
@@ -30,15 +36,16 @@ type Fence struct {
 
 // fenceJSON is used for unmarshalling with *bool to detect absent vs explicit false.
 type fenceJSON struct {
-	Name             string         `json:"name"`
-	ID               int            `json:"id"`
-	Color            string         `json:"color"`
-	Path             [][2]float64   `json:"path,omitempty"`
-	Multipath        [][][2]float64 `json:"multipath,omitempty"`
-	Group            string         `json:"group"`
-	Description      string         `json:"description"`
-	UserSelectable   *bool          `json:"userSelectable"`
-	DisplayInMatches *bool          `json:"displayInMatches"`
+	Name                   string         `json:"name"`
+	ID                     int            `json:"id"`
+	Color                  string         `json:"color"`
+	Path                   [][2]float64   `json:"path,omitempty"`
+	Multipath              [][][2]float64 `json:"multipath,omitempty"`
+	Group                  string         `json:"group"`
+	Description            string         `json:"description"`
+	UserSelectable         *bool          `json:"userSelectable"`
+	DisplayInMatches       *bool          `json:"displayInMatches"`
+	ExemptFromAreaSecurity bool           `json:"exemptFromAreaSecurity"`
 }
 
 // UnmarshalJSON handles defaulting UserSelectable and DisplayInMatches to true when absent.
@@ -56,6 +63,7 @@ func (f *Fence) UnmarshalJSON(data []byte) error {
 	f.Description = raw.Description
 	f.UserSelectable = raw.UserSelectable == nil || *raw.UserSelectable
 	f.DisplayInMatches = raw.DisplayInMatches == nil || *raw.DisplayInMatches
+	f.ExemptFromAreaSecurity = raw.ExemptFromAreaSecurity
 	return nil
 }
 
@@ -77,12 +85,13 @@ type geoJSONGeometry struct {
 }
 
 type geoJSONProperties struct {
-	Name             string `json:"name"`
-	Color            string `json:"color"`
-	Group            string `json:"group"`
-	Description      string `json:"description"`
-	UserSelectable   *bool  `json:"userSelectable"`
-	DisplayInMatches *bool  `json:"displayInMatches"`
+	Name                   string `json:"name"`
+	Color                  string `json:"color"`
+	Group                  string `json:"group"`
+	Description            string `json:"description"`
+	UserSelectable         *bool  `json:"userSelectable"`
+	DisplayInMatches       *bool  `json:"displayInMatches"`
+	ExemptFromAreaSecurity bool   `json:"exemptFromAreaSecurity"`
 }
 
 // LoadGeofenceFile loads a geofence file (Poracle JSON or GeoJSON format).
@@ -128,12 +137,13 @@ func parseGeoJSON(collection geoJSONCollection, defaultName string) []Fence {
 	// in the source's properties block ends up in Fence.Properties for use
 	// by bulk-autocreate filter/params expressions.
 	namedKeys := map[string]bool{
-		"name":             true,
-		"color":            true,
-		"group":            true,
-		"description":      true,
-		"userSelectable":   true,
-		"displayInMatches": true,
+		"name":                   true,
+		"color":                  true,
+		"group":                  true,
+		"description":            true,
+		"userSelectable":         true,
+		"displayInMatches":       true,
+		"exemptFromAreaSecurity": true,
 	}
 
 	var fences []Fence
@@ -183,14 +193,15 @@ func parseGeoJSON(collection geoJSONCollection, defaultName string) []Fence {
 		}
 
 		fence := Fence{
-			Name:             name,
-			ID:               i,
-			Color:            props.Color,
-			Group:            props.Group,
-			Description:      props.Description,
-			UserSelectable:   userSel,
-			DisplayInMatches: dispMatch,
-			Properties:       extras,
+			Name:                   name,
+			ID:                     i,
+			Color:                  props.Color,
+			Group:                  props.Group,
+			Description:            props.Description,
+			UserSelectable:         userSel,
+			DisplayInMatches:       dispMatch,
+			ExemptFromAreaSecurity: props.ExemptFromAreaSecurity,
+			Properties:             extras,
 		}
 
 		switch feature.Geometry.Type {

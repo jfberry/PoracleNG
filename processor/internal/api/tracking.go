@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -15,6 +15,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
@@ -245,17 +246,39 @@ func (f flexInt) isSet() bool {
 // Build it with newOverrideContext before the loop, then pass it into
 // validateOverrideFields for every row.
 type overrideContext struct {
-	human     *store.Human    // nil when AreaLogic is nil (no permission check needed)
-	permitted map[string]bool // lowercase area set; nil when area security disabled
+	human *store.Human
+	// permitted is the set of areas this human may scope a rule to, keyed by
+	// geofence.NormalizeAreaKey (lowercased, underscores as spaces) so either
+	// spelling of a fence name is judged the same, whichever form is stored.
+	//
+	// Nil means "could not determine" — no fences loaded — and the check is
+	// skipped rather than rejecting everything.
+	permitted map[string]bool
+	// limitExempt lifts [tracking] max_distance and max_areas: the human is
+	// an admin or not a user (bot.LimitExempt), or a trusted v2 caller has
+	// already authorised the write.
+	limitExempt bool
 }
 
-// newOverrideContext fetches the full human record once and pre-builds the
-// permitted-area set. It is called once per handler invocation, outside the
-// per-row loop, so that a batch POST of N rows only issues one Get query.
-// Returns an error message + HTTP status on failure.
-func newOverrideContext(deps *TrackingDeps, humanID string) (overrideContext, string, int) {
-	if deps.AreaLogic == nil {
-		return overrideContext{}, "", 0
+// normalizeAreaKey keys an area name for permission comparison
+// (geofence.NormalizeAreaKey).
+func normalizeAreaKey(s string) string {
+	return geofence.NormalizeAreaKey(s)
+}
+
+// newOverrideContext resolves the human and the set of areas they may scope a
+// rule to. It is called once per handler invocation, outside the per-row loop,
+// so that a batch POST of N rows only issues one Get query. Returns an error
+// message + HTTP status on failure.
+//
+// The permitted set used to come from AreaLogic alone, and AreaLogic is nil in
+// production (main.go never sets it), so the set was always nil and the
+// override_areas check never ran on any tracking write — v1 or v2, all 11
+// types. Falling back to the live state's fences is what makes it real; this
+// mirrors what v2_mutes.go already does for area-scoped mutes (#211).
+func newOverrideContext(deps *TrackingDeps, humanID string, trusted bool) (overrideContext, string, int) {
+	if deps.Humans == nil {
+		return overrideContext{limitExempt: trusted}, "", 0
 	}
 	human, err := deps.Humans.Get(humanID)
 	if err != nil {
@@ -265,12 +288,29 @@ func newOverrideContext(deps *TrackingDeps, humanID string) (overrideContext, st
 		return overrideContext{}, "user not found", http.StatusNotFound
 	}
 	admin := isAdmin(deps, humanID)
-	available := deps.AreaLogic.GetAvailableAreas(human.CommunityMembership, admin)
-	permitted := make(map[string]bool, len(available))
-	for _, a := range available {
-		permitted[strings.ToLower(a.Name)] = true
+	exempt := trusted || bot.LimitExempt(admin, human.Type)
+
+	var fences []geofence.Fence
+	switch {
+	case deps.AreaLogic != nil:
+		fences = deps.AreaLogic.Fences()
+	case deps.StateMgr != nil && deps.StateMgr.Get() != nil:
+		// Production path: AreaLogic is nil in main.go (#211).
+		fences = deps.StateMgr.Get().Fences
+	case deps.StateMgr != nil:
+		// State not loaded yet: fail closed (empty set rejects every
+		// override_areas value) rather than skipping the check.
+		return overrideContext{human: human, permitted: map[string]bool{}, limitExempt: exempt}, "", 0
+	default:
+		return overrideContext{human: human, limitExempt: exempt}, "", 0
 	}
-	return overrideContext{human: human, permitted: permitted}, "", 0
+	names := bot.PermittedAreas(fences, deps.Config, human, admin, trusted)
+
+	permitted := make(map[string]bool, len(names))
+	for _, n := range names {
+		permitted[normalizeAreaKey(n)] = true
+	}
+	return overrideContext{human: human, permitted: permitted, limitExempt: exempt}, "", 0
 }
 
 // validateOverrideFields checks the four mutually-exclusive override
@@ -322,7 +362,7 @@ func validateOverrideFields(
 
 	if hasAreas && oc.permitted != nil {
 		for _, a := range overrideAreas {
-			if !oc.permitted[strings.ToLower(a)] {
+			if !oc.permitted[normalizeAreaKey(a)] {
 				return "area not permitted: " + a, http.StatusBadRequest
 			}
 		}
@@ -331,22 +371,107 @@ func validateOverrideFields(
 	return "", 0
 }
 
-// normalizeOverrideAreas converts an empty slice to nil (so an incoming
-// "override_areas":[] round-trips identically to a NULL DB column for diff
-// purposes) and normalizes each remaining area name to lowercase with
-// underscores replaced by spaces. This matches the convention used by
-// human.Area (parseAndNormalizeAreas) and the geofence NormalizedName keys,
-// so area comparisons in the matcher's areaOverlap will always find a match
-// regardless of the original case or underscore usage in the request body.
-func normalizeOverrideAreas(in []string) []string {
+// overrideLimitMsg applies [tracking] max_areas to a tracking write's
+// override_areas, judged on the diff it is about to apply
+// (bot.OverrideAreaLimitBreached): new rules must be within the limit, an
+// updated rule may only keep a subset of its stored list. Call it before
+// writing, with the rows the write diffs. "" means the write may go ahead.
+func overrideLimitMsg[T any](deps *TrackingDeps, oc overrideContext, existing, candidates []T,
+	getUID func(*T) int64, setUID func(*T, int64)) string {
+	if !bot.OverrideAreaLimitBreached(deps.Config, oc.limitExempt, existing, candidates, getUID, setUID) {
+		return ""
+	}
+	return fmt.Sprintf("override_areas has more than the maximum of %d areas", deps.Config.Tracking.MaxAreas)
+}
+
+// earthCircumference (metres) caps distance when the operator sets no
+// [tracking] max_distance (or the write is exempt) — no radius can usefully
+// exceed it.
+const earthCircumference = 40000000
+
+// clampDistance caps a rule's radius at [tracking] max_distance, or at the
+// earth's circumference when there is no limit or exempt (oc.limitExempt) is
+// set, as the bot's enforceDistance does. Clamped rather than rejected so a
+// stored rule above a since-lowered limit still round-trips through GET →
+// POST/PUT instead of failing the whole body. Used by v1 and v2 tracking
+// writes.
+func clampDistance(deps *TrackingDeps, exempt bool, distance int) int {
+	limit := earthCircumference
+	if deps != nil {
+		if m := bot.MaxDistanceFor(deps.Config, exempt); m > 0 {
+			limit = m
+		}
+	}
+	return min(distance, limit)
+}
+
+// v1NormalizeOverrideAreas is the frozen v1 write form: an empty slice becomes
+// nil (so "override_areas":[] round-trips identically to a NULL column for the
+// diff) and each name becomes its comparison key (lowercase, underscores as
+// spaces). Only the v1 tracking<Type>.go handlers use it; v2 and the bot store
+// the fence's own spelling (canonicalOverrideAreas). Either form matches,
+// because the matcher state loaders key what they load.
+func v1NormalizeOverrideAreas(in []string) []string {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make([]string, len(in))
 	for i, a := range in {
-		out[i] = strings.ToLower(strings.ReplaceAll(a, "_", " "))
+		out[i] = geofence.NormalizeAreaKey(a)
 	}
 	return out
+}
+
+// trackingFences returns the loaded fences used to resolve area names: the
+// AreaLogic's when set (tests), else the live state's (production, #211).
+func trackingFences(deps *TrackingDeps) []geofence.Fence {
+	if deps.AreaLogic != nil {
+		return deps.AreaLogic.Fences()
+	}
+	if deps.StateMgr != nil {
+		if st := deps.StateMgr.Get(); st != nil {
+			return st.Fences
+		}
+	}
+	return nil
+}
+
+// canonicalOverrideAreas is the v2 write form of override_areas: each name
+// becomes the loaded fence's own spelling (geofence.CanonicalAreaName), and
+// names that are the same area under another spelling are dropped, keeping
+// first-seen order. Empty input gives nil, the NULL column.
+func canonicalOverrideAreas(deps *TrackingDeps, in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	fences := trackingFences(deps)
+	out := make([]string, 0, len(in))
+	seen := make(map[string]bool, len(in))
+	for _, a := range in {
+		key := geofence.NormalizeAreaKey(a)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, geofence.CanonicalAreaName(fences, a))
+	}
+	return out
+}
+
+// canonicalizeRowOverrideAreas rewrites row's OverrideAreas field (if it has
+// one) to the canonical fence spelling, so v2 reads show fence names even for
+// legacy rows stored spaced. The SQL read path (parseOverrideAreas) returns
+// the spaced key form, which v1, !tracked and rowtext keep using.
+func canonicalizeRowOverrideAreas[T any](deps *TrackingDeps, row *T) {
+	f := reflect.ValueOf(row).Elem().FieldByName("OverrideAreas")
+	if !f.IsValid() || !f.CanSet() {
+		return
+	}
+	areas, ok := f.Interface().([]string)
+	if !ok || len(areas) == 0 {
+		return
+	}
+	f.Set(reflect.ValueOf(canonicalOverrideAreas(deps, areas)))
 }
 
 // DiffTracking compares two tracking structs using `diff` struct tags.

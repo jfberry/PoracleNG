@@ -68,3 +68,28 @@ func TestSplitOrAttachReply_OverThresholdAttaches(t *testing.T) {
 		t.Fatalf("inline text should be the attach message, got %q", r.Text)
 	}
 }
+
+func TestSplitCodeBlockReply_FencesEveryChunk(t *testing.T) {
+	line := strings.Repeat("default_edit = x ", 10)
+	text := strings.TrimSpace(strings.Repeat(line+"\n", 300))
+
+	replies := SplitCodeBlockReply(text)
+	if len(replies) < 2 {
+		t.Fatalf("expected multiple chunks, got %d", len(replies))
+	}
+	for i, r := range replies {
+		if !strings.HasPrefix(r.Text, "```\n") || !strings.HasSuffix(r.Text, "\n```") {
+			t.Errorf("chunk %d not fenced: %q", i, r.Text[:20])
+		}
+		if len(r.Text) > 2000 {
+			t.Errorf("chunk %d is %d chars, over the 2000 limit", i, len(r.Text))
+		}
+	}
+}
+
+func TestSplitCodeBlockReply_EscapesBackticks(t *testing.T) {
+	replies := SplitCodeBlockReply("a = \"```\"")
+	if got, want := replies[0].Text, "```\na = \"\\`\\`\\`\"\n```"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

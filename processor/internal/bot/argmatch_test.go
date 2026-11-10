@@ -858,3 +858,67 @@ func TestArgMatchLatLonCollapseScopedToLatLonCommands(t *testing.T) {
 		t.Fatalf("unrecognized = %v, want both tokens unmerged", result.Unrecognized)
 	}
 }
+
+func newRarityTestMatcher() *ArgMatcher {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"arg.prefix.rarity":    "rarity",
+		"arg.prefix.maxrarity": "maxrarity",
+		"arg.prefix.iv":        "iv",
+		"rarity_1":             "Common",
+		"rarity_2":             "Uncommon",
+		"rarity_3":             "Rare",
+		"rarity_4":             "Very-Rare",
+		"rarity_5":             "Ultra-Rare",
+		"rarity_6":             "Unseen",
+	}))
+	return NewArgMatcher(bundle, &gamedata.GameData{Util: &gamedata.UtilData{}}, nil, []string{"en"})
+}
+
+// The English rarity names contain hyphens, but the range parser split on
+// the first "-" before trying a name, so very-rare / ultra-rare never
+// parsed (#276).
+func TestArgMatchRarityHyphenatedNames(t *testing.T) {
+	am := newRarityTestMatcher()
+	params := []ParamDef{{Type: ParamPrefixRange, Key: "arg.prefix.rarity"}}
+	cases := []struct {
+		tok  string
+		want Range
+	}{
+		{"rarity:very-rare", Range{Min: 4}},
+		{"rarity:rare", Range{Min: 3}},
+		{"rarity:common-very-rare", Range{Min: 1, Max: 4, HasMax: true}},
+		{"rarity:ultra-rare-unseen", Range{Min: 5, Max: 6, HasMax: true}},
+		{"rarity:very-rare-6", Range{Min: 4, Max: 6, HasMax: true}},
+		{"rarity:2-5", Range{Min: 2, Max: 5, HasMax: true}},
+		// The tokenizer turns underscores into spaces, so very_rare
+		// arrives as "very rare"; accept that spelling too.
+		{"rarity:very rare", Range{Min: 4}},
+	}
+	for _, tc := range cases {
+		result := am.Match([]string{tc.tok}, params, "en")
+		if len(result.Unrecognized) > 0 {
+			t.Errorf("%s: unrecognized %v", tc.tok, result.Unrecognized)
+			continue
+		}
+		if got := result.Ranges["rarity"]; got != tc.want {
+			t.Errorf("%s = %+v, want %+v", tc.tok, got, tc.want)
+		}
+	}
+}
+
+// A value that isn't a number or a name, or a negative number, is still
+// rejected.
+func TestArgMatchRangeRejectsJunk(t *testing.T) {
+	am := newRarityTestMatcher()
+	for _, tok := range []string{"rarity:very-common", "rarity:bogus", "iv-5", "iv:-5"} {
+		key := "arg.prefix.rarity"
+		if tok[:2] == "iv" {
+			key = "arg.prefix.iv"
+		}
+		result := am.Match([]string{tok}, []ParamDef{{Type: ParamPrefixRange, Key: key}}, "en")
+		if len(result.Unrecognized) != 1 {
+			t.Errorf("%s: expected unrecognized, got ranges %+v", tok, result.Ranges)
+		}
+	}
+}

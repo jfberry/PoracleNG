@@ -6,19 +6,23 @@
   "template": {
     "embed": {
       "title": "!tracked",
-      "description": "Show everything you're currently tracking, across every tracking type, grouped by category.",
+      "description": "Show your status and every tracking rule in your current profile, grouped by type, plus any active mutes.",
       "fields": [
         {
           "name": "Usage",
-          "value": "`{{prefix}}tracked` — list your active profile's tracking"
+          "value": "`{{prefix}}tracked` — status, rules and mutes\n`{{prefix}}tracked area` — just the areas you have selected"
         },
         {
-          "name": "Output format",
-          "value": "Each rule appears with a `[id:XX]` prefix. Use that ID with `{{prefix}}untrack id:XX` to remove one specific rule without disturbing the others."
+          "name": "What you see",
+          "value": "• Whether alerts are on, your location, areas and active profile\n• Each rule with an `[id:XX]` in front of it\n• ⚠️ on rules that can't match yet: a `d:` rule with no location set, or an area rule with no areas selected\n• Active mutes and how long they have left\n\nIf the list is long, it is sent as a text file instead."
+        },
+        {
+          "name": "Using the ids",
+          "value": "Ids are numbered separately for each type, so say which type you mean:\n`{{prefix}}untrack id:45` — a pokemon rule\n`{{prefix}}raid remove id:12` or `{{prefix}}untrack raid id:12` — a raid rule (same pattern for egg, quest, invasion, and the rest)\n`{{prefix}}raid mute id:12 duration:2h` — pause a rule instead of removing it"
         },
         {
           "name": "Related commands",
-          "value": "`{{prefix}}script` — export your tracking as a list of commands (useful for backups)\n`{{prefix}}untrack id:<N>` — remove one rule\n`{{prefix}}profile` — switch to a different tracking profile"
+          "value": "`{{prefix}}script` — your tracking as a list of commands you can re-run (useful as a backup)\n`{{prefix}}profile` — switch to another tracking profile\n`{{prefix}}help mute` — muting alerts"
         }
       ]
     }

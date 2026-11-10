@@ -1,26 +1,32 @@
-[{
-  "id": "stop",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!stop",
-      "description": "Pause all alert delivery without losing your tracking rules.",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}stop` — stop receiving alerts. Tracking rules are preserved.\n`{{prefix}}start` — resume."
-        },
-        {
-          "name": "When to use it",
-          "value": "Going on holiday, in a long meeting, or just overwhelmed with notifications. `{{prefix}}stop` is preferable to `{{prefix}}untrack everything` because you keep all your filters for when you come back."
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}unregister` — delete your account and all tracking (permanent)"
-        }
-      ]
+[
+  {
+    "id": "stop",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!stop",
+        "description": "Pause all your alerts without losing your tracking.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}stop` — stop all alerts. Your tracking, areas and profiles are kept.\n`{{prefix}}start` — resume them.\n\n`{{prefix}}stop` takes nothing after it: `{{prefix}}stop pokemon` is refused, and nothing is stopped."
+          },
+          {
+            "name": "Stopping only some alerts",
+            "value": "`{{prefix}}untrack` — remove tracking rules (`{{prefix}}help untrack`)\n`{{prefix}}mute` — silence a pokemon, gym, area and so on for a while (`{{prefix}}help mute`)"
+          },
+          {
+            "name": "{{#if userIsAdmin}}Admins{{/if}}",
+            "value": "{{#if userIsAdmin}}`{{prefix}}stop user:<id>` — pause another user. In a registered channel, `{{prefix}}stop` pauses the channel.{{/if}}"
+          },
+          {
+            "name": "Related",
+            "value": "`{{prefix}}unregister` — delete your account and all tracking for good"
+          }
+        ]
+      }
     }
   }
-}]
+]

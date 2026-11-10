@@ -2,6 +2,9 @@ package pvp
 
 import (
 	"slices"
+	"sync"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -29,6 +32,21 @@ type Config struct {
 	PVPFilterGreatMinCP        int
 	PVPFilterUltraMinCP        int
 	PVPFilterLittleMinCP       int
+}
+
+// warnedCaps records level caps already reported as missing from level_caps,
+// so the misconfiguration is logged once per cap rather than on every encounter.
+var warnedCaps sync.Map
+
+// warnUnconfiguredCap reports a rank Golbat sent for a cap not in level_caps.
+// Such ranks are dropped, which silently stops PVP rules matching them (e.g. a
+// cap-51 best-buddy rank with level_caps = [50]). Port of PoracleJs's "PVP
+// configuration mismatch" warning, deduplicated per cap.
+func warnUnconfiguredCap(league, cap int, capsConsidered []int) {
+	if _, seen := warnedCaps.LoadOrStore(cap, true); seen {
+		return
+	}
+	log.Warnf("PVP configuration mismatch: Golbat sent league %d ranks for level cap %d, which is not in [pvp] level_caps %v - these ranks are ignored. Set level_caps to match Golbat's PVP level caps (logged once per cap)", league, cap, capsConsidered)
 }
 
 // Calculate processes PVP data from Golbat webhook into PVPResult.
@@ -126,6 +144,7 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 		for _, cap := range caps {
 			b, ok := capMap[cap]
 			if !ok {
+				warnUnconfiguredCap(league, cap, capsConsidered)
 				continue
 			}
 			if stats.Rank > 0 && stats.Rank < b.rank {

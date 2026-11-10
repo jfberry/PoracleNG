@@ -94,9 +94,10 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 		// Append buffered (summary-bit) matches to the summary buffer.
 		// These users get a grouped delivery later from the summary
-		// scheduler (PR 5); we don't enrich or render now.
+		// scheduler; we don't enrich or render now. bufferQuestMatches
+		// applies the buffer-time post-match filters (#311).
 		if len(buffered) > 0 {
-			ps.bufferQuestMatches(buffered, &quest, rewards, raw)
+			ps.bufferQuestMatches(buffered, &quest, rewards, raw, matchedAreas)
 		}
 
 		if len(matched) > 0 {
@@ -211,8 +212,31 @@ func (ps *ProcessorService) bufferQuestMatches(
 	quest *webhook.QuestWebhook,
 	rewards []matching.QuestRewardData,
 	raw []byte,
+	matchedAreas []webhook.MatchedArea,
 ) {
 	if ps.summaryBuffer == nil || len(users) == 0 {
+		return
+	}
+	// Post-match filters for buffered matches (#311):
+	//   - Platform enabled: checked here (a disabled platform's
+	//     humans are never buffered) AND again at fire time in
+	//     DispatchQuestSummary, for entries buffered before the
+	//     platform was disabled or restored from the snapshot.
+	//   - Alert rate-limit pre-filter: NOT applied — summaries are
+	//     counted against their own summary bucket at dispatch, so
+	//     only the platform half of filterBlocked runs here.
+	//   - External validation: applied here, because the validator
+	//     judges this match (webhook + matched areas), which the
+	//     summary can't reproduce later — it aggregates many stops
+	//     and only re-checks the destination at fire time.
+	//   - Mutes: applied at fire time only (DispatchQuestSummary).
+	//     The digest is what the user receives, and quests stay
+	//     collectible until end of day, so a mute that has lapsed
+	//     (or been !unmute'd) by the time the summary fires should
+	//     not have silently dropped the quest from it.
+	users = ps.filterPlatformEnabled(users)
+	users = ps.filterValidation("quest", raw, matchedAreas, users)
+	if len(users) == 0 {
 		return
 	}
 
@@ -245,9 +269,17 @@ func (ps *ProcessorService) bufferQuestMatches(
 	expiresAt := geo.EndOfDay(quest.Latitude, quest.Longitude)
 	now := time.Now().Unix()
 	payload := append([]byte(nil), raw...) // detach from caller's buffer
+	var areas []string
+	for _, a := range matchedAreas {
+		areas = append(areas, a.Name)
+	}
 
 	for _, u := range users {
 		ps.summaryBuffer.Append(u.ID, AlertTypeQuest, tracker.BufferedQuest{
+			// The matcher dedups by user, so one rule UID per webhook;
+			// Append unions UIDs across repeat firings of the same quest.
+			RuleUIDs:   ruleUIDsOf(u),
+			Areas:      areas,
 			RewardType: rewardType,
 			Reward:     reward,
 			Form:       form,
@@ -262,4 +294,13 @@ func (ps *ProcessorService) bufferQuestMatches(
 			Clean: u.Clean,
 		})
 	}
+}
+
+// ruleUIDsOf returns the matched rule UID as a fresh slice (nil when the
+// match carries no UID, e.g. test paths).
+func ruleUIDsOf(u webhook.MatchedUser) []int64 {
+	if u.RuleUID == 0 {
+		return nil
+	}
+	return []int64{u.RuleUID}
 }

@@ -21,6 +21,10 @@ type BlockScope struct {
 	IterableFields []string   `json:"iterableFields,omitempty"`
 }
 
+// commonFields resolve for every alert type: location + reverse geocoding,
+// matched areas, icons/static map, and the render-time computed fields.
+// Groups that only some alert types produce live in mapLinkFields,
+// tthFields and sunFields and are composed per type in fieldsByType.
 var commonFields = []FieldDef{
 	// Location
 	{Name: "latitude", Type: "number", Description: "Alert location latitude", Category: "location", Preferred: true},
@@ -38,18 +42,22 @@ var commonFields = []FieldDef{
 	{Name: "flag", Type: "string", Description: "Country flag emoji", Category: "location"},
 	{Name: "intersection", Type: "string", Description: "Nearest street intersection (\"Street1 & Street2\") from GeoNames; empty when disabled or none nearby", Category: "location"},
 	{Name: "areas", Type: "string", Description: "Comma-separated matched areas", Category: "location"},
-	{Name: "areasList", Type: "array", Description: "Matched areas as array", Category: "location"},
-	{Name: "distance", Type: "number", Description: "Distance from user location", Category: "location"},
-	{Name: "bearing", Type: "int", Description: "Bearing degrees from user", Category: "location"},
-	{Name: "bearingEmoji", Type: "string", Description: "Directional arrow emoji", Category: "location"},
+	{Name: "matched", Type: "array", Description: "Matched area names, lowercased (for {{#each matched}}{{map 'arealist' this}}{{/each}})", Category: "location"},
 	{Name: "userDistanceTrack", Type: "bool", Description: "True when the matched rule was distance-based (e.g. d:500) vs area-based", Category: "location"},
-	{Name: "userTrackDistance", Type: "int", Description: "The matched rule's distance threshold in metres (0 = area-based rule)", Category: "location"},
-	// Maps
+	// Icons / static map
 	{Name: "staticMap", Type: "string", Description: "Static map image URL", Category: "maps", Preferred: true},
 	{Name: "staticmap", Type: "string", Description: "Deprecated alias for staticMap", Category: "maps", Deprecated: true, PreferredAlternative: "staticMap"},
 	{Name: "imgUrl", Type: "string", Description: "Primary icon URL", Category: "maps", Preferred: true},
 	{Name: "imgUrlAlt", Type: "string", Description: "Alternative icon URL", Category: "maps"},
 	{Name: "stickerUrl", Type: "string", Description: "Sticker icon URL", Category: "maps"},
+	// Time
+	{Name: "now", Type: "string", Description: "Current date/time (RFC3339, UTC)", Category: "time"},
+	{Name: "nowISO", Type: "string", Description: "Current date/time (ISO 8601 with milliseconds, UTC)", Category: "time"},
+}
+
+// mapLinkFields are the map deep links. Every alert type except weatherchange
+// (a weather cell has no single entity to link to).
+var mapLinkFields = []FieldDef{
 	{Name: "googleMapUrl", Type: "string", Description: "Google Maps link", Category: "maps", Preferred: true},
 	{Name: "appleMapUrl", Type: "string", Description: "Apple Maps link", Category: "maps", Preferred: true},
 	{Name: "wazeMapUrl", Type: "string", Description: "Waze link", Category: "maps"},
@@ -59,18 +67,41 @@ var commonFields = []FieldDef{
 	{Name: "rocketMadUrl", Type: "string", Description: "RocketMad link", Category: "maps"},
 	{Name: "mapurl", Type: "string", Description: "Deprecated alias for googleMapUrl", Category: "maps", Deprecated: true, PreferredAlternative: "googleMapUrl"},
 	{Name: "applemap", Type: "string", Description: "Deprecated alias for appleMapUrl", Category: "maps", Deprecated: true, PreferredAlternative: "appleMapUrl"},
-	// Time
+}
+
+// tthFields are the time-remaining components. Every alert type except
+// weatherchange (see weatherTth) and fort-update (no expiry).
+var tthFields = []FieldDef{
 	{Name: "tthd", Type: "int", Description: "Days remaining", Category: "time"},
 	{Name: "tthh", Type: "int", Description: "Hours remaining", Category: "time", Preferred: true},
 	{Name: "tthm", Type: "int", Description: "Minutes remaining", Category: "time", Preferred: true},
 	{Name: "tths", Type: "int", Description: "Seconds remaining", Category: "time", Preferred: true},
-	{Name: "now", Type: "string", Description: "Current date/time", Category: "time"},
-	{Name: "nowPokemon", Type: "string", Description: "Current date/time (pokemon format)", Category: "time"},
-	{Name: "sunsetTime", Type: "string", Description: "Sunset time", Category: "time"},
-	{Name: "sunriseTime", Type: "string", Description: "Sunrise time", Category: "time"},
-	{Name: "isNight", Type: "bool", Description: "Is nighttime", Category: "time"},
-	{Name: "isDusk", Type: "bool", Description: "Is dusk", Category: "time"},
-	{Name: "isDawn", Type: "bool", Description: "Is dawn", Category: "time"},
+}
+
+// sunFields are the time-of-day flags at the alert location. Every alert type
+// except quest and nest.
+var sunFields = []FieldDef{
+	{Name: "nightTime", Type: "bool", Description: "It is night at the alert location", Category: "time"},
+	{Name: "dawnTime", Type: "bool", Description: "It is dawn at the alert location", Category: "time"},
+	{Name: "duskTime", Type: "bool", Description: "It is dusk at the alert location", Category: "time"},
+}
+
+// alertFields composes the common groups for a regular alert type.
+func alertFields(mapLinks, tth, sun bool, typeFields ...[]FieldDef) []FieldDef {
+	out := append([]FieldDef{}, commonFields...)
+	if mapLinks {
+		out = append(out, mapLinkFields...)
+	}
+	if tth {
+		out = append(out, tthFields...)
+	}
+	if sun {
+		out = append(out, sunFields...)
+	}
+	for _, f := range typeFields {
+		out = append(out, f...)
+	}
+	return out
 }
 
 var monsterFields = []FieldDef{
@@ -85,6 +116,11 @@ var monsterFields = []FieldDef{
 	{Name: "nameEng", Type: "string", Description: "English pokemon name", Category: "identity"},
 	{Name: "fullNameEng", Type: "string", Description: "English name + form", Category: "identity"},
 	{Name: "formNameEng", Type: "string", Description: "English form name", Category: "identity"},
+	// Per-user location (pokemon alerts only — other types have no per-user layer)
+	{Name: "distance", Type: "int", Description: "Distance from the user's location to the pokemon, in metres", Category: "location"},
+	{Name: "bearing", Type: "int", Description: "Bearing from the user's location, in degrees", Category: "location"},
+	{Name: "bearingEmoji", Type: "string", Description: "Directional arrow emoji for bearing", Category: "location"},
+	{Name: "userTrackDistance", Type: "int", Description: "The matched rule's distance threshold in metres (0 = area-based rule); largest across matching rules", Category: "location"},
 	// Stats
 	{Name: "iv", Type: "number", Description: "IV percentage (0-100)", Category: "stats", Preferred: true},
 	{Name: "atk", Type: "int", Description: "Attack IV (0-15)", Category: "stats", Preferred: true},
@@ -122,8 +158,8 @@ var monsterFields = []FieldDef{
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names (e.g. \"Fire, Flying\")", Category: "types", Preferred: true},
 	{Name: "typeNameEng", Type: "array", Description: "Array of English type names", Category: "types"},
 	{Name: "typeEmojiKeys", Type: "array", Description: "Array of type emoji keys (raw)", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Array of resolved type emoji strings", Category: "types", Preferred: true},
-	{Name: "emoji", Type: "array", Description: "Alias for typeEmoji (resolved)", Category: "types"},
+	{Name: "typeEmoji", Type: "string", Description: "Resolved type emoji, concatenated", Category: "types", Preferred: true},
+	{Name: "emoji", Type: "array", Description: "Resolved type emoji as an array (iterate with {{#each emoji}})", Category: "types"},
 	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types", Preferred: true},
 	// Weather
 	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather", Preferred: true},
@@ -160,7 +196,7 @@ var monsterFields = []FieldDef{
 	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
 	{Name: "megaEvolutions", Type: "array", Description: "Mega evolution entries", Category: "other"},
 	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
-	{Name: "hasMegaEvolutions", Type: "bool", Description: "Has mega evolutions", Category: "other"},
+	{Name: "hasMegaEvolutions", Type: "bool", Description: "A mega evolution exists anywhere in the evolution chain (e.g. Electrike → Mega Manectric)", Category: "other"},
 	{Name: "pokestopName", Type: "string", Description: "Nearby pokestop name", Category: "other"},
 }
 
@@ -174,6 +210,7 @@ var raidFields = []FieldDef{
 	{Name: "nameEng", Type: "string", Description: "English pokemon name", Category: "identity"},
 	{Name: "fullNameEng", Type: "string", Description: "English name + form + costume", Category: "identity"},
 	{Name: "pokemonId", Type: "int", Description: "Pokemon ID", Category: "identity"},
+	{Name: "formId", Type: "int", Description: "Form ID", Category: "identity"},
 	{Name: "level", Type: "int", Description: "Raid level", Category: "identity", Preferred: true},
 	{Name: "levelName", Type: "string", Description: "Raid level name", Category: "identity", Preferred: true},
 	// Gym
@@ -186,9 +223,7 @@ var raidFields = []FieldDef{
 	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym", Preferred: true},
 	{Name: "campfireUrl", Type: "string", Description: "Niantic Campfire deep link for this gym", Category: "maps"},
 	// Stats
-	{Name: "cp", Type: "int", Description: "Boss CP (20/25)", Category: "stats"},
-	{Name: "cp20", Type: "int", Description: "Boss CP at level 20", Category: "stats"},
-	{Name: "cp25", Type: "int", Description: "Boss CP at level 25", Category: "stats"},
+	{Name: "cp", Type: "int", Description: "Boss CP (webhook)", Category: "stats", RawWebhook: true},
 	// Moves
 	{Name: "quickMoveName", Type: "string", Description: "Translated fast move", Category: "moves", Preferred: true},
 	{Name: "chargeMoveName", Type: "string", Description: "Translated charged move", Category: "moves", Preferred: true},
@@ -202,18 +237,22 @@ var raidFields = []FieldDef{
 	// Types
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
 	{Name: "typeNameEng", Type: "array", Description: "English type names", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Resolved type emoji strings", Category: "types"},
-	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
+	{Name: "typeEmoji", Type: "string", Description: "Resolved type emoji, concatenated", Category: "types"},
+	{Name: "emoji", Type: "array", Description: "Resolved type emoji as an array", Category: "types"},
+	{Name: "color", Type: "string", Description: "Gym team color hex (deprecated alias for gymColor — not the boss type color)", Category: "gym"},
 	// Weather
 	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather"},
 	{Name: "boostWeatherName", Type: "string", Description: "Translated boost weather", Category: "weather"},
 	{Name: "boostingWeathersEmoji", Type: "string", Description: "Concatenated emoji string for every weather that boosts the raid boss's types", Category: "weather"},
+	{Name: "weatherChange", Type: "string", Description: "Weather forecast text — set only when the next-hour forecast may change the boss's boost before the raid ends", Category: "weather"},
+	{Name: "weatherCurrentName", Type: "string", Description: "Current weather name (with weatherChange)", Category: "weather"},
+	{Name: "weatherNextName", Type: "string", Description: "Next hour weather name (with weatherChange)", Category: "weather"},
 	// Other
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
 	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
 	{Name: "megaEvolutions", Type: "array", Description: "Mega evolution entries", Category: "other"},
 	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
-	{Name: "hasMegaEvolutions", Type: "bool", Description: "Has mega evolutions", Category: "other"},
+	{Name: "hasMegaEvolutions", Type: "bool", Description: "A mega evolution exists anywhere in the evolution chain (e.g. Electrike → Mega Manectric)", Category: "other"},
 	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
 	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \").", Category: "other"},
 	{Name: "rsvps", Type: "array", Description: "RSVP timeslot entries", Category: "other"},
@@ -242,17 +281,14 @@ var questFields = []FieldDef{
 	{Name: "rewardString", Type: "string", Description: "Reward description", Category: "quest", Preferred: true},
 	{Name: "dustAmount", Type: "int", Description: "Stardust amount", Category: "quest"},
 	{Name: "pokecoinAmount", Type: "int", Description: "Pokecoin amount", Category: "quest"},
-	{Name: "itemAmount", Type: "int", Description: "Item amount", Category: "quest"},
-	{Name: "itemName", Type: "string", Description: "Item name", Category: "quest"},
-	{Name: "monsterName", Type: "string", Description: "Reward pokemon name", Category: "quest"},
-	{Name: "monsterFullName", Type: "string", Description: "Reward pokemon full name", Category: "quest"},
-	{Name: "energyAmount", Type: "int", Description: "Mega energy amount", Category: "quest"},
-	{Name: "energyMonsterName", Type: "string", Description: "Mega energy pokemon name", Category: "quest"},
-	{Name: "candyAmount", Type: "int", Description: "Candy amount", Category: "quest"},
-	{Name: "candyMonsterName", Type: "string", Description: "Candy pokemon name", Category: "quest"},
-	{Name: "xlCandyAmount", Type: "int", Description: "XL candy amount", Category: "quest"},
-	{Name: "xlCandyMonsterName", Type: "string", Description: "XL candy pokemon name", Category: "quest"},
-	{Name: "shiny", Type: "bool", Description: "Reward is shiny", Category: "quest"},
+	{Name: "itemAmount", Type: "int", Description: "Item amount (first item reward)", Category: "quest"},
+	{Name: "itemNames", Type: "string", Description: "Comma-joined translated item rewards, with amount when > 1 (e.g. \"3 Razz Berry\")", Category: "quest"},
+	{Name: "monsterNames", Type: "string", Description: "Comma-joined translated reward pokemon full names (name + form)", Category: "quest"},
+	{Name: "energyAmount", Type: "int", Description: "Mega energy amount (first energy reward)", Category: "quest"},
+	{Name: "energyMonstersNames", Type: "string", Description: "Comma-joined mega energy rewards (e.g. \"50 Charizard Mega Energy\")", Category: "quest"},
+	{Name: "candyAmount", Type: "int", Description: "Candy amount (first candy reward)", Category: "quest"},
+	{Name: "candyMonstersNames", Type: "string", Description: "Comma-joined candy rewards (e.g. \"3 Lapras Candy\")", Category: "quest"},
+	{Name: "isShiny", Type: "bool", Description: "Reward pokemon is shiny", Category: "quest"},
 	{Name: "conditionString", Type: "string", Description: "Quest completion conditions, joined (e.g. 'Excellent Throw, Curve Ball')", Category: "quest"},
 	{Name: "conditionStringEng", Type: "string", Description: "English copy of conditionString", Category: "quest"},
 	{Name: "conditionList", Type: "array", Description: "Quest conditions as objects with type/name/formatted", Category: "quest"},
@@ -270,8 +306,8 @@ var invasionFields = []FieldDef{
 	{Name: "displayTypeId", Type: "int", Description: "Display type ID", Category: "invasion"},
 	{Name: "genderName", Type: "string", Description: "Grunt gender name", Category: "invasion"},
 	{Name: "genderEmoji", Type: "string", Description: "Grunt gender emoji", Category: "invasion"},
-	{Name: "gruntRewardsList", Type: "object", Description: "Reward pokemon lists", Category: "invasion"},
-	{Name: "gruntLineupList", Type: "array", Description: "Confirmed lineup pokemon", Category: "invasion"},
+	{Name: "gruntRewardsList", Type: "object", Description: "Reward pokemon by slot: {first: {chance, monsters}, second: {chance, monsters}}", Category: "invasion"},
+	{Name: "gruntLineupList", Type: "object", Description: "Confirmed lineup (only when the webhook carries one): {confirmed, monsters: [{id, formId, name, formName, fullName}]}", Category: "invasion"},
 	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
 	{Name: "expirationTimestamp", Type: "int", Description: "Unix expiry timestamp (for Discord <t:N:R>)", Category: "time"},
 }
@@ -316,7 +352,7 @@ var showcaseFields = []FieldDef{
 	{Name: "showcaseFocusType", Type: "string", Description: "Raw focus class: pokemon, type, alignment, class, family, buddy, generation, hatched, mega, shiny.", Category: "showcase"},
 	{Name: "showcaseFocusCategory", Type: "string", Description: "Translated focus category label (e.g. \"Type\", \"Buddy\").", Category: "showcase", Preferred: true},
 	{Name: "showcaseFocusName", Type: "string", Description: "Translated featured value (e.g. \"Steel\" for a type focus, \"3+\" for a buddy focus). Empty for flag focuses (hatched/shiny/mega).", Category: "showcase", Preferred: true},
-	{Name: "showcaseFocusEmoji", Type: "string", Description: "Optional emoji key for the focus category (from util.json showcaseFocus).", Category: "showcase"},
+	{Name: "showcaseFocusEmoji", Type: "string", Description: "Emoji for the focus category (emoji key showcase-focus-<type>, overridable in emoji.json).", Category: "showcase"},
 }
 
 var incidentSnippets = []Snippet{
@@ -354,12 +390,14 @@ var nestFields = []FieldDef{
 	{Name: "nameEng", Type: "string", Description: "English pokemon name", Category: "identity"},
 	{Name: "nest_name", Type: "string", Description: "Nest name", Category: "location", Preferred: true},
 	{Name: "pokemonId", Type: "int", Description: "Pokemon ID", Category: "identity"},
+	{Name: "formId", Type: "int", Description: "Form ID", Category: "identity"},
 	{Name: "pokemonCount", Type: "int", Description: "Pokemon count", Category: "stats"},
 	{Name: "pokemonSpawnAvg", Type: "number", Description: "Avg spawns per hour", Category: "stats"},
-	{Name: "pokemonRatio", Type: "number", Description: "Pokemon spawn ratio", Category: "stats"},
+	{Name: "pokemon_ratio", Type: "number", Description: "Pokemon spawn ratio (webhook)", Category: "stats", RawWebhook: true},
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Resolved type emoji strings", Category: "types"},
+	{Name: "typeEmoji", Type: "string", Description: "Resolved type emoji, concatenated", Category: "types"},
+	{Name: "emoji", Type: "array", Description: "Resolved type emoji as an array", Category: "types"},
 	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
 }
 
@@ -370,24 +408,30 @@ var gymFields = []FieldDef{
 	{Name: "teamEmoji", Type: "string", Description: "Team emoji", Category: "gym"},
 	{Name: "gymColor", Type: "string", Description: "Team color hex", Category: "gym"},
 	{Name: "oldTeamName", Type: "string", Description: "Previous team name", Category: "gym"},
-	{Name: "oldTeamEmoji", Type: "string", Description: "Previous team emoji", Category: "gym"},
+	{Name: "oldTeamEmoji", Type: "string", Description: "Old team emoji (old_team_id)", Category: "gym"},
+	{Name: "previousControlTeamEmoji", Type: "string", Description: "Previous controlling team's emoji (last non-zero team seen on this gym)", Category: "gym"},
 	{Name: "slotsAvailable", Type: "int", Description: "Available gym slots", Category: "gym"},
 	{Name: "oldSlotsAvailable", Type: "int", Description: "Previous slot count", Category: "gym"},
 	{Name: "inBattle", Type: "bool", Description: "Is gym in battle", Category: "gym"},
 	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym"},
-	{Name: "previousControlName", Type: "string", Description: "Previous owner name", Category: "gym"},
+	{Name: "previousControlName", Type: "string", Description: "Previous controlling team name (translated)", Category: "gym"},
 }
 
 var fortUpdateFields = []FieldDef{
 	{Name: "name", Type: "string", Description: "Fort name", Category: "identity", Preferred: true},
 	{Name: "id", Type: "string", Description: "Fort ID", Category: "identity"},
 	{Name: "fortType", Type: "string", Description: "pokestop or gym", Category: "identity", Preferred: true},
-	{Name: "changeType", Type: "string", Description: "new, edit, or removal", Category: "change", Preferred: true},
-	{Name: "changeTypeText", Type: "string", Description: "Translated change type", Category: "change"},
-	{Name: "editTypesList", Type: "array", Description: "Types of edits made", Category: "change"},
+	{Name: "fortTypeText", Type: "string", Description: "\"Pokestop\" or \"Gym\"", Category: "identity"},
+	{Name: "isNew", Type: "bool", Description: "A new fort (also set for an edit of a fort with no previous name/description)", Category: "change", Preferred: true},
+	{Name: "isEdit", Type: "bool", Description: "An edit to an existing fort", Category: "change", Preferred: true},
+	{Name: "isRemoval", Type: "bool", Description: "A removed fort", Category: "change", Preferred: true},
+	{Name: "changeTypeText", Type: "string", Description: "\"New\", \"Edit\" or \"Removal\" (English, not translated)", Category: "change"},
+	{Name: "change_type", Type: "string", Description: "new, edit, or removal (webhook)", Category: "change", RawWebhook: true},
+	{Name: "edit_types", Type: "array", Description: "Edited properties, e.g. [\"name\", \"location\", \"image_url\"] (webhook)", Category: "change", RawWebhook: true},
 	{Name: "isEditName", Type: "bool", Description: "Name was changed", Category: "change"},
+	{Name: "isEditDescription", Type: "bool", Description: "Description was changed", Category: "change"},
 	{Name: "isEditLocation", Type: "bool", Description: "Location was changed", Category: "change"},
-	{Name: "isEditImage", Type: "bool", Description: "Image was changed", Category: "change"},
+	{Name: "isEditImageUrl", Type: "bool", Description: "Image was changed", Category: "change"},
 	{Name: "newName", Type: "string", Description: "New fort name", Category: "change"},
 	{Name: "oldName", Type: "string", Description: "Previous fort name", Category: "change"},
 	{Name: "newDescription", Type: "string", Description: "New fort description", Category: "change"},
@@ -403,8 +447,10 @@ var maxbattleFields = []FieldDef{
 	{Name: "megaName", Type: "string", Description: "Full display name incl. form + costume (equals fullName)", Category: "identity", Preferred: true},
 	{Name: "costumeName", Type: "string", Description: "Translated costume name (empty when none); fullName/megaName already include it parenthesised", Category: "identity"},
 	{Name: "pokemonId", Type: "int", Description: "Pokemon ID", Category: "identity"},
+	{Name: "id", Type: "int", Description: "Pokemon ID (same as pokemonId; for the station use stationId)", Category: "identity"},
 	{Name: "level", Type: "int", Description: "Battle level", Category: "identity", Preferred: true},
-	{Name: "pokestopName", Type: "string", Description: "Location name", Category: "location", Preferred: true},
+	{Name: "stationName", Type: "string", Description: "Station name", Category: "location", Preferred: true},
+	{Name: "stationId", Type: "string", Description: "Station ID", Category: "location"},
 	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
 	{Name: "endTimestamp", Type: "int", Description: "Unix end timestamp (for Discord <t:N:R>)", Category: "time"},
 	{Name: "quickMoveName", Type: "string", Description: "Translated fast move", Category: "moves"},
@@ -412,27 +458,35 @@ var maxbattleFields = []FieldDef{
 	{Name: "quickMoveEmoji", Type: "string", Description: "Fast move type emoji", Category: "moves"},
 	{Name: "chargeMoveEmoji", Type: "string", Description: "Charged move type emoji", Category: "moves"},
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Resolved type emoji strings", Category: "types"},
-	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
-	{Name: "gmax", Type: "bool", Description: "Is Gigantamax", Category: "other"},
-	{Name: "totalStationedPokemon", Type: "int", Description: "Total stationed pokemon", Category: "other"},
-	{Name: "totalStationedGmax", Type: "int", Description: "Total stationed Gmax", Category: "other"},
+	{Name: "typeEmoji", Type: "string", Description: "Resolved type emoji, concatenated", Category: "types"},
+	{Name: "emoji", Type: "array", Description: "Resolved type emoji as an array", Category: "types"},
+	{Name: "color", Type: "string", Description: "Max battle embed color hex (always D000C0)", Category: "other"},
+	{Name: "gmax", Type: "int", Description: "1 when Gigantamax, else 0 — test with {{#if gmax}}", Category: "other"},
+	{Name: "total_stationed_pokemon", Type: "int", Description: "Total stationed pokemon", Category: "other"},
+	{Name: "total_stationed_gmax", Type: "int", Description: "Total stationed Gmax", Category: "other"},
 }
 
 var weatherChangeFields = []FieldDef{
 	{Name: "weatherName", Type: "string", Description: "New weather name", Category: "weather", Preferred: true},
 	{Name: "oldWeatherName", Type: "string", Description: "Previous weather name", Category: "weather", Preferred: true},
+	{Name: "weatherEmoji", Type: "string", Description: "New weather emoji", Category: "weather", Preferred: true},
+	{Name: "oldWeatherEmoji", Type: "string", Description: "Previous weather emoji", Category: "weather"},
 	{Name: "weatherEmojiKey", Type: "string", Description: "New weather emoji key", Category: "weather"},
 	{Name: "oldWeatherEmojiKey", Type: "string", Description: "Previous weather emoji key", Category: "weather"},
-	{Name: "weatherTthh", Type: "int", Description: "Hours until weather change", Category: "time"},
-	{Name: "weatherTthm", Type: "int", Description: "Minutes until weather change", Category: "time"},
-	{Name: "weatherTths", Type: "int", Description: "Seconds until weather change", Category: "time"},
-	{Name: "enrichedActivePokemons", Type: "array", Description: "Active pokemon affected by weather change", Category: "pokemon"},
+	{Name: "gameplay_condition", Type: "int", Description: "New weather ID (webhook)", Category: "weather", RawWebhook: true},
+	{Name: "old_gameplay_condition", Type: "int", Description: "Previous weather ID (webhook)", Category: "weather", RawWebhook: true},
+	{Name: "s2_cell_id", Type: "string", Description: "S2 weather cell ID (webhook)", Category: "weather", RawWebhook: true},
+	{Name: "source", Type: "string", Description: "How the change was detected: \"webhook\" or \"fromMonster\" (webhook)", Category: "weather", RawWebhook: true},
+	{Name: "weatherTth", Type: "object", Description: "Time until the next hourly weather update: {days, hours, minutes, seconds} — e.g. {{weatherTth.minutes}}", Category: "time"},
+	{Name: "activePokemons", Type: "array", Description: "The user's tracked pokemon affected by the change (requires [weather] show_altered_pokemon): {pokemon_id, form, iv, cp, latitude, longitude, disappearTime (unix), name, nameEng, formName, formNormalised, fullName, fullNameEng, imgUrl}", Category: "pokemon", Preferred: true},
+	{Name: "enrichedActivePokemons", Type: "array", Description: "Alias of activePokemons", Category: "pokemon"},
 }
 
+// greetingFields is the whole greeting view: the registration/greeting
+// renderers (bot/commands/poracle.go, discordbot + telegrambot
+// reconciliation) pass only {prefix} — no alert fields.
 var greetingFields = []FieldDef{
-	{Name: "pokemonId", Type: "int", Description: "Random pokemon ID", Category: "identity"},
-	{Name: "pokemonName", Type: "string", Description: "Translated random pokemon name", Category: "identity"},
+	{Name: "prefix", Type: "string", Description: "Command prefix for the platform (e.g. \"!\" on Discord, \"/\" on Telegram)", Category: "other", Preferred: true},
 }
 
 var pvpEntryFields = []FieldDef{
@@ -444,6 +498,8 @@ var pvpEntryFields = []FieldDef{
 	{Name: "capped", Type: "bool", Description: "True when this rank is at the level cap"},
 	{Name: "percentage", Type: "string", Description: "Stat product percentage (formatted)"},
 	{Name: "pokemon", Type: "int", Description: "Pokemon ID for this rank"},
+	{Name: "pokemonId", Type: "int", Description: "Pokemon ID for this rank (same as pokemon)"},
+	{Name: "matchesUserTrack", Type: "bool", Description: "True when this rank satisfies one of the user's PVP tracking rules"},
 	{Name: "form", Type: "int", Description: "Form ID for this rank"},
 	{Name: "evolution", Type: "int", Description: "Evolution form ID (mega etc.)"},
 	{Name: "name", Type: "string", Description: "Translated pokemon name"},
@@ -473,15 +529,25 @@ var evolutionEntryFields = []FieldDef{
 	{Name: "fullName", Type: "string", Description: "Translated name + form"},
 	{Name: "formName", Type: "string", Description: "Translated form name"},
 	{Name: "formNormalised", Type: "string", Description: "Form name (empty for Normal)"},
+	{Name: "nameEng", Type: "string", Description: "English pokemon name"},
+	{Name: "fullNameEng", Type: "string", Description: "English name + form"},
+	{Name: "formNameEng", Type: "string", Description: "English form name"},
+	{Name: "formNormalisedEng", Type: "string", Description: "English form name (empty for Normal)"},
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names"},
+	{Name: "typeEmoji", Type: "string", Description: "Joined type emoji string for the platform"},
+	{Name: "emoji", Type: "array", Description: "Type emoji strings for the platform"},
 	{Name: "typeEmojiKeys", Type: "array", Description: "Array of type emoji keys"},
 	{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}"},
+	{Name: "evolutionRequirement", Type: "string", Description: "Translated evolution requirement (e.g. \"50 candies\")"},
 }
 
 var megaEvolutionEntryFields = []FieldDef{
 	{Name: "evolution", Type: "int", Description: "Temp evolution ID"},
 	{Name: "fullName", Type: "string", Description: "Translated mega name"},
+	{Name: "fullNameEng", Type: "string", Description: "English mega name"},
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names"},
+	{Name: "typeEmoji", Type: "string", Description: "Joined type emoji string for the platform"},
+	{Name: "emoji", Type: "array", Description: "Type emoji strings for the platform"},
 	{Name: "typeEmojiKeys", Type: "array", Description: "Array of type emoji keys"},
 	{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}"},
 }
@@ -527,8 +593,8 @@ var monsterBlockScopes = []BlockScope{
 	},
 	{
 		Helper:         "each",
-		Args:           []string{"typeEmoji"},
-		IterableFields: []string{"typeEmoji", "typeNameEng", "emoji"},
+		Args:           []string{"emoji"},
+		IterableFields: []string{"emoji", "typeNameEng"},
 		Description:    "Iterate over a type emoji / English type name array (each item is a string)",
 	},
 	{
@@ -592,8 +658,8 @@ var raidBlockScopes = []BlockScope{
 	},
 	{
 		Helper:         "each",
-		Args:           []string{"typeEmoji"},
-		IterableFields: []string{"typeEmoji", "typeNameEng"},
+		Args:           []string{"emoji"},
+		IterableFields: []string{"emoji", "typeNameEng"},
 		Description:    "Iterate over a type emoji / English type name array",
 	},
 }
@@ -638,6 +704,15 @@ var commonSnippets = []Snippet{
 	{Label: "contains", Insert: "{{#contains fieldName 'text'}}...{{/contains}}", Description: "Check if string contains text", Category: "string"},
 	{Label: "replace", Insert: "{{replace fieldName 'old' 'new'}}", Description: "Replace all occurrences", Category: "string"},
 	{Label: "concat", Insert: "{{concat a b c}}", Description: "Concatenate strings", Category: "string"},
+	{Label: "capitalizeAll", Insert: "{{capitalizeAll fieldName}}", Description: "Capitalise the first letter of every word", Category: "string"},
+	{Label: "ellipsis", Insert: "{{ellipsis fieldName 20}}", Description: "First N characters, plus … when longer", Category: "string"},
+	{Label: "remove", Insert: "{{remove fieldName 'text'}}", Description: "Remove all occurrences of text", Category: "string"},
+	{Label: "startsWith", Insert: "{{#startsWith 'prefix' fieldName}}...{{else}}...{{/startsWith}}", Description: "Case-sensitive prefix test (also usable as a subexpression)", Category: "string"},
+	// Custom maps (config/customMaps/)
+	{Label: "map", Insert: "{{map 'mapName' fieldName}}", Description: "Custom map lookup; prints nothing when the key is missing", Category: "customMap"},
+	{Label: "map (object value)", Insert: "{{#map 'mapName' fieldName}}{{property}}{{else}}...{{/map}}", Description: "Custom map lookup with an object value as the block context; else runs when the key is missing", Category: "customMap"},
+	{Label: "map2 (fallback key)", Insert: "{{map2 'mapName' (concat pokemonId '_' formId) pokemonId}}", Description: "Custom map lookup trying a second key when the first is missing", Category: "customMap"},
+	{Label: "if map has key", Insert: "{{#if (map 'mapName' fieldName)}}...{{/if}}", Description: "Test whether a custom map has the key", Category: "customMap"},
 	// Iteration
 	{Label: "each", Insert: "{{#each arrayField}}{{this}}{{/each}}", Description: "Iterate over an array", Category: "iteration"},
 	{Label: "each with index", Insert: "{{#each arrayField}}{{@index}}: {{this}}{{/each}}", Description: "Iterate with index", Category: "iteration"},
@@ -720,7 +795,9 @@ type fieldEntry struct {
 // {{original.X}}. The same field shapes apply (minus PVP rankings, which
 // are stripped from stored prior bytes).
 var monsterChangedExtraFields = []FieldDef{
-	{Name: "original", Type: "object", Description: "Prior-sighting view: every monster field above is also accessible as original.X (e.g. original.fullName, original.cp, original.iv, original.weatherName, original.mapurl). PVP rankings are NOT included.", Category: "identity", Preferred: true},
+	{Name: "original", Type: "object", Description: "Prior-sighting view: the prior sighting's enrichment as original.X (e.g. original.fullName, original.cp, original.iv, original.boostWeatherName, original.googleMapUrl). Only enrichment fields — no aliases (use googleMapUrl, not mapurl), resolved emoji, computed fields, staticMap or PVP rankings.", Category: "identity", Preferred: true},
+	{Name: "changeType", Type: "string", Description: "Kind of change: \"species\" (species/form/gender) or \"stats\" (weather boost / IV re-report)", Category: "identity"},
+	{Name: "changeTypeText", Type: "string", Description: "Translated label for changeType", Category: "identity"},
 }
 
 // questSummaryFields are the shared (group-scoped) fields available
@@ -756,23 +833,29 @@ var questSummaryBlockScopes = []BlockScope{
 	},
 }
 
+// fieldsByType is the per-template-type catalogue served to the DTS editor.
+// Every field must be produced for its type by enrichment, an alias, the
+// computed/emoji layers or the raw webhook — TestFieldCatalogue_FieldsAreProduced
+// guards against entries for fields nothing emits.
 var fieldsByType = map[string]fieldEntry{
-	"monster":        {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
-	"monsterNoIv":    {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
-	"monsterChanged": {Fields: append(append(commonFields, monsterFields...), monsterChangedExtraFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
-	"raid":           {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
-	"rsvpChanges":    {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
-	"egg":            {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
-	"quest":          {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
-	"questSummary":   {Fields: append(commonFields, questSummaryFields...), BlockScopes: questSummaryBlockScopes, Snippets: append(commonSnippets, questSnippets...)},
-	"invasion":       {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
-	"incident":       {Fields: append(append(commonFields, incidentFields...), incidentOnlyFields...), Snippets: append(commonSnippets, incidentSnippets...)},
-	"showcase":       {Fields: append(append(commonFields, incidentFields...), showcaseFields...), Snippets: append(append(commonSnippets, incidentSnippets...), showcaseSnippets...)},
-	"lure":           {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
-	"nest":           {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
-	"gym":            {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},
-	"fort-update":    {Fields: append(commonFields, fortUpdateFields...), Snippets: commonSnippets},
-	"maxbattle":      {Fields: append(commonFields, maxbattleFields...), Snippets: append(commonSnippets, maxbattleSnippets...)},
-	"weatherchange":  {Fields: append(commonFields, weatherChangeFields...), Snippets: commonSnippets},
-	"greeting":       {Fields: append(commonFields, greetingFields...), Snippets: commonSnippets},
+	"monster":        {Fields: alertFields(true, true, true, monsterFields), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"monsterNoIv":    {Fields: alertFields(true, true, true, monsterFields), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"monsterChanged": {Fields: alertFields(true, true, true, monsterFields, monsterChangedExtraFields), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"raid":           {Fields: alertFields(true, true, true, raidFields), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
+	"rsvpChanges":    {Fields: alertFields(true, true, true, raidFields), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
+	"egg":            {Fields: alertFields(true, true, true, eggFields), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
+	"quest":          {Fields: alertFields(true, true, false, questFields), Snippets: append(commonSnippets, questSnippets...)},
+	// questSummary's view is the group view built by dts.BuildQuestSummaryView
+	// — no location/geocoding/map-link fields at the top level.
+	"questSummary":  {Fields: questSummaryFields, BlockScopes: questSummaryBlockScopes, Snippets: append(commonSnippets, questSnippets...)},
+	"invasion":      {Fields: alertFields(true, true, true, invasionFields), Snippets: append(commonSnippets, invasionSnippets...)},
+	"incident":      {Fields: alertFields(true, true, true, incidentFields, incidentOnlyFields), Snippets: append(commonSnippets, incidentSnippets...)},
+	"showcase":      {Fields: alertFields(true, true, true, incidentFields, showcaseFields), Snippets: append(append(commonSnippets, incidentSnippets...), showcaseSnippets...)},
+	"lure":          {Fields: alertFields(true, true, true, lureFields), Snippets: append(commonSnippets, lureSnippets...)},
+	"nest":          {Fields: alertFields(true, true, false, nestFields), Snippets: commonSnippets},
+	"gym":           {Fields: alertFields(true, true, true, gymFields), Snippets: commonSnippets},
+	"fort-update":   {Fields: alertFields(true, false, true, fortUpdateFields), Snippets: commonSnippets},
+	"maxbattle":     {Fields: alertFields(true, true, true, maxbattleFields), Snippets: append(commonSnippets, maxbattleSnippets...)},
+	"weatherchange": {Fields: alertFields(false, false, true, weatherChangeFields), Snippets: commonSnippets},
+	"greeting":      {Fields: greetingFields, Snippets: commonSnippets},
 }

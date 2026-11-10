@@ -174,12 +174,17 @@ func (st *StatsTracker) RecordSighting(pokemonID int, ivScanned bool, isShiny bo
 }
 
 // GetRarityGroup returns the rarity group for a pokemon.
-// Returns RarityUnknown (-1) if not enough data has accumulated.
+// Returns RarityUnknown (-1) until enough data has accumulated to group
+// species at all; after that, a species with no sightings in the window
+// is RarityNever (6, "Unseen").
 func (st *StatsTracker) GetRarityGroup(pokemonID int) int {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
 	if g, ok := st.groups[pokemonID]; ok {
 		return g
+	}
+	if len(st.groups) > 0 {
+		return RarityNever
 	}
 	return RarityUnknown
 }

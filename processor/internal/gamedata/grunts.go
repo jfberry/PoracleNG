@@ -47,6 +47,23 @@ func (g *Grunt) TypeKey() string {
 	return fmt.Sprintf("poke_type_%d", g.TypeID)
 }
 
+// NormaliseGruntTypeName maps a grunt_type as it may arrive — from a bot arg or
+// an API body — onto the canonical form TypeNameFromTemplate produces.
+//
+// Two sources put spaces where the canonical name has underscores. The command
+// parser replaces underscores with spaces in every unquoted token, so
+// `!invasion npc_0` arrives as "npc 0"; and rows written before the canonical
+// set used underscores were stored in that same space form. Both denote
+// "npc_0", and neither matches anything until it is normalised: the matcher
+// compares the stored string against ResolveGruntTypeName, which returns the
+// underscore form.
+//
+// Callers must still check the result against the canonical set — this maps a
+// spelling, it does not vouch for the name.
+func NormaliseGruntTypeName(s string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), " ", "_")
+}
+
 // TypeNameFromTemplate extracts the grunt type name from the character template
 // string. Returns a lowercased name matching what the !invasion command stores
 // in the DB.

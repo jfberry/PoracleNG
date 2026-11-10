@@ -393,7 +393,7 @@ func (r *Renderer) renderForUsers(
 
 		var rendered string
 		if tmpl == nil {
-			rendered = fallbackMessage(templateType, platform, templateID, language)
+			rendered = fallbackMessage(fallbackNotFound, templateType, platform, templateID, language)
 		} else {
 			df := raymond.NewDataFrame()
 			df.Set("language", language)
@@ -409,7 +409,7 @@ func (r *Renderer) renderForUsers(
 					fmt.Sprintf("dts.render:%s:%s:%s:%s", templateType, platform, language, templateID),
 					fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` render error: %v — falling back to default message.", templateType, platform, language, templateID, err),
 				)
-				rendered = fallbackMessage(templateType, platform, templateID, language)
+				rendered = fallbackMessage(fallbackRenderError, templateType, platform, templateID, language)
 				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
 				rendered = result
@@ -428,7 +428,7 @@ func (r *Renderer) renderForUsers(
 				fmt.Sprintf("dts.invalid:%s:%s:%s:%s", templateType, platform, language, templateID),
 				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, platform, language, templateID),
 			)
-			rawMessage = fallbackMessageRaw(templateType, platform, templateID, language)
+			rawMessage = fallbackMessageRaw(fallbackInvalidJSON, templateType, platform, templateID, language)
 		} else if renderedMessageIsEmpty(rawMessage) {
 			log.Errorf("[%s] dts: template %s/%s/%s/%s rendered an empty message for user %s — falling back to default message (raw: %s)",
 				logReference, templateType, platform, language, templateID, user.ID, rendered)
@@ -607,7 +607,7 @@ func (r *Renderer) renderGrouped(
 
 		var rendered string
 		if tmpl == nil {
-			rendered = fallbackMessage(templateType, key.platform, key.templateID, key.language)
+			rendered = fallbackMessage(fallbackNotFound, templateType, key.platform, key.templateID, key.language)
 		} else {
 			df := raymond.NewDataFrame()
 			df.Set("language", key.language)
@@ -623,7 +623,7 @@ func (r *Renderer) renderGrouped(
 					fmt.Sprintf("dts.render:%s:%s:%s:%s", templateType, key.platform, key.language, key.templateID),
 					fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` render error: %v — falling back to default message.", templateType, key.platform, key.language, key.templateID, err),
 				)
-				rendered = fallbackMessage(templateType, key.platform, key.templateID, key.language)
+				rendered = fallbackMessage(fallbackRenderError, templateType, key.platform, key.templateID, key.language)
 				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
 				rendered = result
@@ -640,7 +640,7 @@ func (r *Renderer) renderGrouped(
 				fmt.Sprintf("dts.invalid:%s:%s:%s:%s", templateType, key.platform, key.language, key.templateID),
 				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, key.platform, key.language, key.templateID),
 			)
-			rawMessage = fallbackMessageRaw(templateType, key.platform, key.templateID, key.language)
+			rawMessage = fallbackMessageRaw(fallbackInvalidJSON, templateType, key.platform, key.templateID, key.language)
 		} else if renderedMessageIsEmpty(rawMessage) {
 			log.Errorf("[%s] dts: template %s/%s/%s/%s rendered an empty message for group (%s/%s/%s) — falling back to default message (raw: %s)",
 				logReference, templateType, key.platform, key.language, key.templateID, key.platform, key.templateID, key.language, rendered)
@@ -804,12 +804,31 @@ func mapOrEmpty(m map[string]map[string]any, key string) map[string]any {
 	return nil
 }
 
+// fallbackReason says why a user is getting a fallback message instead of
+// their rendered alert. The text is user-visible, so the operator can tell a
+// missing template from a broken one.
+type fallbackReason int
+
+const (
+	fallbackNotFound    fallbackReason = iota // no template matched the selection chain
+	fallbackRenderError                       // template found but failed to execute
+	fallbackInvalidJSON                       // template rendered, but the output is not valid JSON
+)
+
+func (f fallbackReason) text() string {
+	switch f {
+	case fallbackRenderError:
+		return "Template render error"
+	case fallbackInvalidJSON:
+		return "Template produced invalid JSON"
+	default:
+		return "Template not found"
+	}
+}
+
 // fallbackMessage returns a JSON string for a fallback error message.
-func fallbackMessage(templateType, platform, templateID, language string) string {
-	msg := fmt.Sprintf("Template not found: %s/%s/%s/%s", templateType, platform, templateID, language)
-	obj := map[string]string{"content": msg}
-	b, _ := json.Marshal(obj)
-	return string(b)
+func fallbackMessage(reason fallbackReason, templateType, platform, templateID, language string) string {
+	return string(fallbackMessageRaw(reason, templateType, platform, templateID, language))
 }
 
 // appendPingToRaw parses a JSON message, appends ping to "content", and re-serializes.
@@ -832,12 +851,24 @@ func appendPingToRaw(raw json.RawMessage, ping string) json.RawMessage {
 }
 
 // fallbackMessageRaw returns a json.RawMessage for a fallback error message.
-func fallbackMessageRaw(templateType, platform, templateID, language string) json.RawMessage {
+func fallbackMessageRaw(reason fallbackReason, templateType, platform, templateID, language string) json.RawMessage {
 	obj := map[string]string{
-		"content": fmt.Sprintf("Template not found: %s/%s/%s/%s", templateType, platform, templateID, language),
+		"content": fmt.Sprintf("%s: %s/%s/%s/%s", reason.text(), templateType, platform, templateID, language),
 	}
 	b, _ := json.Marshal(obj)
 	return b
+}
+
+// ExecTemplate renders a template outside the alert pipeline (help,
+// greetings) the way alerts are rendered: with the language and platform
+// data frame that language-aware helpers read, and with panic recovery so
+// a malformed operator template returns an error instead of crashing the
+// process.
+func ExecTemplate(tmpl *raymond.Template, view any, language, platform string) (string, error) {
+	df := raymond.NewDataFrame()
+	df.Set("language", language)
+	df.Set("platform", platform)
+	return safeExecWith(tmpl, view, df)
 }
 
 // renderedMessageIsEmpty reports whether a rendered (valid-JSON) message
@@ -871,6 +902,11 @@ func renderedMessageIsEmpty(raw json.RawMessage) bool {
 	}
 	if s, ok := m["photo"].(string); ok && s != "" {
 		return false
+	}
+	if p, ok := m["photo"].(map[string]any); ok {
+		if s, ok := p["url"].(string); ok && s != "" {
+			return false
+		}
 	}
 	if b, ok := m["location"].(bool); ok && b {
 		return false

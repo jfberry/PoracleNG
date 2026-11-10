@@ -174,3 +174,69 @@ func TestBuildTarget_NonAdminInUnregisteredChannelRejected(t *testing.T) {
 		t.Errorf("error should mention unregistered; got %q", err.Error())
 	}
 }
+
+// A `user` override must be followed by a numeric ID, as in PoracleJS
+// (`user:?(-?\d{1,20})`). Any token starting with "user" used to be taken
+// as an override, swallowing words like an area named "Userton" (#282).
+func TestBuildTarget_UserPrefixRequiresDigits(t *testing.T) {
+	ctx := newTargetCtx(t, true, true)
+	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
+		ID: "123456", Type: TypeDiscordUser, Name: "Bob", Enabled: true,
+	})
+
+	target, remaining, err := BuildTarget(ctx, []string{"userton", "usernames"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if target.ID != "user1" || strings.Join(remaining, " ") != "userton usernames" {
+		t.Errorf("target=%s remaining=%v, want sender and both words kept", target.ID, remaining)
+	}
+
+	for _, arg := range []string{"user:123456", "user123456"} {
+		target, remaining, err = BuildTarget(ctx, []string{arg, "pikachu"})
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", arg, err)
+		}
+		if target.ID != "123456" || strings.Join(remaining, " ") != "pikachu" {
+			t.Errorf("%s: target=%s remaining=%v, want 123456 / [pikachu]", arg, target.ID, remaining)
+		}
+	}
+}
+
+// A bare `name<X>` (no colon) is only a target override when X names an
+// existing named target; otherwise ordinary words such as "namco" or
+// "nameless" must stay in the args (#313). `name:X` always overrides.
+func TestBuildTarget_BareNamePrefixRequiresExistingTarget(t *testing.T) {
+	for _, admin := range []bool{true, false} {
+		ctx := newTargetCtx(t, true, admin)
+		ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
+			ID: "wh1", Type: TypeWebhook, Name: "foo", Enabled: true,
+		})
+		target, remaining, err := BuildTarget(ctx, []string{"namco", "nameless", "pikachu"})
+		if err != nil {
+			t.Fatalf("admin=%v: unexpected error: %v", admin, err)
+		}
+		if target.ID != "user1" || strings.Join(remaining, " ") != "namco nameless pikachu" {
+			t.Errorf("admin=%v: target=%s remaining=%v, want sender and all words kept", admin, target.ID, remaining)
+		}
+	}
+
+	ctx := newTargetCtx(t, true, true)
+	ctx.Humans.(*store.MockHumanStore).AddHuman(&store.Human{
+		ID: "wh1", Type: TypeWebhook, Name: "foo", Enabled: true,
+	})
+	for _, arg := range []string{"name:foo", "namefoo"} {
+		target, remaining, err := BuildTarget(ctx, []string{arg, "pikachu"})
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", arg, err)
+		}
+		if target.ID != "wh1" || strings.Join(remaining, " ") != "pikachu" {
+			t.Errorf("%s: target=%s remaining=%v, want wh1 / [pikachu]", arg, target.ID, remaining)
+		}
+	}
+
+	// name:X with an unknown X still errors (explicit override).
+	if _, _, err := BuildTarget(ctx, []string{"name:missing", "pikachu"}); err == nil {
+		t.Error("name:missing: expected webhook-not-found error")
+	}
+}

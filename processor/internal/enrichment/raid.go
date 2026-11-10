@@ -17,6 +17,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 	m["pokemon_id"] = raid.PokemonID
 	m["gym_id"] = raid.GymID
 	m["firstNotification"] = firstNotification
+	// Golbat sends ex_raid_eligible; is_ex_raid_eligible is the older
+	// spelling. Either one makes the gym EX-eligible, as in matching.
+	m["ex"] = bool(raid.ExRaidEligible) || bool(raid.IsExRaidEligible)
 
 	tz := geo.GetTimezone(raid.Latitude, raid.Longitude)
 
@@ -173,6 +176,14 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 				m["boostingWeatherIds"] = boostingWeathers
 				m["boostingWeatherEmojiKeys"] = gd.GetWeatherEmojiKeys(boostingWeathers)
 
+				// Weather change forecast: the boss is boosted now only if the
+				// cell's weather boosts one of its types.
+				boostWeather := 0
+				if cellWeather, _ := m["gameWeatherId"].(int); gd.IsBoostedByWeather(monster.Types, cellWeather) {
+					boostWeather = cellWeather
+				}
+				e.addWeatherChangeForecast(m, monster.Types, boostWeather, raid.End, raid.Latitude, raid.Longitude)
+
 				// Evolution chain
 				m["hasEvolutions"] = len(monster.Evolutions) > 0
 				m["hasMegaEvolutions"] = len(monster.TempEvolutions) > 0
@@ -305,6 +316,9 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		evolutions, megaEvolutions := e.buildEvolutions(gd, tr, raid.PokemonID, raid.Form)
 		m["evolutions"] = evolutions
 		m["megaEvolutions"] = megaEvolutions
+		// Chain-wide, as PoracleJS did: Electrike → Mega Manectric counts. Outranks
+		// the base-layer flag, which only reflects the species itself.
+		m["hasMegaEvolutions"] = len(megaEvolutions) > 0
 		m["prevEvolutions"] = e.buildPrevEvolutions(gd, tr, raid.PokemonID)
 	}
 

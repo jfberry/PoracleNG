@@ -189,8 +189,8 @@ func TestV2Snapshot_TypeKeysAndInvasionIncidentSplit(t *testing.T) {
 	if len(inv) != 1 || len(inc) != 1 {
 		t.Fatalf("expected 1 invasion + 1 incident, got %d + %d", len(inv), len(inc))
 	}
-	if tid, _ := inv[0]["type_id"].(float64); int(tid) != 11 {
-		t.Fatalf("invasion rule should carry type_id=11, got %v", inv[0])
+	if gt, _ := inv[0]["grunt_type"].(string); gt != "grass" {
+		t.Fatalf("invasion rule should carry grunt_type=grass, got %v", inv[0])
 	}
 	if _, ok := inv[0]["display_type"]; ok {
 		t.Fatalf("invasion rule must not carry display_type: %v", inv[0])
@@ -304,6 +304,45 @@ func TestV2Snapshot_AllProfilesSpansProfilesWithProfileNo(t *testing.T) {
 	}
 	if seen[1] != 149 || seen[2] != 150 {
 		t.Fatalf("all_profiles profile_no mapping wrong: %v", seen)
+	}
+}
+
+// all_profiles must not depend on profiles rows (#330). u3 has none: its rules
+// sit on its active profile 1 (a PoracleJS-migrated human) and on profile 5, a
+// deleted profile's leftovers. Both are the human's rules, as in v1.
+func TestV2Snapshot_AllProfilesIncludesProfilesWithoutRows(t *testing.T) {
+	r, deps, restore := newV2SnapshotTestAPI(t)
+	defer restore()
+
+	humans := deps.Humans.(*store.MockHumanStore)
+	humans.AddHuman(&store.Human{ID: "u3", Type: "discord:user", Name: "User3", Enabled: true, Language: "en", CurrentProfileNo: 1})
+	humans.RuleProfiles = map[string][]int{"u3": {5, 1}}
+	for _, row := range []db.MonsterTrackingAPI{
+		{ID: "u3", ProfileNo: 1, PokemonID: 149},
+		{ID: "u3", ProfileNo: 5, PokemonID: 150},
+	} {
+		if _, err := deps.Tracking.Monsters.Insert(&row); err != nil {
+			t.Fatalf("seed rule: %v", err)
+		}
+	}
+
+	body := *mustOK(t, r, http.MethodGet, "/api/v2/humans/u3/tracking?all_profiles=true", "")
+	seen := map[int]int{} // profile_no -> pokemon_id
+	for _, rule := range trackingRules(t, body, "pokemon") {
+		seen[int(rule["profile_no"].(float64))] = int(rule["pokemon_id"].(float64))
+	}
+	if len(seen) != 2 || seen[1] != 149 || seen[5] != 150 {
+		t.Fatalf("all_profiles must cover the row-less active profile and the leftover profile, got %v", seen)
+	}
+	if profiles, _ := body["profiles"].([]any); len(profiles) != 0 {
+		t.Fatalf("profiles lists profiles rows only, got %v", profiles)
+	}
+
+	// The active profile is read even when no rule store reports it.
+	humans.RuleProfiles = nil
+	body = *mustOK(t, r, http.MethodGet, "/api/v2/humans/u3/tracking?all_profiles=true", "")
+	if rules := trackingRules(t, body, "pokemon"); len(rules) != 1 || rules[0]["pokemon_id"].(float64) != 149 {
+		t.Fatalf("all_profiles must always read the active profile, got %v", rules)
 	}
 }
 

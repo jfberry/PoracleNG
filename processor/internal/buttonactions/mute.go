@@ -52,6 +52,12 @@ func HandleMute(_ context.Context, snap *snapshots.Snapshot, def buttons.Def, _ 
 		return Response{Text: tr.T("msg.button.missing_scope"), Reaction: "🙅"}, nil
 	}
 
+	// Tracking mutes are typed (#323): one entry per rule uid in the snapshot,
+	// keyed by the table of the alert that was rendered.
+	if scopeType == buttons.ScopeTracking {
+		return muteTrackingRules(snap, def, tr, deps)
+	}
+
 	scopeValue, ok := muteScopeValue(scopeType, snap)
 	if !ok {
 		return Response{
@@ -71,6 +77,32 @@ func HandleMute(_ context.Context, snap *snapshots.Snapshot, def buttons.Def, _ 
 
 	return Response{
 		Text:     tr.Tf("msg.mute.added", muteScopeLabel(tr, scopeType, scopeValue, snap), durationLabel(duration)),
+		Reaction: "🔇",
+	}, nil
+}
+
+// muteTrackingRules adds one typed tracking mute per rule uid in the snapshot.
+func muteTrackingRules(snap *snapshots.Snapshot, def buttons.Def, tr *i18n.Translator, deps Deps) (Response, error) {
+	table, ok := alertTypeTable(snap.AlertType)
+	if !ok || len(snap.TrackingUIDs) == 0 {
+		return Response{
+			Text:     tr.Tf("msg.button.missing_target", scopeNounLabel(tr, buttons.ScopeTracking)),
+			Reaction: "🙅",
+		}, nil
+	}
+	duration := muteDurationFromParams(def.Params)
+	exp := time.Now().Add(duration).Unix()
+	labels := make([]string, 0, len(snap.TrackingUIDs))
+	for _, uid := range snap.TrackingUIDs {
+		v := strconv.FormatInt(uid, 10)
+		deps.MuteStore.Add(mute.Entry{
+			HumanID: snap.Target, ScopeType: mute.ScopeTracking, RuleTable: table,
+			ScopeValue: v, ExpiresAt: exp,
+		})
+		labels = append(labels, tr.Tf("msg.mute.rule_label", table, v))
+	}
+	return Response{
+		Text:     tr.Tf("msg.mute.added", strings.Join(labels, ", "), durationLabel(duration)),
 		Reaction: "🔇",
 	}, nil
 }
@@ -111,10 +143,7 @@ func muteScopeValue(scope string, snap *snapshots.Snapshot) (string, bool) {
 		}
 		return "", false
 	case buttons.ScopeTracking:
-		// Tracking-UID mute (Phase 2.5). Not enforceable until MatchedUser
-		// carries the UID; the store accepts ScopeTracking writes but the
-		// matcher ignores them. Return a clear error rather than a silent
-		// success.
+		// Handled by muteTrackingRules (one typed entry per rule uid).
 		return "", false
 	default:
 		return "", false

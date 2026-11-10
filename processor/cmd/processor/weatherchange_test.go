@@ -156,57 +156,44 @@ func TestEnrichWeatherChange_FreshenStaleTimeFlag(t *testing.T) {
 	}
 }
 
-// TestEnrichWeatherChange_ActivePokemonsHonorsConfig locks in the fix for the
-// "!poracle-test weatherchange shows no changed pokemon" bug. The bundled and
-// operator weatherchange templates iterate {{#each activePokemons}}, but
-// WeatherTranslate only populates the activePokemons key when
-// [weather] show_altered_pokemon_static_map is set (enrichedActivePokemons is
-// always set — a separate key the templates don't read). enrichWeatherChange
-// used to hardcode the flag false, so the test render never matched
-// production (where the flag is on). It must read the flag from config, like
-// the live consumeWeatherChanges path, so !poracle-test faithfully reproduces
-// the live alert.
-func TestEnrichWeatherChange_ActivePokemonsHonorsConfig(t *testing.T) {
-	ps := newEnrichParityService(t)
-	ps.cfg = &config.Config{Weather: config.WeatherConfig{ShowAlteredPokemonStaticMap: true}}
+// TestEnrichWeatherChange_ActivePokemonsIndependentOfStaticMapFlag locks in
+// the fix for "weatherchange shows no changed pokemon". The bundled and
+// operator weatherchange templates iterate {{#each activePokemons}};
+// WeatherTranslate used to set that key only when
+// [weather] show_altered_pokemon_static_map was on, so operators with
+// show_altered_pokemon on but the static-map flag off got an empty list.
+// The list must be present whatever the static-map flag says — only the
+// per-user tile depends on it (PoracleJS behaviour).
+func TestEnrichWeatherChange_ActivePokemonsIndependentOfStaticMapFlag(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Config
+	}{
+		{"flag on", &config.Config{Weather: config.WeatherConfig{ShowAlteredPokemonStaticMap: true}}},
+		{"flag off", &config.Config{Weather: config.WeatherConfig{ShowAlteredPokemonStaticMap: false}}},
+		{"nil cfg", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newEnrichParityService(t)
+			ps.cfg = tc.cfg
 
-	raw := loadTestdataSample(t, "weatherchange", "rain")
-	r, err := ps.enrichWeatherChange(raw, "en", false)
-	if err != nil {
-		t.Fatalf("enrichWeatherChange error: %v", err)
-	}
+			raw := loadTestdataSample(t, "weatherchange", "rain")
+			r, err := ps.enrichWeatherChange(raw, "en", false)
+			if err != nil {
+				t.Fatalf("enrichWeatherChange error: %v", err)
+			}
 
-	// activePokemons is the key the weatherchange templates iterate — it must
-	// be present (and non-empty) once the config flag is on.
-	active, ok := r.perLang["activePokemons"].([]map[string]any)
-	if !ok {
-		t.Fatalf("perLang[activePokemons] = %v (%T), want []map[string]any — the key {{#each activePokemons}} reads", r.perLang["activePokemons"], r.perLang["activePokemons"])
-	}
-	if len(active) == 0 {
-		t.Errorf("perLang[activePokemons] is empty, want the affected-pokemon list so the template renders it")
-	}
-}
-
-// TestEnrichWeatherChange_ActivePokemonsNilCfg guards the nil-cfg fallback the
-// original hardcode existed to protect: the enrich-parity harness leaves
-// ps.cfg nil, so the flag reads false and activePokemons stays absent (the
-// always-present enrichedActivePokemons still carries the data) — no panic.
-func TestEnrichWeatherChange_ActivePokemonsNilCfg(t *testing.T) {
-	ps := newEnrichParityService(t)
-	if ps.cfg != nil {
-		t.Fatalf("harness precondition: ps.cfg = %v, want nil", ps.cfg)
-	}
-
-	raw := loadTestdataSample(t, "weatherchange", "rain")
-	r, err := ps.enrichWeatherChange(raw, "en", false)
-	if err != nil {
-		t.Fatalf("enrichWeatherChange error: %v", err)
-	}
-	if _, present := r.perLang["activePokemons"]; present {
-		t.Errorf("nil cfg: perLang[activePokemons] present, want absent (flag defaults off)")
-	}
-	if _, ok := r.perLang["enrichedActivePokemons"].([]map[string]any); !ok {
-		t.Errorf("nil cfg: perLang[enrichedActivePokemons] missing, want the always-present affected list")
+			for _, key := range []string{"activePokemons", "enrichedActivePokemons"} {
+				list, ok := r.perLang[key].([]map[string]any)
+				if !ok {
+					t.Fatalf("perLang[%s] = %v (%T), want []map[string]any", key, r.perLang[key], r.perLang[key])
+				}
+				if len(list) == 0 {
+					t.Errorf("perLang[%s] is empty, want the affected-pokemon list so the template renders it", key)
+				}
+			}
+		})
 	}
 }
 

@@ -176,17 +176,23 @@ type BotDeps struct {
 	ProcessStart time.Time
 
 	// Slash command lifecycle — used by !poracle-admin slash subcommands.
-	// All five are always non-nil in production. When slash is not
+	// All six are always non-nil in production. When slash is not
 	// configured (Discord disabled, or [discord.slash_commands] enabled=false)
 	// the closures return slash.ErrSlashNotConfigured.
 	//
-	// SlashStatus reads the on-disk fingerprint cache; all other operations
-	// mutate Discord via the slash Dispatcher.
+	// SlashStatus reads the on-disk fingerprint cache; SlashList reads live
+	// from Discord; all other operations mutate Discord via the slash
+	// Dispatcher.
 	SlashSync        func() error
 	SlashForceResync func() error
 	SlashClearGlobal func() error
 	SlashClearGuild  func(guildID string) error
 	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+	// SlashList reports the commands Discord currently has registered, per
+	// scope. guildID is the guild the command was invoked from ("" in DM);
+	// it is listed alongside the configured scopes so an operator running
+	// the command inside a guild always sees that guild's ids.
+	SlashList func(guildID string) ([]SlashScopeCommands, error)
 }
 
 // SlashScope is a per-scope snapshot of slash registration state.
@@ -197,6 +203,25 @@ type SlashScope struct {
 	Name         string    // "global" or guild ID
 	LastSyncedAt time.Time // zero if never synced
 	Fingerprint  string    // first 8 chars, or empty if never synced
+}
+
+// SlashCommandMention is one invocable slash command path and the id needed
+// to build a Discord command mention (`</path:id>`). Defined here rather than
+// in internal/discordbot/slash for the same import-cycle reason as SlashScope.
+type SlashCommandMention struct {
+	Path string // "help", "untrack raid", "summary quest settime"
+	ID   string // always the top-level command's id
+}
+
+// Mention renders the clickable Discord command-mention syntax.
+func (m SlashCommandMention) Mention() string { return "</" + m.Path + ":" + m.ID + ">" }
+
+// SlashScopeCommands is one registration scope and the commands Discord has
+// registered in it. Guild-scoped registrations get different ids per guild,
+// so scopes are reported separately rather than merged.
+type SlashScopeCommands struct {
+	Name     string // "global" or guild ID
+	Commands []SlashCommandMention
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -251,6 +276,7 @@ type AdminDeps struct {
 	SlashClearGlobal func() error
 	SlashClearGuild  func(guildID string) error
 	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+	SlashList        func(guildID string) ([]SlashScopeCommands, error)
 
 	// Admin reload functions — live-ops commands only.
 	// Each bypasses the debouncer and executes synchronously.
@@ -286,6 +312,9 @@ type CommandContext struct {
 	// Permissions (resolved before command runs)
 	IsAdmin          bool
 	IsCommunityAdmin bool
+	// CommunityAdminOf lists the communities a Telegram community admin
+	// administers (lowercase); !userlist limits its output to them.
+	CommunityAdminOf []string
 	IsRegistered     bool
 	Permissions      Permissions
 
@@ -432,6 +461,7 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 			SlashClearGlobal: deps.SlashClearGlobal,
 			SlashClearGuild:  deps.SlashClearGuild,
 			SlashStatus:      deps.SlashStatus,
+			SlashList:        deps.SlashList,
 			ReloadDTS:        deps.ReloadDTS,
 			ReloadGeofence:   deps.ReloadGeofence,
 			ReloadState:      deps.ReloadState,
@@ -502,6 +532,23 @@ func SplitTextReply(text string) []Reply {
 	replies := make([]Reply, len(messages))
 	for i, msg := range messages {
 		replies[i] = Reply{Text: msg}
+	}
+	return replies
+}
+
+// codeBlockChunkLen leaves headroom under the 2000-char limit for the
+// ``` fences plus a short caller-supplied header line on the first chunk.
+const codeBlockChunkLen = 1900
+
+// SplitCodeBlockReply is SplitTextReply with each chunk wrapped in a fenced
+// code block, so machine-shaped text (config keys like default_edit) isn't
+// interpreted as Markdown — e.g. underscore pairs turning into italics.
+// Each chunk is fenced separately so a split never leaves a block unclosed.
+func SplitCodeBlockReply(text string) []Reply {
+	messages := SplitMessage(escapeMarkdownCode(text), codeBlockChunkLen)
+	replies := make([]Reply, len(messages))
+	for i, msg := range messages {
+		replies[i] = Reply{Text: "```\n" + msg + "\n```"}
 	}
 	return replies
 }

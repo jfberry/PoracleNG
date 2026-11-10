@@ -33,7 +33,12 @@ func NewHumaAPI(r *gin.Engine, apiGroup *gin.RouterGroup, version string) huma.A
 		"poracleSecret": {Type: "apiKey", In: "header", Name: "X-Poracle-Secret"},
 	}
 
+	// Every huma path is relative to the /api group.
+	cfg.Servers = []*huma.Server{{URL: "/api"}}
+
 	humaAPI := humagin.NewWithGroup(r, apiGroup, cfg)
+
+	addHealthToSpec(humaAPI.OpenAPI())
 
 	// Public spec + docs (top-level, outside /api, so RequireSecretGin never runs).
 	r.GET("/openapi.json", func(c *gin.Context) {
@@ -56,3 +61,42 @@ const docsHTML = `<!doctype html><html><head><meta charset="utf-8">
 <script src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
 </head><body><elements-api apiDescriptionUrl="/openapi.json" router="hash" layout="sidebar"/></body></html>`
+
+// addHealthToSpec documents GET /health in the spec WITHOUT registering it on
+// huma: the huma API is bound to /api, so huma.Register would create a real
+// (secret-protected) /api/health route. The real handler is HandleHealth on
+// the top-level gin router. The path overrides servers to "/" and is public.
+func addHealthToSpec(oa *huma.OpenAPI) {
+	str := &huma.Schema{Type: "string"}
+	body := &huma.Schema{
+		Type:     "object",
+		Required: []string{"status", "version", "capabilities"},
+		Properties: map[string]*huma.Schema{
+			"status":  str,
+			"version": str,
+			"capabilities": {
+				Type:                 "object",
+				AdditionalProperties: &huma.Schema{Type: "boolean"},
+			},
+		},
+	}
+	if oa.Paths == nil {
+		oa.Paths = map[string]*huma.PathItem{}
+	}
+	oa.Paths["/health"] = &huma.PathItem{
+		Servers: []*huma.Server{{URL: "/"}},
+		Get: &huma.Operation{
+			OperationID: "get-health",
+			Summary:     "Health check",
+			Description: "Public (no secret). Returns the binary version and a static feature-capability map for client feature detection.",
+			Tags:        []string{"health"},
+			Security:    []map[string][]string{},
+			Responses: map[string]*huma.Response{
+				"200": {
+					Description: "Healthy",
+					Content:     map[string]*huma.MediaType{"application/json": {Schema: body}},
+				},
+			},
+		},
+	}
+}

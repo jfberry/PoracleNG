@@ -31,7 +31,7 @@ func NewSpatialIndex(fences []Fence) *SpatialIndex {
 	si := &SpatialIndex{fences: fences}
 	for i := range fences {
 		f := &fences[i]
-		f.NormalizedName = strings.ToLower(strings.ReplaceAll(f.Name, "_", " "))
+		f.NormalizedName = NormalizeAreaKey(f.Name)
 		if len(f.Path) > 0 {
 			minX, minY, maxX, maxY := boundingBox(f.Path)
 			entry := &fenceEntry{fence: f, path: f.Path}

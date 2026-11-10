@@ -111,6 +111,21 @@
     },
     {
       "type": 3,
+      "name": "edit",
+      "description": "Update the alert in place (e.g. RSVP changes)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
       "name": "template",
       "description": "DTS template name",
       "channel_types": null,

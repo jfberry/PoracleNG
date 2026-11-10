@@ -265,7 +265,7 @@ func TestV2Lure_BulkDelete(t *testing.T) {
 
 // --- PUT full-replace -------------------------------------------------------
 
-func TestV2Lure_PutFullReplace_NewUID(t *testing.T) {
+func TestV2Lure_PutFullReplace_KeepsUID(t *testing.T) {
 	r, ls, _, restore := newV2LureTestAPI(t)
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/lure", `[{"lure_id":501,"distance":500}]`)
@@ -277,8 +277,8 @@ func TestV2Lure_PutFullReplace_NewUID(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	newUID := int64(v2RulesArray(t, v2DecodeBody(t, w), "updated")[0]["uid"].(float64))
-	if newUID == oldUID {
-		t.Fatalf("PUT must yield a NEW uid")
+	if newUID != oldUID {
+		t.Fatalf("PUT must keep the rule uid: was %d, now %d", oldUID, newUID)
 	}
 	rows := ls.AllRows()
 	if len(rows) != 1 || rows[0].LureID != 502 || rows[0].Distance != 0 {

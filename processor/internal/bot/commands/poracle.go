@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -204,18 +205,12 @@ func (c *PoracleCommand) renderGreeting(ctx *bot.CommandContext) *bot.Reply {
 	}
 
 	// Look up the greeting template
-	tmpl := ctx.DTS.Get("greeting", platform, "", ctx.Language)
-	if tmpl == nil {
-		tmpl = ctx.DTS.Get("greeting", platform, "1", ctx.Language)
-	}
-	if tmpl == nil {
-		tmpl = ctx.DTS.Get("greeting", platform, "default", ctx.Language)
-	}
+	tmpl := ctx.DTS.Greeting(platform, ctx.Language)
 	if tmpl == nil {
 		return nil
 	}
 
-	result, err := tmpl.Exec(view)
+	result, err := dts.ExecTemplate(tmpl, view, helpEffectiveLanguage(ctx), platform)
 	if err != nil {
 		log.Warnf("poracle: render greeting: %v", err)
 		return nil

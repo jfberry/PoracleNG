@@ -1,8 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-
 	"github.com/jmoiron/sqlx"
 )
 
@@ -40,9 +38,7 @@ func LoadForts(db *sqlx.DB) ([]*FortTracking, error) {
 
 	result := make([]*FortTracking, len(forts))
 	for i := range forts {
-		if forts[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(forts[i].OverrideAreasRaw), &forts[i].OverrideAreas)
-		}
+		forts[i].OverrideAreas = loadOverrideKeys(forts[i].OverrideAreasRaw)
 		result[i] = &forts[i]
 	}
 	return result, nil

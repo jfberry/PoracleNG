@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -39,6 +40,13 @@ type BufferedQuest struct {
 	// dispatched chunk so the message lives at least as long as the
 	// longest constituent quest.
 	Clean int `json:"clean,omitempty"`
+	// RuleUIDs are the tracking-rule UIDs that buffered this quest for
+	// the user (unioned across upserts), and Areas the geofence areas the
+	// quest matched. Both feed the fire-time mute check in
+	// DispatchQuestSummary so tracking- and area-scope mutes behave as
+	// they do for immediate alerts.
+	RuleUIDs []int64  `json:"rule_uids,omitempty"`
+	Areas    []string `json:"areas,omitempty"`
 }
 
 // bufferKey deduplicates entries within a (humanID, alertType) bucket.
@@ -110,6 +118,11 @@ func (sb *SummaryBuffer) Append(humanID, alertType string, q BufferedQuest) {
 	// quest itself, not the rule that matched it.
 	if existing, ok := bucket[key]; ok {
 		q.Clean |= existing.Clean
+		for _, uid := range existing.RuleUIDs {
+			if !slices.Contains(q.RuleUIDs, uid) {
+				q.RuleUIDs = append(q.RuleUIDs, uid)
+			}
+		}
 	}
 	bucket[key] = q
 }

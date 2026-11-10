@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -17,9 +18,31 @@ type MockHumanStore struct {
 	// Calls records method names called (for assertion).
 	Calls []string
 
-	Locations       map[string][]UserLocation
-	LocationRefs    map[string][]ReferencingRule // keyed by id|lowercased-label
-	PrunedAreaCalls map[string]map[string]bool   // humanID → permitted set, for test assertions
+	// UpdateCalls records a copy of each Update call's arguments.
+	UpdateCalls []MockUpdateCall
+
+	// StripUserAreasErr / StripOverrideAreasErr, when non-nil, are returned
+	// by the corresponding methods.
+	StripUserAreasErr     error
+	StripOverrideAreasErr error
+
+	// OverrideTables are the tracking mocks EditOverrideAreas acts on, keyed
+	// by SQL table name (see trackingTablesWithOverrideAreas).
+	OverrideTables map[string]OverrideTable
+
+	Locations         map[string][]UserLocation
+	LocationRefs      map[string][]ReferencingRule // keyed by id|lowercased-label
+	StrippedAreaCalls map[string]map[string]bool   // humanID → denied set, for test assertions
+
+	// RuleProfiles is what RuleProfileNos returns per human. The mock has no
+	// view of the tracking tables, so tests seed it to match their rows.
+	RuleProfiles map[string][]int
+}
+
+// MockUpdateCall is a copy of one Update call's arguments.
+type MockUpdateCall struct {
+	ID     string
+	Fields map[string]any
 }
 
 // NewMockHumanStore creates a new empty MockHumanStore.
@@ -89,6 +112,7 @@ func (m *MockHumanStore) Create(h *Human) error {
 		return fmt.Errorf("human %s already exists", h.ID)
 	}
 	cp := *h
+	cp.CurrentProfileNo = profileNoOrDefault(cp.CurrentProfileNo)
 	m.humans[h.ID] = &cp
 	return nil
 }
@@ -129,6 +153,11 @@ func (m *MockHumanStore) SetAdminDisable(id string, disable bool) error {
 	defer m.mu.Unlock()
 	if h, ok := m.humans[id]; ok {
 		h.AdminDisable = disable
+		// Mirror the SQL store: re-enabling also sets enabled = 1, fails = 0.
+		if !disable {
+			h.Enabled = true
+			h.Fails = 0
+		}
 	}
 	return nil
 }
@@ -137,19 +166,46 @@ func (m *MockHumanStore) SetLocation(id string, profileNo int, lat, lon float64)
 	m.record("SetLocation")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if h, ok := m.humans[id]; ok {
+	if h, ok := m.humans[id]; ok && h.CurrentProfileNo == profileNo {
 		h.Latitude = lat
 		h.Longitude = lon
+	}
+	for i := range m.profiles[id] {
+		if m.profiles[id][i].ProfileNo == profileNo {
+			m.profiles[id][i].Latitude = lat
+			m.profiles[id][i].Longitude = lon
+		}
 	}
 	return nil
 }
 
+// SetArea mirrors SQLHumanStore: it writes the named profile's area, and
+// humans.area only when profileNo is the current profile. The mock previously
+// ignored profileNo entirely, so a test could not tell a per-profile write
+// from a global one.
 func (m *MockHumanStore) SetArea(id string, profileNo int, areas []string) error {
 	m.record("SetArea")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if h, ok := m.humans[id]; ok {
+	if h, ok := m.humans[id]; ok && h.CurrentProfileNo == profileNo {
 		h.Area = areas
+	}
+	for i := range m.profiles[id] {
+		if m.profiles[id][i].ProfileNo == profileNo {
+			m.profiles[id][i].Area = areas
+		}
+	}
+	return nil
+}
+
+// AreaForProfile returns the areas stored against one profile. Test helper.
+func (m *MockHumanStore) AreaForProfile(id string, profileNo int) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, p := range m.profiles[id] {
+		if p.ProfileNo == profileNo {
+			return p.Area
+		}
 	}
 	return nil
 }
@@ -199,6 +255,11 @@ func (m *MockHumanStore) Update(id string, fields map[string]any) error {
 	m.record("Update")
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	cp := make(map[string]any, len(fields))
+	for k, v := range fields {
+		cp[k] = v
+	}
+	m.UpdateCalls = append(m.UpdateCalls, MockUpdateCall{ID: id, Fields: cp})
 	if h, ok := m.humans[id]; ok {
 		for k, v := range fields {
 			switch k {
@@ -314,6 +375,15 @@ func (m *MockHumanStore) GetProfiles(id string) ([]Profile, error) {
 	return m.profiles[id], nil
 }
 
+func (m *MockHumanStore) RuleProfileNos(id string) ([]int, error) {
+	m.record("RuleProfileNos")
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	nos := slices.Clone(m.RuleProfiles[id])
+	slices.Sort(nos)
+	return slices.Compact(nos), nil
+}
+
 func (m *MockHumanStore) SwitchProfile(id string, profileNo int) (bool, error) {
 	m.record("SwitchProfile")
 	m.mu.Lock()
@@ -333,15 +403,20 @@ func (m *MockHumanStore) SwitchProfile(id string, profileNo int) (bool, error) {
 	return false, nil
 }
 
-func (m *MockHumanStore) AddProfile(id string, name string, activeHours string) error {
+func (m *MockHumanStore) AddProfile(id string, name string, activeHours string) (int, error) {
 	m.record("AddProfile")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	newNo := 1
+	// Lowest FREE profile_no, matching SQLHumanStore — not max+1. The two
+	// diverged, so a test could assert the wrong number and still pass here
+	// while production assigned another (#213).
+	taken := make(map[int]bool, len(m.profiles[id]))
 	for _, p := range m.profiles[id] {
-		if p.ProfileNo >= newNo {
-			newNo = p.ProfileNo + 1
-		}
+		taken[p.ProfileNo] = true
+	}
+	newNo := 1
+	for taken[newNo] {
+		newNo++
 	}
 	m.profiles[id] = append(m.profiles[id], Profile{
 		ID:          id,
@@ -349,7 +424,7 @@ func (m *MockHumanStore) AddProfile(id string, name string, activeHours string) 
 		Name:        name,
 		ActiveHours: activeHours,
 	})
-	return nil
+	return newNo, nil
 }
 
 func (m *MockHumanStore) DeleteProfile(id string, profileNo int) error {
@@ -395,6 +470,19 @@ func (m *MockHumanStore) UpdateProfileHours(id string, profileNo int, activeHour
 		if p.ProfileNo == profileNo {
 			m.profiles[id][i].ActiveHours = activeHours
 			break
+		}
+	}
+	return nil
+}
+
+func (m *MockHumanStore) UpdateProfileName(id string, profileNo int, name string) error {
+	m.record("UpdateProfileName")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.profiles[id] {
+		if m.profiles[id][i].ProfileNo == profileNo {
+			m.profiles[id][i].Name = name
+			return nil
 		}
 	}
 	return nil
@@ -473,13 +561,143 @@ func (m *MockHumanStore) CountLocationReferences(id, label string) ([]Referencin
 	return append([]ReferencingRule(nil), m.LocationRefs[key]...), nil
 }
 
-func (m *MockHumanStore) PruneOverrideAreas(humanID string, permitted map[string]bool) error {
-	m.record("PruneOverrideAreas")
+func (m *MockHumanStore) StripOverrideAreas(humanID string, denied map[string]bool) error {
+	m.record("StripOverrideAreas")
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.PrunedAreaCalls == nil {
-		m.PrunedAreaCalls = map[string]map[string]bool{}
+	if m.StripOverrideAreasErr != nil {
+		return m.StripOverrideAreasErr
 	}
-	m.PrunedAreaCalls[humanID] = permitted
+	if m.StrippedAreaCalls == nil {
+		m.StrippedAreaCalls = map[string]map[string]bool{}
+	}
+	m.StrippedAreaCalls[humanID] = denied
 	return nil
+}
+
+// StripUserAreas mirrors SQLHumanStore.StripUserAreas: humans row first, then
+// profiles by profile_no; an all-stripped list becomes empty non-nil.
+func (m *MockHumanStore) StripUserAreas(humanID string, denied map[string]bool) ([]string, error) {
+	m.record("StripUserAreas")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.StripUserAreasErr != nil {
+		return nil, m.StripUserAreasErr
+	}
+	var removed []string
+	seen := map[string]bool{}
+	prune := func(areas []string) []string {
+		kept := make([]string, 0, len(areas))
+		for _, a := range areas {
+			low := strings.ToLower(a)
+			if !denied[low] {
+				kept = append(kept, a)
+			} else if !seen[low] {
+				seen[low] = true
+				removed = append(removed, low)
+			}
+		}
+		return kept
+	}
+	h, ok := m.humans[humanID]
+	if !ok {
+		return nil, nil // SQL: no humans row means profiles are not touched
+	}
+	h.Area = prune(h.Area)
+	ps := m.profiles[humanID]
+	sort.SliceStable(ps, func(i, j int) bool { return ps[i].ProfileNo < ps[j].ProfileNo })
+	for i := range ps {
+		ps[i].Area = prune(ps[i].Area)
+	}
+	return removed, nil
+}
+
+// RemoveAreaFromProfiles mirrors SQLHumanStore.RemoveAreaFromProfiles.
+func (m *MockHumanStore) RemoveAreaFromProfiles(id, name string, profileNos []int, dryRun bool) ([]int, bool, error) {
+	m.record("RemoveAreaFromProfiles")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var removedFrom []int
+	changed := false
+	ps := m.profiles[id]
+	sort.SliceStable(ps, func(i, j int) bool { return ps[i].ProfileNo < ps[j].ProfileNo })
+	for i := range ps {
+		if !slices.Contains(profileNos, ps[i].ProfileNo) {
+			continue
+		}
+		kept, rowChanged := removeAreaName(ps[i].Area, name)
+		if !rowChanged {
+			continue
+		}
+		if !dryRun {
+			ps[i].Area = kept
+		}
+		removedFrom = append(removedFrom, ps[i].ProfileNo)
+		changed = true
+	}
+	if h, ok := m.humans[id]; ok && slices.Contains(profileNos, h.CurrentProfileNo) {
+		if kept, hc := removeAreaName(h.Area, name); hc {
+			changed = true
+			removedFrom = withProfileNo(removedFrom, h.CurrentProfileNo)
+			if !dryRun {
+				h.Area = kept
+			}
+		}
+	}
+	return removedFrom, changed, nil
+}
+
+// RenameAreaInProfiles mirrors SQLHumanStore.RenameAreaInProfiles.
+func (m *MockHumanStore) RenameAreaInProfiles(id, from, to string, profileNos []int, dryRun bool) ([]int, bool, error) {
+	m.record("RenameAreaInProfiles")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var renamedIn []int
+	changed := false
+	ps := m.profiles[id]
+	sort.SliceStable(ps, func(i, j int) bool { return ps[i].ProfileNo < ps[j].ProfileNo })
+	for i := range ps {
+		if !slices.Contains(profileNos, ps[i].ProfileNo) {
+			continue
+		}
+		out, rowChanged := editAreaList(ps[i].Area, from, to)
+		if !rowChanged {
+			continue
+		}
+		if !dryRun {
+			ps[i].Area = out
+		}
+		renamedIn = append(renamedIn, ps[i].ProfileNo)
+		changed = true
+	}
+	if h, ok := m.humans[id]; ok && slices.Contains(profileNos, h.CurrentProfileNo) {
+		if out, hc := editAreaList(h.Area, from, to); hc {
+			changed = true
+			renamedIn = withProfileNo(renamedIn, h.CurrentProfileNo)
+			if !dryRun {
+				h.Area = out
+			}
+		}
+	}
+	return renamedIn, changed, nil
+}
+
+// EditOverrideAreas mirrors SQLHumanStore.EditOverrideAreas over the tracking
+// mocks registered in OverrideTables.
+func (m *MockHumanStore) EditOverrideAreas(id string, profileNos []int, from, to string, dryRun bool) (map[string][]int64, bool, error) {
+	m.record("EditOverrideAreas")
+	broadened := map[string][]int64{}
+	anyChanged := false
+	for _, table := range trackingTablesWithOverrideAreas {
+		t, ok := m.OverrideTables[table]
+		if !ok {
+			continue
+		}
+		emptied, ch := t.editOverrides(id, profileNos, from, to, dryRun)
+		anyChanged = anyChanged || ch
+		if len(emptied) > 0 {
+			broadened[trackingTypePathMap[table]] = emptied
+		}
+	}
+	return broadened, anyChanged, nil
 }

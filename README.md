@@ -26,7 +26,7 @@ The processor receives raw webhooks from Golbat, matches them against all user t
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.27+ (see `processor/go.mod`)
 - MySQL 8.0+
 - A Golbat instance sending webhooks
 
@@ -167,7 +167,9 @@ Why split: cleaner branding (alerts and support can have different bot identitie
 
 **What users will see**: two separate DM threads in Discord — alerts arrive from one bot, commands go to the other. Mentioning the command bot in a server channel (`@PoracleCommands !poracle`) is the way to invoke commands; the alerts bot stays silent except when posting alerts.
 
-**Failure modes**: if `command_token` is set but the gateway bot fails to connect (bad token, missing intents), PoracleNG exits at startup rather than silently falling back to single-bot mode. To downgrade back to single-bot operation, remove the `command_token` line and restart.
+**Connection retries**: in both single-bot and split-bot mode, temporary Discord gateway failures (such as DNS not being ready after a reboot) are retried 60 seconds after each failed attempt. The HTTP server, webhook processing, API, and Telegram bot start independently of the Discord gateway. Discord commands and gateway-dependent API features become available when it connects. Outbound Discord alerts still require Discord's REST API to be reachable. SIGINT/SIGTERM interrupts the retry wait and shuts down cleanly. Once connected, discordgo handles later reconnections as before.
+
+**Failure modes**: invalid tokens, missing permissions/intents and other non-reconnectable gateway errors are returned without retrying. If `command_token` is set, PoracleNG exits at startup rather than silently falling back to single-bot mode; single-bot mode logs the error and continues. To downgrade back to single-bot operation, remove the `command_token` line and restart.
 
 ### Config Data Files
 

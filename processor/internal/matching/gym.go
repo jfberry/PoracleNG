@@ -70,6 +70,7 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 		// If g.GymID is nil, area/distance is checked by validateHumansForGym
 
 		out = append(out, trackingUserData{
+			RuleTable:             "gym",
 			HumanID:               g.ID,
 			ProfileNo:             g.ProfileNo,
 			Distance:              g.Distance,
@@ -208,6 +209,7 @@ func validateHumansForGym(
 			CardinalDirection: CardinalDirection(bearing),
 			TrackDistance:     td.Distance,
 			RuleUID:           td.UID,
+			RuleTable:         td.RuleTable,
 		})
 	}
 	return result

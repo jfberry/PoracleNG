@@ -51,6 +51,9 @@ func TestLureMatchBasic(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "lure" {
+		t.Errorf("RuleTable = %q, want lure", matched[0].RuleTable)
+	}
 }
 
 func TestLureMatchAnyLure(t *testing.T) {

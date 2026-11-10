@@ -65,3 +65,22 @@ func TestOverride_AreasFireWithoutHumanAreas(t *testing.T) {
 		t.Fatalf("override_areas alone should be enough; got %d", len(out))
 	}
 }
+
+// #243 D3: exemptFromAreaSecurity lifts the community filter on SELECTION
+// only. A human holding an exempt fence, alerted inside it but outside their
+// area_restriction, gets nothing when strict_locations is on. Matching never
+// reads the flag; this test fails if someone wires it in.
+func TestStrictLocations_IgnoresExemptSelection(t *testing.T) {
+	h := newHuman(0, 0, []string{"drawn"}, nil)
+	h.AreaRestriction = []string{"coast_fence"}
+	humans := map[string]*db.Human{"u1": h}
+	rules := []trackingUserData{newRule(1, 0, "", nil)}
+	matched := map[string]bool{"drawn": true} // event inside the exempt fence only
+
+	if out := ValidateHumansGeneric(rules, 0, 0, matched, true, humans, "test"); len(out) != 0 {
+		t.Fatalf("strict_locations must still gate an exempt fence; got %d matches", len(out))
+	}
+	if out := ValidateHumansGeneric(rules, 0, 0, matched, false, humans, "test"); len(out) != 1 {
+		t.Fatalf("without strict_locations the selection alone delivers (the documented sharp edge); got %d", len(out))
+	}
+}

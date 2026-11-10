@@ -224,6 +224,11 @@ type MatchedUser struct {
 	// known" — should not happen for matches built by the per-type
 	// matchers, but is the natural fallback for synthetic test matches.
 	RuleUID int64 `json:"rule_uid,omitempty"`
+
+	// RuleTable is the canonical tracking table of the rule (pokemon, raid,
+	// egg, quest, invasion, lure, nest, gym, fort, maxbattle). Tracking mutes
+	// match on (RuleTable, RuleUID) because uids are per-table (#323).
+	RuleTable string `json:"rule_table,omitempty"`
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.

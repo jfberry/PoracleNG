@@ -8,14 +8,13 @@ import (
 //
 // Options:
 //
-//	fort_type      (int, required, choices) — 0=pokestop, 1=gym
+//	fort_type      (int, required, choices) — 0=pokestop, 1=gym, 2=station, 3=everything
 //	include_empty  (bool)                    — alert on empty/unowned forts
 //	distance       (int)                    — alert radius in metres
-//	clean          (bool)                    — auto-delete on expiry
 //	template       (string, autocomplete)   — DTS template name
 //
 // fort_type is required by Discord and resolved to a lowercase keyword
-// (`pokestop` / `gym`) consumed by the bot's invasion arg matcher in
+// (`pokestop` / `gym` / `station` / `everything`) consumed by the bot's invasion arg matcher in
 // processor/internal/bot/commands/fort.go. Out-of-range choice values
 // produce an empty token which we skip — the matcher will then fall
 // through to its `everything` default.

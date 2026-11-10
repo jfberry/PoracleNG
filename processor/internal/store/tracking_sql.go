@@ -28,6 +28,10 @@ func (s *sqlTrackingStore[T]) DeleteByUIDs(id string, uids []int64) error {
 	return db.DeleteByUIDs(s.database, s.table, id, uids)
 }
 
+func (s *sqlTrackingStore[T]) ReassignUID(id string, from, to int64) error {
+	return db.ReassignUID(s.database, s.table, id, from, to)
+}
+
 func (s *sqlTrackingStore[T]) DeleteByUID(id string, uid int64) error {
 	return db.DeleteByUID(s.database, s.table, id, uid)
 }
@@ -177,3 +181,98 @@ func FortGetUID(f *db.FortTrackingAPI) int64                { return f.UID }
 func FortSetUID(f *db.FortTrackingAPI, uid int64)           { f.UID = uid }
 func MaxbattleGetUID(m *db.MaxbattleTrackingAPI) int64      { return m.UID }
 func MaxbattleSetUID(m *db.MaxbattleTrackingAPI, uid int64) { m.UID = uid }
+
+// TablesWithUID returns the canonical rule-table keys (the mute.CanonicalRuleTable
+// vocabulary) of every table holding a rule with this uid for the human's
+// profile. uids are per-table, so more than one table can match. A store that
+// is nil or errors is skipped.
+func (ts *TrackingStores) TablesWithUID(id string, profileNo int, uid int64) []string {
+	if ts == nil {
+		return nil
+	}
+	var out []string
+	check := func(table string, has func() bool) {
+		if has() {
+			out = append(out, table)
+		}
+	}
+	hasUID := func(n int, uidAt func(i int) int64) bool {
+		for i := 0; i < n; i++ {
+			if uidAt(i) == uid {
+				return true
+			}
+		}
+		return false
+	}
+	check("pokemon", func() bool {
+		if ts.Monsters == nil {
+			return false
+		}
+		r, err := ts.Monsters.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("raid", func() bool {
+		if ts.Raids == nil {
+			return false
+		}
+		r, err := ts.Raids.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("egg", func() bool {
+		if ts.Eggs == nil {
+			return false
+		}
+		r, err := ts.Eggs.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("quest", func() bool {
+		if ts.Quests == nil {
+			return false
+		}
+		r, err := ts.Quests.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("invasion", func() bool {
+		if ts.Invasions == nil {
+			return false
+		}
+		r, err := ts.Invasions.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("lure", func() bool {
+		if ts.Lures == nil {
+			return false
+		}
+		r, err := ts.Lures.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("nest", func() bool {
+		if ts.Nests == nil {
+			return false
+		}
+		r, err := ts.Nests.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("gym", func() bool {
+		if ts.Gyms == nil {
+			return false
+		}
+		r, err := ts.Gyms.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("fort", func() bool {
+		if ts.Forts == nil {
+			return false
+		}
+		r, err := ts.Forts.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	check("maxbattle", func() bool {
+		if ts.Maxbattles == nil {
+			return false
+		}
+		r, err := ts.Maxbattles.SelectByIDProfile(id, profileNo)
+		return err == nil && hasUID(len(r), func(i int) int64 { return r[i].UID })
+	})
+	return out
+}

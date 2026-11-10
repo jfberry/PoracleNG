@@ -16,47 +16,51 @@ import (
 // pokemon_id in translateV2Maxbattle (see matching/maxbattle.go:48): omit both
 // for "everything" (stored 9000/90), an explicit by-level level must be >= 1, a
 // specific pokemon_id stores the 9000 level placeholder. gmax is a BOOL on the
-// wire, stored as 0/1. station_id is a nullable string. ping is server-managed
+// wire, stored as 0/1. station_id is a nullable string.
 // (not a caller input).
 //
 // pokemon_id, move, evolution all default to 9000 (the "any / by level"
 // sentinel the engine uses), per the field audit maxbattle table.
 type v2MaxbattleRule struct {
-	PokemonID *int    `json:"pokemon_id,omitempty" nullable:"true" doc:"Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level."`
-	Level     *int    `json:"level,omitempty" nullable:"true" doc:"Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused)."`
-	Form      *int    `json:"form,omitempty" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
-	Move      *int    `json:"move,omitempty" nullable:"true" doc:"Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
+	PokemonID *int    `json:"pokemon_id,omitempty" minimum:"1" nullable:"true" doc:"Omit pokemon_id to track by battle level (any boss); give a Pokédex id for a specific boss. Omitting stores the by-level sentinel 9000. Returned as null when tracking by level."`
+	Level     *int    `json:"level,omitempty" minimum:"1" maximum:"90" nullable:"true" doc:"Max battle tier. Only applies when tracking by level (no pokemon_id) — omit for any tier (stored 90), or give a tier >= 1. With a specific pokemon_id, level is ignored (stored placeholder 9000, matching the bot). Returned as null when stored 90 (any tier) or 9000 (level unused)."`
+	Form      *int    `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
+	Move      *int    `json:"move,omitempty" minimum:"0" nullable:"true" doc:"Charge move id (game-master). Omit to match any move (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
 	Gmax      *bool   `json:"gmax,omitempty" nullable:"true" doc:"Match Gigantamax only. Omit to match regardless (default false). Returned as null when false."`
 	Evolution *int    `json:"evolution,omitempty" nullable:"true" doc:"Evolution id (game-master). Omit to match any evolution (stored as 9000 = the project-wide 'any' sentinel). Returned as null when at its wildcard."`
 	StationID *string `json:"station_id,omitempty" nullable:"true" doc:"Restrict to a specific power-spot station id. Omit (or empty/null) to match any station (stored as null). Returned as null when unset."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
-	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
+	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Not supported for maxbattle tracking — omit, or send null/false (true is rejected with 422). Always returned as null."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
-	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset."`
+	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). At most [tracking] max_areas names unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted (a rule already stored over it may keep or shrink its own list). Omit for none. Returned as null when unset."`
 }
 
 // translateV2Maxbattle converts a strict v2 maxbattle rule into the stored
 // MaxbattleTrackingAPI, applying documented defaults, the track-by-level
 // validation, gmax bool→int, the clean bitmask, profile, and
-// validated/normalized override fields. ping is always stored "" (server-managed).
+// validated/normalized override fields.
 func translateV2Maxbattle(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2MaxbattleRule) (db.MaxbattleTrackingAPI, error) {
-	pokemonID := valueOr(req.PokemonID, 9000)
+	if err := rejectEdit("maxbattle", req.Edit); err != nil {
+		return db.MaxbattleTrackingAPI{}, err
+	}
+	pokemonID := valueOr(req.PokemonID, wcAnyID)
 
 	// The level field's meaning depends on pokemon_id (see matching/maxbattle.go:48):
 	//   - by-level mode (pokemon_id == 9000): omitted level => 90 ("any tier" /
 	//     "everything"); an explicit level must be >= 1.
 	//   - specific-pokemon mode: level is ignored by the matcher and stored as the
 	//     9000 placeholder (byte-identical to bot/v1 rows).
-	level := 9000
-	if pokemonID == 9000 {
+	level := wcLevelPlaceholder
+	if pokemonID == wcAnyID {
 		if req.Level == nil {
-			level = 90
+			level = wcLevelAny
 		} else {
 			level = *req.Level
 			if level < 1 {
@@ -65,11 +69,7 @@ func translateV2Maxbattle(deps *TrackingDeps, humanID string, profileNo int, oc 
 		}
 	}
 
-	distance := valueOr(req.Distance, 0)
-	const maxDistance = 40000000 // Earth circumference (metres)
-	if distance > maxDistance {
-		distance = maxDistance
-	}
+	distance := clampDistance(deps, oc.limitExempt, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {
@@ -89,19 +89,19 @@ func translateV2Maxbattle(deps *TrackingDeps, humanID string, profileNo int, oc 
 	row := db.MaxbattleTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
 		PokemonID:             pokemonID,
-		Form:                  valueOr(req.Form, 0),
+		Form:                  valueOr(req.Form, wcForm),
 		Level:                 level,
-		Move:                  valueOr(req.Move, 9000),
+		Move:                  valueOr(req.Move, wcAnyID),
 		Gmax:                  gmax,
-		Evolution:             valueOr(req.Evolution, 9000),
+		Evolution:             valueOr(req.Evolution, wcAnyID),
 		StationID:             stationID,
-		Clean:                 packClean(valueOr(req.Clean, false), valueOr(req.Edit, false), valueOr(req.Summary, false)),
+		Clean:                 packClean(valueOr(req.Clean, false), false, valueOr(req.Summary, false)),
 		OverrideLocationLabel: overrideLabel,
-		OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+		OverrideAreas:         canonicalOverrideAreas(deps, req.OverrideAreas),
 	}
 	return row, nil
 }
@@ -114,19 +114,20 @@ func maxbattleRowToRule(row *db.MaxbattleTrackingAPI) v2MaxbattleRule {
 		stationID = row.StationID
 	}
 	return v2MaxbattleRule{
-		PokemonID: ptrUnless(row.PokemonID, 9000),
+		PokemonID: ptrUnless(row.PokemonID, wcAnyID),
 		// level has no meaningful tier when stored 9000 (specific-pokemon
 		// placeholder, incl. legacy bot rows) or 90 (by-level any-tier).
 		Level:                 raidLevelOrNull(row.Level),
-		Form:                  ptrUnless(row.Form, 0),
-		Move:                  ptrUnless(row.Move, 9000),
+		Form:                  ptrUnless(row.Form, wcForm),
+		Move:                  ptrUnless(row.Move, wcAnyID),
 		Gmax:                  ptrUnless(row.Gmax != 0, false),
-		Evolution:             ptrUnless(row.Evolution, 9000),
+		Evolution:             ptrUnless(row.Evolution, wcAnyID),
 		StationID:             stationID,
-		Distance:              ptrUnless(row.Distance, 0),
+		Distance:              ptrUnless(row.Distance, wcDistance),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
-		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
+		Edit:                  nil, // edit is not supported for this type; always null
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),
@@ -136,9 +137,9 @@ func maxbattleRowToRule(row *db.MaxbattleTrackingAPI) v2MaxbattleRule {
 // RegisterV2TrackingMaxbattle registers the strict v2 maxbattle tracking
 // endpoints via the generic resource helpers.
 //
-// Note: MaxbattleTrackingAPI carries no diff:"match" tags, so the shared
-// ApplyDiff path treats every candidate as a fresh insert (matching the v1
-// "always inserts" behaviour) — the generic layer needs no special-casing.
+// Note: MaxbattleTrackingAPI tags ping, clean, distance and template as
+// updatable, so the shared ApplyDiff path squashes a rule that differs only in
+// one of those — the generic layer needs no special-casing.
 func RegisterV2TrackingMaxbattle(api huma.API, deps *TrackingDeps) {
 	registerV2Tracking(api, deps, v2TrackingType[v2MaxbattleRule, db.MaxbattleTrackingAPI]{
 		Name: "maxbattle",

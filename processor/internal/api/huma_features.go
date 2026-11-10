@@ -54,7 +54,7 @@ func (summarySetBody) Schema(huma.Registry) *huma.Schema {
 	// field types or `required`, so zero-padded string ints ("00") still pass.
 	entry := &huma.Schema{
 		Type:                 "object",
-		Description:          "Active-hours entry: {day 0-6, hours 0-23, mins 0-59, optional step, end_hours, end_mins}. Integer fields also accept zero-padded strings (e.g. \"00\").",
+		Description:          "Active-hours entry: {day 1-7 (ISO: 1=Monday … 7=Sunday), hours 0-23, mins 0-59, optional step, end_hours, end_mins}. Integer fields also accept zero-padded strings (e.g. \"00\").",
 		AdditionalProperties: true,
 	}
 	return &huma.Schema{
@@ -100,7 +100,7 @@ func RegisterSummarySet(api huma.API, deps *SummaryDeps) {
 		Summary: "Upsert a summary schedule", Tags: []string{"summaries"},
 		Description: "Upsert the active-hours schedule for (id, alertType). The " +
 			"`active_hours` field is an array of entries " +
-			"`{day 0-6, hours 0-23, mins 0-59, optional step, end_hours, end_mins}`. " +
+			"`{day 1-7 (ISO: 1=Monday … 7=Sunday), hours 0-23, mins 0-59, optional step, end_hours, end_mins}`. " +
 			"For backward compatibility with existing clients this in-place endpoint " +
 			"also accepts the legacy lenient forms: `active_hours` may be a " +
 			"JSON-string-encoded array, and integer fields may be zero-padded strings " +
@@ -292,9 +292,11 @@ type summaryGetOutput struct {
 	}
 }
 
-// summaryDisabledMsg / unknownAlertTypeMsg keep the legacy wording stable.
+// summaryDisabledMsg is returned (503) only when the schedule store wasn't
+// constructed — not when quest_summary_enabled is off, which leaves the
+// endpoints live. unknownAlertTypeMsg keeps the legacy wording stable.
 const (
-	summaryDisabledMsg  = "summary feature is disabled (set tracking.quest_summary_enabled = true)"
+	summaryDisabledMsg  = "summary schedule store is unavailable (it failed to initialise at startup; check the processor log)"
 	unknownAlertTypeMsg = "unknown alert type (currently only \"quest\" is supported for summary scheduling)"
 )
 
@@ -333,7 +335,7 @@ func RegisterCommand(api huma.API, deps *bot.BotDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "post-command", Method: "POST", Path: "/command",
 		Summary: "Execute a bot command", Tags: []string{"command"},
-		Description: "Runs a bot command line (e.g. \"track pikachu iv90\") through the same parser the Discord/Telegram bots use, on behalf of the user/channel described by the body. Returns {status, replies} with the messages the bot would have sent instead of delivering them.",
+		Description: "Runs a bot command line (e.g. \"track pikachu iv90\" or \"!track pikachu iv90\") through the same parser the Discord/Telegram bots use; the configured command prefix is optional and is prepended to any line that lacks it. Multiple commands may be separated by newlines. Runs on behalf of the user/channel described by the body. Returns {status, replies} with the messages the bot would have sent instead of delivering them.",
 		Security:    []map[string][]string{{"poracleSecret": {}}},
 	}, func(_ context.Context, in *commandInput) (*commandOutput, error) {
 		req := commandRequest{
@@ -354,8 +356,9 @@ func RegisterCommand(api huma.API, deps *bot.BotDeps) {
 			return nil, huma.Error500InternalServerError("command parser not configured")
 		}
 
-		// Parse commands from text
-		parsed := deps.Parser.Parse(req.Text)
+		// Parse commands from text. The command prefix is optional for API
+		// callers: it is prepended to any line that lacks it.
+		parsed := deps.Parser.Parse(deps.Parser.EnsurePrefix(req.Text))
 		if len(parsed) == 0 {
 			return &commandOutput{Body: commandResponse{Status: "ok", Replies: nil}}, nil
 		}
@@ -450,7 +453,7 @@ func RegisterCommand(api huma.API, deps *bot.BotDeps) {
 				ctx.HasArea = target.HasArea
 			}
 
-			replies := handler.Run(ctx, remainingArgs)
+			replies := bot.RunLocked(handler, ctx, remainingArgs)
 			// Apply maintenance suffix so callers see the paused-delivery
 			// warning, matching discordbot/bot.go and telegrambot/bot.go.
 			replies = bot.ApplyMaintenanceSuffix(replies, deps.Dispatcher, tr.T("cmd.maintenance.active_suffix"))

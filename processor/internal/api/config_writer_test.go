@@ -153,7 +153,7 @@ func TestWriteConfigTOML_IntCoercedRoundTrip(t *testing.T) {
 	// Editor sends an int — JSON unmarshal makes it float64.
 	updates := map[string]any{
 		"pvp": map[string]any{
-			"filter_max_rank": float64(100),
+			"filter_max_rank": float64(50), // non-default, so it isn't elided
 		},
 	}
 	if _, err := writeConfigTOML(dir, updates); err != nil {
@@ -168,8 +168,8 @@ func TestWriteConfigTOML_IntCoercedRoundTrip(t *testing.T) {
 	if _, err := toml.DecodeFile(filepath.Join(dir, "config.toml"), &dst); err != nil {
 		t.Fatalf("decode into int field: %v", err)
 	}
-	if dst.PVP.FilterMaxRank != 100 {
-		t.Errorf("got %d, want 100", dst.PVP.FilterMaxRank)
+	if dst.PVP.FilterMaxRank != 50 {
+		t.Errorf("got %d, want 50", dst.PVP.FilterMaxRank)
 	}
 }
 

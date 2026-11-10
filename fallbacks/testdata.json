@@ -1960,5 +1960,24 @@
       ],
       "raid_seed": "5845571837887094592"
     }
+  },
+  {
+    "type": "nest",
+    "test": "riverside",
+    "location": "current",
+    "webhook": {
+      "nest_id": 482731905,
+      "name": "Riverside Park",
+      "lat": 51.50782,
+      "lon": -0.12845,
+      "pokemon_id": 66,
+      "form": 0,
+      "type": 0,
+      "pokemon_count": 84,
+      "pokemon_avg": 14.0,
+      "pokemon_ratio": 35.0,
+      "poly_path": "[[[51.5069,-0.1301],[51.5087,-0.1301],[51.5087,-0.1268],[51.5069,-0.1268],[51.5069,-0.1301]]]",
+      "reset_time": 1792198800
+    }
   }
 ]

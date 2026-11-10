@@ -20,6 +20,10 @@ type ApplyCommand struct{}
 func (c *ApplyCommand) Name() string      { return "cmd.apply" }
 func (c *ApplyCommand) Aliases() []string { return nil }
 
+// ExemptFromTargetLock: apply never writes its own target; it locks each
+// apply target itself via bot.RunLocked.
+func (c *ApplyCommand) ExemptFromTargetLock() {}
+
 // Run handles the apply command. Because the parser splits by "|", we receive
 // only the first pipe group here. The remaining groups are handled by the
 // bot framework dispatching multiple ParsedCommands with "cmd.apply" key.
@@ -164,7 +168,7 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				}
 			}
 
-			replies := handler.Run(&targetCtx, cmdArgs)
+			replies := bot.RunLocked(handler, &targetCtx, cmdArgs)
 			allReplies = append(allReplies, replies...)
 		}
 	}

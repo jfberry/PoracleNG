@@ -1,7 +1,9 @@
 package mappers
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -210,7 +212,7 @@ func TestTrackMapperSize(t *testing.T) {
 		sopt("pokemon", "25"),
 		sopt("size", "xxl"),
 	})
-	want := []string{"25", "xxl"}
+	want := []string{"25", "size:xxl"}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Errorf("tokens=%v want %v", tokens, want)
 	}
@@ -244,7 +246,7 @@ func TestTrackMapperAllOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"25", "iv95", "great5", "ultra10", "little7", "d250", "clean", "template:pvp", "form:alola", "costume:1", "xl"}
+	want := []string{"25", "iv95", "great5", "ultra10", "little7", "d250", "clean", "template:pvp", "form:alola", "costume:1", "size:xl"}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Errorf("tokens=%v want %v", tokens, want)
 	}
@@ -281,4 +283,103 @@ func TestLookupTrack(t *testing.T) {
 	if Lookup("track") == nil {
 		t.Fatal("nil mapper for /track")
 	}
+}
+
+// --- token grammar: values must survive the text parser ----------------------
+//
+// Slash tokens go straight to cmd.Run (slash/dispatcher.go) — only the TEXT
+// parser lowercases and normalises. So any value the mapper passes through
+// verbatim reaches ArgMatcher exactly as Discord sent it, and a value the
+// parser cannot resolve lands in Unrecognized, where ReportUnrecognized aborts
+// the ENTIRE command. That is the same failure #238 fixed for size.
+
+// form was emitted verbatim while filterByForm compares against a lowercased
+// translation, so a capitalised value silently failed to resolve and aborted
+// the command with msg.form_not_found.
+func TestTrackMapperLowercasesForm(t *testing.T) {
+	tokens, err := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "Pikachu"),
+		sopt("form", "Alola"),
+	})
+	if err != nil {
+		t.Fatalf("Track: %v", err)
+	}
+	if !hasToken(tokens, "form:alola") {
+		t.Errorf("tokens = %v, want a lowercased form:alola", tokens)
+	}
+}
+
+func TestTrackMapperLowercasesCostume(t *testing.T) {
+	tokens, err := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "pikachu"),
+		sopt("costume", "Party-Hat"),
+	})
+	if err != nil {
+		t.Fatalf("Track: %v", err)
+	}
+	if !hasToken(tokens, "costume:party-hat") {
+		t.Errorf("tokens = %v, want a lowercased costume token", tokens)
+	}
+}
+
+// autocomplete.IVRange offers the user's raw input back as a committable
+// choice, so free text reaches the mapper. An unparseable value must be
+// reported as such rather than emitted as a token that aborts the command with
+// "Unrecognized: iv100%".
+func TestTrackMapperRejectsUnparseableIV(t *testing.T) {
+	for _, bad := range []string{"100%", "ninety", "90+", "-", ""} {
+		t.Run(bad, func(t *testing.T) {
+			tokens, err := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+				sopt("pokemon", "pikachu"),
+				sopt("iv", bad),
+			})
+			if bad == "" {
+				// Empty is "not supplied" and is skipped, not an error.
+				if err != nil {
+					t.Fatalf("empty iv should be skipped, got %v", err)
+				}
+				for _, tok := range tokens {
+					if strings.HasPrefix(tok, "iv") {
+						t.Errorf("empty iv must emit no token, got %v", tokens)
+					}
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected a MapperError for iv=%q, got tokens %v", bad, tokens)
+			}
+			var me *MapperError
+			if !errors.As(err, &me) {
+				t.Fatalf("expected *MapperError for iv=%q, got %T", bad, err)
+			}
+		})
+	}
+}
+
+func TestTrackMapperAcceptsValidIV(t *testing.T) {
+	for in, want := range map[string]string{
+		"95":     "iv95",
+		"90-100": "iv90-100",
+		" 95 ":   "iv95",
+	} {
+		tokens, err := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+			sopt("pokemon", "pikachu"),
+			sopt("iv", in),
+		})
+		if err != nil {
+			t.Fatalf("iv=%q: %v", in, err)
+		}
+		if !hasToken(tokens, want) {
+			t.Errorf("iv=%q → tokens %v, want %q", in, tokens, want)
+		}
+	}
+}
+
+func hasToken(tokens []string, want string) bool {
+	for _, t := range tokens {
+		if t == want {
+			return true
+		}
+	}
+	return false
 }

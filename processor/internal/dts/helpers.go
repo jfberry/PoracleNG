@@ -116,6 +116,25 @@ func boolResult(result bool, options *raymond.Options) any {
 	return options.Inverse()
 }
 
+// capitalizeAll upper-cases the first letter or digit of each run of
+// non-space characters.
+func capitalizeAll(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	pending := true // still looking for the first letter/digit of this word
+	for _, r := range s {
+		switch {
+		case unicode.IsSpace(r):
+			pending = true
+		case pending && (unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'):
+			r = unicode.ToUpper(r)
+			pending = false
+		}
+		sb.WriteRune(r)
+	}
+	return sb.String()
+}
+
 func toFloat(v any) float64 {
 	if v == nil {
 		return 0
@@ -153,6 +172,18 @@ func toBool(v any) bool {
 func toString(v any) string {
 	if v == nil {
 		return ""
+	}
+	// raymond hands a missing field to a helper as []any(nil); treat it (and
+	// any empty list) as empty rather than printing "[]", matching how
+	// PoracleJS rendered undefined in helpers like {{concat}}.
+	if a, ok := v.([]any); ok && len(a) == 0 {
+		return ""
+	}
+	// Whole-number floats (raw webhook numbers decode as float64) print in
+	// full like JS String(n), not in Go's exponent form, so large ids such
+	// as s2_cell_id work as map keys and match what {{field}} renders.
+	if f, ok := v.(float64); ok && f == math.Trunc(f) && math.Abs(f) < 1e21 {
+		return strconv.FormatFloat(f, 'f', -1, 64)
 	}
 	return fmt.Sprintf("%v", v)
 }
@@ -407,6 +438,44 @@ func registerStringHelpers() {
 		return string(unicode.ToUpper(r)) + str[size:]
 	})
 
+	// capitalizeAll — upper-case the first letter of every word, leaving the
+	// rest untouched (PoracleJS / handlebars-helpers). A word is a run of
+	// non-space characters; its first letter or digit is capitalised, so
+	// "(old) church" → "(Old) Church". Unlike the JS original this is
+	// Unicode-aware: "église" → "Église".
+	raymond.RegisterHelper("capitalizeAll", func(s any) any {
+		return capitalizeAll(toString(s))
+	})
+
+	// ellipsis — keep the first n characters and append "…" when the string
+	// was longer (PoracleJS / handlebars-helpers). Counts characters, not
+	// bytes. Usage: {{ellipsis gymName 20}}
+	raymond.RegisterHelper("ellipsis", func(s, limit any) any {
+		r := []rune(toString(s))
+		n := max(int(toFloat(limit)), 0)
+		if len(r) <= n {
+			return string(r)
+		}
+		return string(r[:n]) + "…"
+	})
+
+	// startsWith — case-sensitive prefix test, argument order as in
+	// PoracleJS: {{#startsWith "Hello" str}}..{{else}}..{{/startsWith}}.
+	// Also usable as a subexpression: {{#if (startsWith "EX" gymName)}}.
+	raymond.RegisterHelper("startsWith", func(prefix, s any, options *raymond.Options) any {
+		return boolResult(strings.HasPrefix(toString(s), toString(prefix)), options)
+	})
+
+	// remove — delete every occurrence of a substring:
+	// {{remove gymName " (EX)"}}
+	raymond.RegisterHelper("remove", func(s, sub any) any {
+		str, subStr := toString(s), toString(sub)
+		if subStr == "" {
+			return str
+		}
+		return strings.ReplaceAll(str, subStr, "")
+	})
+
 	raymond.RegisterHelper("replace", func(s, old, new any) any {
 		return strings.ReplaceAll(toString(s), toString(old), toString(new))
 	})
@@ -447,7 +516,8 @@ func registerStringHelpers() {
 // workers, so mutating in place is a concurrent-write bug (observed in
 // production under parallel renders of the same alert).
 // For non-map contexts: wraps in an eachWrapper that implements
-// FieldResolver so {{this}} still works.
+// FieldResolver so {{this}} still works, and HelperArgProvider so helpers
+// receive the item itself.
 func eachContextWithMeta(ctx any, index, length int) any {
 	isFirst := index == 0
 	isLast := index == length-1
@@ -486,6 +556,15 @@ func (w *eachWrapper) GetField(name string) (any, bool) {
 func (w *eachWrapper) String() string {
 	return fmt.Sprintf("%v", w.value)
 }
+
+// HelperArg implements raymond.HelperArgProvider so helpers (and the builtin
+// if/unless/with) receive the wrapped value, not the wrapper: otherwise
+// {{gt this 1}} saw a pointer and {{#if this}} treated a 0 item as true.
+func (w *eachWrapper) HelperArg() any {
+	return w.value
+}
+
+var _ raymond.HelperArgProvider = (*eachWrapper)(nil)
 
 func registerArrayHelpers() {
 	// forEach — block helper with @isFirst, @isLast, @total

@@ -72,7 +72,7 @@ func TestBufferQuestMatches_WritesIdentityTuple(t *testing.T) {
 	raw := []byte(`{"pokestop_id":"stop-A","with_ar":true}`)
 	users := []webhook.MatchedUser{{ID: "user-1", Clean: 4}}
 
-	ps.bufferQuestMatches(users, quest, rewards, raw)
+	ps.bufferQuestMatches(users, quest, rewards, raw, nil)
 
 	got := ps.summaryBuffer.List("user-1", "quest")
 	if len(got) != 1 {
@@ -115,7 +115,7 @@ func TestBufferQuestMatches_OneEntryPerUser(t *testing.T) {
 		{ID: "user-1", Clean: 4},
 		{ID: "user-2", Clean: 4},
 	}
-	ps.bufferQuestMatches(users, quest, rewards, raw)
+	ps.bufferQuestMatches(users, quest, rewards, raw, nil)
 
 	for _, id := range []string{"user-1", "user-2"} {
 		got := ps.summaryBuffer.List(id, "quest")
@@ -145,5 +145,5 @@ func TestBufferQuestMatches_NilBufferIsSafe(t *testing.T) {
 	users := []webhook.MatchedUser{{ID: "user-1", Clean: 4}}
 
 	// Should not panic.
-	ps.bufferQuestMatches(users, quest, rewards, []byte(`{}`))
+	ps.bufferQuestMatches(users, quest, rewards, []byte(`{}`), nil)
 }

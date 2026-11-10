@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -10,8 +11,10 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/humanlock"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/state"
@@ -152,12 +155,10 @@ func toInt(v any) int {
 // This is a cheap pre-filter to skip render/enrichment work for destinations
 // we already know are paused.
 func (ps *ProcessorService) filterBlocked(matched []webhook.MatchedUser) []webhook.MatchedUser {
-	if ps.rateLimiter == nil {
-		return matched
-	}
+	matched = ps.filterPlatformEnabled(matched)
 	allowed := matched[:0]
 	for _, m := range matched {
-		if ps.rateLimiter.IsBlocked(m.ID, m.Type) {
+		if ps.rateLimiter != nil && ps.rateLimiter.IsBlocked(m.ID, m.Type) {
 			metrics.RateLimitDropped.Inc()
 			log.Debugf("Rate limit pre-filter: skipping render for %s %s %s", m.Type, m.ID, m.Name)
 			continue
@@ -165,6 +166,65 @@ func (ps *ProcessorService) filterBlocked(matched []webhook.MatchedUser) []webho
 		allowed = append(allowed, m)
 	}
 	return allowed
+}
+
+// filterPlatformEnabled drops destinations whose platform is disabled.
+// [discord] / [telegram] enabled = false stops all delivery to that
+// platform's humans (Discord webhooks included), as in PoracleJS — not
+// just its gateway. Split out of filterBlocked so the quest summary path
+// can apply it without the alert-bucket rate-limit pre-filter (summaries
+// are counted against their own bucket at dispatch).
+func (ps *ProcessorService) filterPlatformEnabled(matched []webhook.MatchedUser) []webhook.MatchedUser {
+	allowed := matched[:0]
+	for _, m := range matched {
+		if ps.platformEnabled(m.Type) {
+			allowed = append(allowed, m)
+		}
+	}
+	return allowed
+}
+
+// platformEnabled reports whether the platform a destination type belongs
+// to is enabled in config.
+func (ps *ProcessorService) platformEnabled(destType string) bool {
+	if ps.cfg == nil {
+		return true
+	}
+	switch delivery.PlatformFromType(destType) {
+	case "discord":
+		return ps.cfg.Discord.Enabled
+	case "telegram":
+		return ps.cfg.Telegram.Enabled
+	}
+	return true
+}
+
+// disabledPlatformWarnings returns a startup warning for each platform that
+// has a token configured but enabled = false. Disabling a platform stops
+// its commands and all alerts to its humans, so a token left in place
+// usually means the operator expects it to be working.
+func disabledPlatformWarnings(cfg *config.Config) []string {
+	var out []string
+	if !cfg.Discord.Enabled && slices.ContainsFunc(cfg.Discord.DiscordTokens(), func(t string) bool { return t != "" }) {
+		out = append(out, "[discord] has a token but enabled = false: no Discord commands or alerts (including webhooks) will be sent")
+	}
+	if !cfg.Telegram.Enabled && slices.ContainsFunc(cfg.Telegram.TelegramTokens(), func(t string) bool { return t != "" }) {
+		out = append(out, "[telegram] has a token but enabled = false: no Telegram commands or alerts will be sent")
+	}
+	return out
+}
+
+// applyDefaultEdit sets the edit bit on every matched user when alertType is
+// listed in [tracking] default_edit, so downstream edit-key, raid-partition
+// and delivery-tracking decisions treat those rules as edit rules. The stored
+// rule is untouched: removing the type from the list reverts the behaviour.
+func applyDefaultEdit(matched []webhook.MatchedUser, tracking config.TrackingConfig, alertType string) {
+	if !tracking.DefaultEditFor(alertType) {
+		return
+	}
+	for i := range matched {
+		matched[i].Clean |= 2
+	}
 }
 
 // filterMuted drops matched users whose in-memory mute state suppresses
@@ -199,6 +259,7 @@ func (ps *ProcessorService) filterMuted(matched []webhook.MatchedUser, areas []w
 		// scopes use the event-level fields (gym_id, pokemon_id, etc.)
 		// from the caller's ev.
 		ev.MatchedRuleUID = m.RuleUID
+		ev.MatchedRuleTable = m.RuleTable
 		if ps.muteStore.Match(m.ID, ev, now) {
 			metrics.MuteHitsTotal.WithLabelValues(m.Type).Inc()
 			log.Debugf("Mute filter: dropping %s %s %s (active mute matches event)", m.Type, m.ID, m.Name)
@@ -336,22 +397,26 @@ func (ps *ProcessorService) notifySummaryRateBreach(target, typ, name, language 
 // triggers a debounced state reload so the user is removed from matching.
 func (ps *ProcessorService) OnBan(target, typ, name, language string) {
 	tr := ps.translations.For(language)
-	var msg string
-	if ps.cfg.AlertLimits.DisableOnStop {
-		if ps.humans != nil {
-			if err := ps.humans.SetAdminDisable(target, true); err != nil {
-				log.Errorf("Rate limit: failed to admin_disable user %s: %s", target, err)
+	// Hold the per-human lock only around the disable write, not the
+	// notifications below. Deferred so a panic in the write can't leave the
+	// human's lock held.
+	msg := func() string {
+		defer humanlock.Lock(target)()
+		if ps.cfg.AlertLimits.DisableOnStop {
+			if ps.humans != nil {
+				if err := ps.humans.SetAdminDisable(target, true); err != nil {
+					log.Errorf("Rate limit: failed to admin_disable user %s: %s", target, err)
+				}
 			}
+			return tr.T("rate_limit.banned_hard")
 		}
-		msg = tr.T("rate_limit.banned_hard")
-	} else {
 		if ps.humans != nil {
 			if err := ps.humans.SetEnabled(target, false); err != nil {
 				log.Errorf("Rate limit: failed to disable user %s: %s", target, err)
 			}
 		}
-		msg = tr.Tf("rate_limit.banned_soft", bot.CommandPrefixForType(ps.cfg, typ))
-	}
+		return tr.Tf("rate_limit.banned_soft", bot.CommandPrefixForType(ps.cfg, typ))
+	}()
 
 	ps.dispatchBypass(target, typ, name, msg, "RateLimit")
 
@@ -383,7 +448,11 @@ func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType 
 	if ps.humans == nil {
 		return
 	}
-	if err := ps.humans.SetEnabled(target, false); err != nil {
+	err := func() error {
+		defer humanlock.Lock(target)()
+		return ps.humans.SetEnabled(target, false)
+	}()
+	if err != nil {
 		log.Errorf("Delivery failure: failed to disable user %s: %s", target, err)
 		return
 	}

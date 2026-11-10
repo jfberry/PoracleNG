@@ -1,6 +1,7 @@
 package store
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -99,6 +100,18 @@ func (m *MockTrackingStore[T]) DeleteByUIDs(id string, uids []int64) error {
 	return nil
 }
 
+// ReassignUID moves the row (owned by id) at uid from to uid to.
+func (m *MockTrackingStore[T]) ReassignUID(id string, from, to int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.rows {
+		if m.getUID(&m.rows[i]) == from && (m.getID == nil || m.getID(&m.rows[i]) == id) {
+			m.setUID(&m.rows[i], to)
+		}
+	}
+	return nil
+}
+
 func (m *MockTrackingStore[T]) DeleteByUID(id string, uid int64) error {
 	return m.DeleteByUIDs(id, []int64{uid})
 }
@@ -110,4 +123,59 @@ func (m *MockTrackingStore[T]) AllRows() []T {
 	out := make([]T, len(m.rows))
 	copy(out, m.rows)
 	return out
+}
+
+// OverrideTable is a tracking table whose override_areas a MockHumanStore can
+// edit. Build one with NewMockOverrideTable and register it under the SQL
+// table name ("monsters", "raid", "lures", ...) in
+// MockHumanStore.OverrideTables.
+type OverrideTable interface {
+	editOverrides(id string, profileNos []int, from, to string, dryRun bool) (emptied []int64, changed bool)
+}
+
+type mockOverrideTable[T any] struct {
+	m   *MockTrackingStore[T]
+	get func(*T) []string
+	set func(*T, []string)
+}
+
+// NewMockOverrideTable exposes a mock tracking store's override_areas to
+// MockHumanStore.EditOverrideAreas. Rows are scoped by the store's id and
+// profile accessors when WithIDScope / WithProfileScope were set.
+func NewMockOverrideTable[T any](m *MockTrackingStore[T], get func(*T) []string, set func(*T, []string)) OverrideTable {
+	return &mockOverrideTable[T]{m: m, get: get, set: set}
+}
+
+func (t *mockOverrideTable[T]) editOverrides(id string, profileNos []int, from, to string, dryRun bool) ([]int64, bool) {
+	m := t.m
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var emptied []int64
+	anyChanged := false
+	for i := range m.rows {
+		row := &m.rows[i]
+		if m.getID != nil && m.getID(row) != id {
+			continue
+		}
+		if m.getProfNo != nil && !slices.Contains(profileNos, m.getProfNo(row)) {
+			continue
+		}
+		areas := t.get(row)
+		if len(areas) == 0 {
+			continue
+		}
+		out, changed := editAreaList(areas, from, to)
+		if !changed {
+			continue
+		}
+		anyChanged = true
+		if len(out) == 0 {
+			emptied = append(emptied, m.getUID(row))
+			out = nil
+		}
+		if !dryRun {
+			t.set(row, out)
+		}
+	}
+	return emptied, anyChanged
 }

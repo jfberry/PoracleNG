@@ -491,3 +491,32 @@ func TestHumaConfigPoracleWeb_DisabledHooksOmitsVestigialPokestop(t *testing.T) 
 		}
 	}
 }
+
+// --- #210: disable_showcase reaches disabledHooks ---------------------------
+
+// disable_showcase gates ProcessShowcase and is documented in the config
+// editor schema, but was never added to hookTypes — so a client could not tell
+// showcase processing was off and went on offering a control that could never
+// produce an alert. Same shape as the #195 fort omission.
+func TestHumaConfigPoracleWeb_DisabledHooksIncludesShowcase(t *testing.T) {
+	r, api := newConfigTestAPI(t)
+	cfg := &config.Config{}
+	cfg.General.DisableShowcase = true
+	RegisterConfigPoracleWeb(api, cfg)
+
+	w := getJSON(t, r, "/api/config/poracleWeb")
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	hooks, _ := got["disabledHooks"].([]any)
+	found := false
+	for _, h := range hooks {
+		if h == "showcase" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("disabledHooks = %v, want to contain \"showcase\"", hooks)
+	}
+}

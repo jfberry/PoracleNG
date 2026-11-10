@@ -488,3 +488,31 @@ func TestTrackerSaveLoadPreservesTemplate(t *testing.T) {
 		t.Errorf("other fields lost across Save/Load: %+v", got)
 	}
 }
+
+func TestTrackerSaveLoadPreservesSentAt(t *testing.T) {
+	dir := t.TempDir()
+	senders := map[string]Sender{"discord": &mockSender{}}
+
+	mt1 := NewMessageTracker(dir, senders)
+	mt1.Track("pokemon:enc1:u1", &TrackedMessage{
+		SentID: "s1",
+		Target: "u1",
+		Type:   "discord:user",
+		SentAt: 1_800_000_000,
+	}, 5*time.Minute)
+	if err := mt1.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	mt1.cache.Stop()
+
+	mt2 := NewMessageTracker(dir, senders)
+	if err := mt2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	defer mt2.cache.Stop()
+
+	got := mt2.LookupEdit("pokemon:enc1:u1")
+	if got == nil || got.SentAt != 1_800_000_000 {
+		t.Fatalf("SentAt lost across Save/Load: %+v", got)
+	}
+}

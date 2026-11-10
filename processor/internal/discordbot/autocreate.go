@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -740,7 +741,7 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateAct
 			ctx.AreaLogic = bot.NewAreaLogic(st.Fences, b.Cfg)
 		}
 
-		replies := handler.Run(ctx, pc.Args)
+		replies := bot.RunLocked(handler, ctx, pc.Args)
 		reportCommandFailures(rep, expanded, replies)
 		// For the interactive path (actor has a ChannelID) send the
 		// remaining (non-failure) replies back to the originating channel —
@@ -1246,8 +1247,8 @@ func (b *Bot) cascadeChannelDelete(s *discordgo.Session, channelID string, delet
 // formatTemplate replaces {0}, {1}, etc. placeholders with the provided arguments.
 func formatTemplate(s string, args []string) string {
 	result := s
-	for i := len(args) - 1; i >= 0; i-- {
-		result = strings.ReplaceAll(result, fmt.Sprintf("{%d}", i), args[i])
+	for i, arg := range slices.Backward(args) {
+		result = strings.ReplaceAll(result, fmt.Sprintf("{%d}", i), arg)
 	}
 	return result
 }

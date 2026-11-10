@@ -68,3 +68,20 @@ func TestValidateCommunityAreasEmpty(t *testing.T) {
 		t.Errorf("expected no output for empty config, got:\n%s", out)
 	}
 }
+
+// allowed_areas entries resolve by NormalizeAreaKey, as the runtime compares
+// them, so a spaced entry for an underscored fence is not flagged.
+func TestValidateCommunityAreas_EitherSpelling(t *testing.T) {
+	fences := []geofence.Fence{{Name: "Gent_Centrum"}, {Name: "Brugge Centrum"}}
+	communities := []config.CommunityConfig{{
+		Name:         "be",
+		AllowedAreas: []string{"gent centrum", "brugge_centrum"},
+	}}
+	out := captureLogs(t, func() { validateCommunityAreas(fences, communities) })
+	if strings.Contains(out, "NOT FOUND") {
+		t.Errorf("either spelling must resolve, got:\n%s", out)
+	}
+	if !strings.Contains(out, "allowed_areas: 2/2 resolved") {
+		t.Errorf("expected 2/2 summary, got:\n%s", out)
+	}
+}

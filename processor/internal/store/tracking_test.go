@@ -320,3 +320,52 @@ func TestApplyDiffPropagatesInsertUIDs(t *testing.T) {
 		t.Errorf("update row uid %d does not address the replacement row (stored: %+v)", upd.UID, st.rows)
 	}
 }
+
+// reassigningLureStore is a sqlFaithfulLureStore that can also move a row to
+// a given uid, as the SQL store does (UIDReassigner).
+type reassigningLureStore struct{ *sqlFaithfulLureStore }
+
+func (s reassigningLureStore) ReassignUID(id string, from, to int64) error {
+	row, ok := s.rows[from]
+	if !ok {
+		return nil
+	}
+	delete(s.rows, from)
+	row.UID = to
+	s.rows[to] = row
+	return nil
+}
+
+// An update (bot command or v1 save that changes a rule's updatable fields)
+// keeps the rule's uid when the store supports it, so tracking mutes, alert
+// buttons and remembered id:N references stay valid. New rules still get
+// fresh uids.
+func TestApplyDiffKeepsUIDOnUpdate(t *testing.T) {
+	st := reassigningLureStore{newSQLFaithfulLureStore()}
+	if _, err := st.Insert(&db.LureTrackingAPI{ID: "u1", ProfileNo: 1, LureID: 502, Template: "1"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	existing, _ := st.SelectByIDProfile("u1", 1)
+
+	candidates := []db.LureTrackingAPI{
+		{ID: "u1", ProfileNo: 1, LureID: 502, Template: "2"}, // update
+		{ID: "u1", ProfileNo: 1, LureID: 503, Template: "1"}, // new
+	}
+	diff, err := ApplyDiff[db.LureTrackingAPI](st, "u1", existing, candidates, LureGetUID, LureSetUID)
+	if err != nil {
+		t.Fatalf("ApplyDiff: %v", err)
+	}
+
+	if upd := diff.Updates[0]; upd.UID != 1 {
+		t.Errorf("updated rule uid = %d, want it kept at 1", upd.UID)
+	}
+	if stored, ok := st.rows[1]; !ok || stored.Template != "2" {
+		t.Errorf("uid 1 should hold the updated rule, rows: %+v", st.rows)
+	}
+	if len(st.rows) != 2 {
+		t.Errorf("rows = %d, want 2 (updated + new)", len(st.rows))
+	}
+	if ins := diff.Inserts[0]; ins.UID == 1 || ins.UID == 0 {
+		t.Errorf("new rule uid = %d, want a fresh uid", ins.UID)
+	}
+}

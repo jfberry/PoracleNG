@@ -1,30 +1,36 @@
-[{
-  "id": "info",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!info",
-      "description": "Look up pokemon, items, and current game data — no tracking required.",
-      "fields": [
-        {
-          "name": "Pokemon details",
-          "value": "`{{prefix}}info <pokemon>` — by name or dex id. Returns types, base stats, generation, evolution chain, available forms, weather boost, and 100% IV CP at level 40."
-        },
-        {
-          "name": "Game data",
-          "value": "`{{prefix}}info moves` — list of moves with IDs\n`{{prefix}}info items` — list of items (berries, evolution stones, etc.) with IDs\n`{{prefix}}info weather` — current weather and boosted types\n`{{prefix}}info templates` — DTS template numbers loaded on this server (which `template:N` values your tracking rules can use)"
-        },
-        {
-          "name": "Statistics",
-          "value": "`{{prefix}}info rarity` — pokemon rarity tier breakdown (common → ultra-rare) and which species are in each tier\n`{{prefix}}info shiny` — observed shiny rates per species (sample-based, server-specific)"
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}tracked` — see your active tracking rules\n`{{prefix}}help track` — learn how to use the info above to build rules"
-        }
-      ]
+[
+  {
+    "id": "info",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!info",
+        "description": "Look up pokemon and game data. Nothing here changes your tracking.",
+        "fields": [
+          {
+            "name": "Pokemon",
+            "value": "`{{prefix}}info pikachu` — by name or dex number (`{{prefix}}info 25`): types, weather boosts, weaknesses and resistances, base stats, generation, evolutions, recently seen forms and costumes, shiny rate, and 100% IV CP at levels 15, 20, 25, 40, 50 and 51\n`{{prefix}}info vulpix forms` — every form, the recently seen ones first, written as the `form:` value to track\n`{{prefix}}info pikachu costumes` — costumes seen recently"
+          },
+          {
+            "name": "Game data",
+            "value": "`{{prefix}}info moves` — move names as used in `move:` filters, with their types\n`{{prefix}}info items` — item names\n`{{prefix}}info costumes` — every costume, with its ID\n`{{prefix}}info weather` — current weather and next-hour forecast at your location, and the types it boosts\n`{{prefix}}info weather 51.5,-0.12` — the same for a given point\n`{{prefix}}info templates` — the alert templates you can pick with `template:`"
+          },
+          {
+            "name": "Statistics",
+            "value": "`{{prefix}}info rarity` — pokemon grouped by how often they spawn here, common to ultra-rare\n`{{prefix}}info shiny` — shiny rates seen on this server"
+          },
+          {
+            "name": "{{#if userIsAdmin}}Admins{{/if}}",
+            "value": "{{#if userIsAdmin}}`{{prefix}}info dts` — every loaded template by type and platform\n`{{prefix}}info translate <word>` — look up a word in the translations{{/if}}"
+          },
+          {
+            "name": "Related",
+            "value": "`{{prefix}}help track` — use what you found here in tracking rules"
+          }
+        ]
+      }
     }
   }
-}]
+]

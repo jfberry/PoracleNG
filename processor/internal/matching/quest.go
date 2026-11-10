@@ -63,6 +63,7 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) (immediate []webh
 		}
 
 		td := trackingUserData{
+			RuleTable:             "quest",
 			HumanID:               q.ID,
 			ProfileNo:             q.ProfileNo,
 			Distance:              q.Distance,

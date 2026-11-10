@@ -2,9 +2,12 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -65,12 +68,24 @@ type ReconciliationDiscordConfig struct {
 	UpdateChannelNames        bool `toml:"update_channel_names"`
 	UpdateChannelNotes        bool `toml:"update_channel_notes"`
 	UnregisterMissingChannels bool `toml:"unregister_missing_channels"`
+
+	// PruneUserAreas removes areas a membership change no longer permits from
+	// humans.area and every profile. Default false: it destroys user-entered
+	// data, and an incomplete allowed_areas would empty a whole community.
+	// Exempt fences are never pruned (#243).
+	PruneUserAreas bool `toml:"prune_user_areas"`
 }
 
 // ReconciliationTelegramConfig holds settings from [reconciliation.telegram].
 type ReconciliationTelegramConfig struct {
 	UpdateUserNames    bool `toml:"update_user_names"`
 	RemoveInvalidUsers bool `toml:"remove_invalid_users"`
+
+	// PruneUserAreas removes areas a membership change no longer permits from
+	// humans.area and every profile. Default false: it destroys user-entered
+	// data, and an incomplete allowed_areas would empty a whole community.
+	// Exempt fences are never pruned (#243).
+	PruneUserAreas bool `toml:"prune_user_areas"`
 }
 
 // RoleSubscriptionEntry represents a [[discord.role_subscriptions]] TOML entry.
@@ -85,6 +100,7 @@ type TrackingConfig struct {
 	EverythingFlagPermissions   string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
 	DefaultDistance             int    `toml:"default_distance"`
 	MaxDistance                 int    `toml:"max_distance"`
+	MaxAreas                    int    `toml:"max_areas"`
 	EnableGymBattle             bool   `toml:"enable_gym_battle"`
 	DefaultUserTrackingLevelCap int    `toml:"default_user_tracking_level_cap"`
 	// PokemonChangeTracking controls whether the encounter tracker fires
@@ -93,6 +109,20 @@ type TrackingConfig struct {
 	// change events fall through to the regular `monster` send path — no
 	// reply threading, no `monsterChanged` template.
 	PokemonChangeTracking bool `toml:"pokemon_change_tracking"`
+	// PokemonEdit honours the edit bit on pokemon rules: a follow-up for the
+	// same encounter edits the original alert in place while it is within
+	// PokemonEditWindowMins. Default true. When false, pokemon jobs carry no
+	// edit key and follow-ups arrive as threaded replies.
+	PokemonEdit bool `toml:"pokemon_edit"`
+	// PokemonEditWindowMins is how old (minutes since first send) a pokemon
+	// alert may be and still be edited; older alerts get a threaded reply so
+	// the update isn't lost up a busy channel. Default 5. 0 or negative = no
+	// limit.
+	PokemonEditWindowMins int `toml:"pokemon_edit_window_mins"`
+	// DefaultEdit lists alert types (see DefaultEditTypes) whose rules edit
+	// in place even when the rule's edit bit is not set. Applied at match
+	// time, so it covers existing rules and reverts cleanly when removed.
+	DefaultEdit []string `toml:"default_edit"`
 	// QuestSummaryEnabled toggles the per-user buffered quest summary
 	// pipeline (matcher routing, scheduler, render). Default true. When
 	// disabled the scheduler isn't started; the buffer is still loaded
@@ -109,14 +139,48 @@ type TrackingConfig struct {
 	QuestSummaryBufferTTLHours int `toml:"quest_summary_buffer_ttl_hours"`
 }
 
+// DefaultEditTypes are the alert types whose alerts honour the edit bit and
+// so may appear in [tracking] default_edit.
+var DefaultEditTypes = []string{"pokemon", "raid", "egg", "lure", "incident"}
+
+// DefaultEditFor reports whether alertType is listed in default_edit.
+// Entries match ignoring case and surrounding spaces.
+func (t TrackingConfig) DefaultEditFor(alertType string) bool {
+	return slices.ContainsFunc(t.DefaultEdit, func(v string) bool { return sameEditType(v, alertType) })
+}
+
+func sameEditType(entry, alertType string) bool {
+	return strings.EqualFold(strings.TrimSpace(entry), alertType)
+}
+
+// UnsupportedDefaultEdit returns default_edit entries that are not in
+// DefaultEditTypes; they have no effect.
+func (t TrackingConfig) UnsupportedDefaultEdit() []string {
+	var bad []string
+	for _, v := range t.DefaultEdit {
+		if !slices.ContainsFunc(DefaultEditTypes, func(alertType string) bool { return sameEditType(v, alertType) }) {
+			bad = append(bad, v)
+		}
+	}
+	return bad
+}
+
+// PokemonEditMaxAge returns the pokemon edit window; 0 means no limit.
+func (t TrackingConfig) PokemonEditMaxAge() time.Duration {
+	if t.PokemonEditWindowMins <= 0 {
+		return 0
+	}
+	return time.Duration(t.PokemonEditWindowMins) * time.Minute
+}
+
 // SummariserConfig holds settings shared by all summariser pipelines
 // (currently quest summary; future raid/gym/etc. summaries will reuse).
 type SummariserConfig struct {
 	// MaxPerMessage chunks any reward group with more than N entries
 	// into ceil(total/N) consecutive messages so they fit Discord's
-	// 4096-char embed-description cap. Each chunk references the same
-	// shared static map (the tileserver caches by URL → one render,
-	// served N times). Default 25 — comfortably under the ~40-stop
+	// 4096-char embed-description cap. Each chunk gets its own static
+	// map autopositioned over just that chunk's stops, so the list and
+	// the pins match. Default 25 — comfortably under the ~40-stop
 	// limit when shlink is not configured. Set 0 to disable splitting
 	// (oversize groups will fail at the Discord API).
 	MaxPerMessage int `toml:"max_per_message"`
@@ -210,7 +274,15 @@ type ProcessorConfig struct {
 	Port        int      `toml:"port"`
 	IPWhitelist []string `toml:"ip_whitelist"`
 	IPBlacklist []string `toml:"ip_blacklist"`
-	APISecret   string   `toml:"api_secret"` // API secret for X-Poracle-Secret header authentication
+	// TrustedProxies lists reverse-proxy IPs/CIDRs whose X-Forwarded-For /
+	// X-Real-IP headers are honoured when determining the client IP for
+	// ip_whitelist / ip_blacklist. Empty = trust none (use the TCP peer).
+	TrustedProxies []string `toml:"trusted_proxies"`
+	APISecret      string   `toml:"api_secret"` // API secret for X-Poracle-Secret header authentication
+	// EnablePprof serves /debug/pprof (Go profiling) behind the API secret.
+	// Off by default: the endpoints leak process details and can be used to
+	// trigger expensive CPU profiles.
+	EnablePprof bool `toml:"enable_pprof"`
 }
 
 // AlerterConfig reads the [alerter] section for backward-compatible api_secret configuration.
@@ -408,6 +480,26 @@ func tomlTokens(v any) []string {
 	return nil
 }
 
+// IsLoopbackHost reports whether a listen host binds only to the loopback
+// interface: "localhost" or any loopback IP (127.0.0.0/8, ::1), optionally
+// bracketed. An empty host binds all interfaces and is not loopback.
+func IsLoopbackHost(host string) bool {
+	h := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(host), "["), "]")
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	a, err := netip.ParseAddr(h)
+	return err == nil && a.Unmap().IsLoopback()
+}
+
+// BlankAPISecretExposed reports whether the API is unauthenticated (blank
+// api_secret, which disables auth by design) while listening on a
+// non-loopback host — the case that warrants a startup warning (#266).
+// Host is the effective host, i.e. after the PORACLE_HOST default applies.
+func (p ProcessorConfig) BlankAPISecretExposed() bool {
+	return p.APISecret == "" && !IsLoopbackHost(p.Host)
+}
+
 // ListenAddr returns the host:port listen address.
 func (p ProcessorConfig) ListenAddr() string {
 	return fmt.Sprintf("%s:%d", p.Host, p.Port)
@@ -543,16 +635,16 @@ type StatsConfig struct {
 
 type TuningConfig struct {
 	ReloadIntervalSecs         int `toml:"reload_interval_secs"`
-	EncounterCacheTTL          int `toml:"encounter_cache_ttl"`
+	EncounterCacheTTL          int `toml:"encounter_cache_ttl"` // unused: never read, has no effect
 	WorkerPoolSize             int `toml:"worker_pool_size"`
-	BatchSize                  int `toml:"batch_size"`
-	FlushIntervalMillis        int `toml:"flush_interval_millis"`
+	BatchSize                  int `toml:"batch_size"`                   // unused: never read, has no effect
+	FlushIntervalMillis        int `toml:"flush_interval_millis"`        // unused: never read, has no effect
 	TileserverConcurrency      int `toml:"tileserver_concurrency"`       // tile worker goroutines (default 2)
 	TileserverTimeout          int `toml:"tileserver_timeout"`           // HTTP POST timeout ms (default 10000)
 	TileserverFailureThreshold int `toml:"tileserver_failure_threshold"` // circuit breaker threshold (default 5)
 	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`       // circuit breaker cooldown ms (default 30000)
 	TileserverQueueSize        int `toml:"tileserver_queue_size"`        // async tile queue depth (default 100)
-	TileserverDeadlineMs       int `toml:"tileserver_deadline"`          // max wait for tile before fallback ms (default 5000)
+	TileserverDeadlineMs       int `toml:"tileserver_deadline"`          // max wait for tile before fallback ms (default 10000)
 	TileserverPregenTTL        int `toml:"tileserver_pregen_ttl"`        // seconds for pregenerated tile TTL (default 86400 = 1 day, -1 = no TTL)
 	GeocodingConcurrency       int `toml:"geocoding_concurrency"`
 	GeocodingTimeout           int `toml:"geocoding_timeout"` // ms
@@ -648,6 +740,9 @@ type GeocodingConfig struct {
 	GeocodingKey []string `toml:"geocoding_key"` // google API keys
 	CacheDetail  int      `toml:"cache_detail"`  // decimal places for cache key rounding (default 3)
 	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
+	// LocalLanguage is the language of the provider's native place names;
+	// lookups in it are sent without a language (provider default).
+	LocalLanguage string `toml:"local_language"`
 	// IntersectionUsers is a pool of GeoNames usernames for nearest-street-
 	// intersection lookups (the {{intersection}} DTS field). Empty disables
 	// the feature. Results share the reverse-geocode pogreb cache.
@@ -937,6 +1032,8 @@ func Load(baseDir string) (*Config, error) {
 		},
 		Tracking: TrackingConfig{
 			PokemonChangeTracking:      true,
+			PokemonEdit:                true,
+			PokemonEditWindowMins:      5,
 			QuestSummaryEnabled:        true,
 			QuestSummaryBufferTTLHours: 24,
 		},

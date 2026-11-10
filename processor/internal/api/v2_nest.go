@@ -12,32 +12,32 @@ import (
 //
 // All filter fields are optional POINTERS (omitted ⇒ documented default via
 // valueOr); there is no required field. No enums. Defaults come from the field
-// audit nest table. ping is server-managed (not a caller input).
+// audit nest table.
 type v2NestRule struct {
-	PokemonID   *int `json:"pokemon_id,omitempty" nullable:"true" doc:"Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard."`
-	Form        *int `json:"form,omitempty" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
-	MinSpawnAvg *int `json:"min_spawn_avg,omitempty" nullable:"true" doc:"Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard."`
+	PokemonID   *int `json:"pokemon_id,omitempty" minimum:"1" nullable:"true" doc:"Pokédex id of the nesting species. Omit to match any species (stored as 0 = any). Returned as null when at its wildcard."`
+	Form        *int `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
+	MinSpawnAvg *int `json:"min_spawn_avg,omitempty" minimum:"0" nullable:"true" doc:"Minimum hourly spawn average to alert on. Omit to impose no minimum (stored as 0 = any). Returned as null when at its wildcard."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Values above the server's [tracking] max_distance are clamped to it, unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted. Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
+	Ping     *string `json:"ping,omitempty" nullable:"true" maxLength:"255" doc:"Text appended to the alert, typically Discord role/user mentions. Stored verbatim — not restricted to mention tokens as the bot is, so @everyone/@here in a channel rule will ping. Omit for none. Returned as null when empty."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
-	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
+	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Not supported for nest tracking — omit, or send null/false (true is rejected with 422). Always returned as null."`
 	Summary  *bool   `json:"summary,omitempty" nullable:"true" doc:"Route into the summary digest (clean bitmask bit 4). Omit to disable (default false). Returned as null when false."`
 
 	OverrideLocationLabel *string  `json:"override_location_label,omitempty" nullable:"true" doc:"Saved-location label to use instead of the profile location (requires distance > 0; mutually exclusive with override_areas). Omit for none. Returned as null when unset."`
-	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). Omit for none. Returned as null when unset."`
+	OverrideAreas         []string `json:"override_areas,omitempty" doc:"Restrict this rule to these geofence areas (mutually exclusive with distance > 0 and override_location_label). At most [tracking] max_areas names unless the human is an admin or not a user (channel, webhook, group, thread), or the request is trusted (a rule already stored over it may keep or shrink its own list). Omit for none. Returned as null when unset."`
 }
 
 // translateV2Nest converts a strict v2 nest rule into the stored NestTrackingAPI,
 // applying documented defaults, the clean bitmask, profile, and
-// validated/normalized override fields. ping is always stored "" (server-managed).
+// validated/normalized override fields.
 func translateV2Nest(deps *TrackingDeps, humanID string, profileNo int, oc overrideContext, req *v2NestRule) (db.NestTrackingAPI, error) {
-	distance := valueOr(req.Distance, 0)
-	const maxDistance = 40000000 // Earth circumference (metres)
-	if distance > maxDistance {
-		distance = maxDistance
+	if err := rejectEdit("nest", req.Edit); err != nil {
+		return db.NestTrackingAPI{}, err
 	}
+	distance := clampDistance(deps, oc.limitExempt, valueOr(req.Distance, wcDistance))
 
 	overrideLabel := valueOr(req.OverrideLocationLabel, "")
 	if msg, code := validateOverrideFields(deps, oc, humanID, overrideLabel, req.OverrideAreas, distance); msg != "" {
@@ -47,15 +47,15 @@ func translateV2Nest(deps *TrackingDeps, humanID string, profileNo int, oc overr
 	row := db.NestTrackingAPI{
 		ID:                    humanID,
 		ProfileNo:             profileNo,
-		Ping:                  "", // server-managed
+		Ping:                  valueOr(req.Ping, ""),
 		Template:              valueOr(req.Template, ""),
 		Distance:              distance,
-		PokemonID:             valueOr(req.PokemonID, 0),
-		MinSpawnAvg:           valueOr(req.MinSpawnAvg, 0),
-		Form:                  valueOr(req.Form, 0),
-		Clean:                 packClean(valueOr(req.Clean, false), valueOr(req.Edit, false), valueOr(req.Summary, false)),
+		PokemonID:             valueOr(req.PokemonID, wcAnyPokemonID),
+		MinSpawnAvg:           valueOr(req.MinSpawnAvg, wcNestMinSpawnAvg),
+		Form:                  valueOr(req.Form, wcForm),
+		Clean:                 packClean(valueOr(req.Clean, false), false, valueOr(req.Summary, false)),
 		OverrideLocationLabel: overrideLabel,
-		OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+		OverrideAreas:         canonicalOverrideAreas(deps, req.OverrideAreas),
 	}
 	return row, nil
 }
@@ -64,13 +64,14 @@ func translateV2Nest(deps *TrackingDeps, humanID string, profileNo int, oc overr
 // shape for responses.
 func nestRowToRule(row *db.NestTrackingAPI) v2NestRule {
 	return v2NestRule{
-		PokemonID:             ptrUnless(row.PokemonID, 0),
-		Form:                  ptrUnless(row.Form, 0),
-		MinSpawnAvg:           ptrUnless(row.MinSpawnAvg, 0),
-		Distance:              ptrUnless(row.Distance, 0),
+		PokemonID:             ptrUnless(row.PokemonID, wcAnyPokemonID),
+		Form:                  ptrUnless(row.Form, wcForm),
+		MinSpawnAvg:           ptrUnless(row.MinSpawnAvg, wcNestMinSpawnAvg),
+		Distance:              ptrUnless(row.Distance, wcDistance),
 		Template:              ptrUnless(row.Template, ""),
+		Ping:                  ptrUnless(row.Ping, ""),
 		Clean:                 ptrUnless(db.IsClean(row.Clean), false),
-		Edit:                  ptrUnless(db.IsEdit(row.Clean), false),
+		Edit:                  nil, // edit is not supported for this type; always null
 		Summary:               ptrUnless(db.IsSummary(row.Clean), false),
 		OverrideLocationLabel: ptrUnless(row.OverrideLocationLabel, ""),
 		OverrideAreas:         ptrUnlessSlice(row.OverrideAreas),

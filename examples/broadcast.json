@@ -1,6 +1,6 @@
 [
-  // An example template with different telegram and discord messages
   {
+    "_comment": "An example message with different discord and telegram versions. Send with: !broadcast @area donate",
     "id": "donate",
     "platform": "discord",
     "template": {
@@ -17,8 +17,8 @@
       "content": "More donations are needed for this area"
     }
   },
-  // An example message that will work for both telegram and discord
   {
+    "_comment": "An example message that works for both discord and telegram (no platform set)",
     "id": "2",
     "template": {
       "content": "This service takes a substantial amount of effort to maintain, please consider donating"

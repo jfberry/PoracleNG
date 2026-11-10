@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -58,8 +59,20 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	// A community admin (not a full admin) sees only humans belonging to
+	// a community they administer, as in PoracleJS.
+	var communityFilter []string
+	if !ctx.IsAdmin {
+		communityFilter = ctx.CommunityAdminOf
+	}
+
 	var filtered []*store.Human
 	for _, h := range allHumans {
+		if communityFilter != nil && !slices.ContainsFunc(h.CommunityMembership, func(c string) bool {
+			return slices.ContainsFunc(communityFilter, func(f string) bool { return strings.EqualFold(c, f) })
+		}) {
+			continue
+		}
 		if filterPlatform != "" && !strings.HasPrefix(h.Type, filterPlatform+":") && h.Type != filterPlatform {
 			continue
 		}

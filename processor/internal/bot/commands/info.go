@@ -82,22 +82,42 @@ func (c *InfoCommand) usage(ctx *bot.CommandContext) []bot.Reply {
 	return []bot.Reply{{Text: text}}
 }
 
+// splitInfoFormArg pulls a `form:<name>` argument out of args, accepting the
+// user's translated form prefix (arg.prefix.form, e.g. French "forme:") as
+// well as English "form:". Returns the lowercased form name and the
+// remaining args.
+func splitInfoFormArg(ctx *bot.CommandContext, args []string) (string, []string) {
+	prefixes := []string{"form:"}
+	if ctx.Translations != nil {
+		if p := strings.ToLower(ctx.Tr().T("arg.prefix.form")); p != "" && p != "arg.prefix.form" && p+":" != "form:" {
+			prefixes = append(prefixes, p+":")
+		}
+	}
+	var formFilter string
+	rest := make([]string, 0, len(args))
+	for _, a := range args {
+		lower := strings.ToLower(a)
+		matched := false
+		for _, prefix := range prefixes {
+			if after, ok := strings.CutPrefix(lower, prefix); ok {
+				formFilter = after
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			rest = append(rest, a)
+		}
+	}
+	return formFilter, rest
+}
+
 func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if ctx.Resolver == nil || ctx.GameData == nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	// Parse form: argument out of args
-	var formFilter string
-	nameArgs := make([]string, 0, len(args))
-	for _, a := range args {
-		lower := strings.ToLower(a)
-		if after, ok := strings.CutPrefix(lower, "form:"); ok {
-			formFilter = after
-		} else {
-			nameArgs = append(nameArgs, a)
-		}
-	}
+	formFilter, nameArgs := splitInfoFormArg(ctx, args)
 
 	tr := ctx.Tr()
 	enTr := ctx.Translations.For("en")
@@ -126,33 +146,16 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	pokemonID := resolved[0].PokemonID
 	form := resolved[0].Form
 
-	// If a form filter was specified, try to match it
+	// If a form filter was specified, look it up among the species' forms
+	// in game data (as !track form: does). The resolver only ever returns
+	// base forms, so searching its results never matches a form name.
 	if formFilter != "" {
-		matched := false
-		for _, r := range resolved {
-			if r.PokemonID != pokemonID {
-				continue
-			}
-			formName := strings.ToLower(ctx.Tr().T(gamedata.FormTranslationKey(r.Form)))
-			if formName == formFilter {
-				form = r.Form
-				matched = true
-				break
-			}
+		forms := filterByForm(ctx, []bot.ResolvedPokemon{{PokemonID: pokemonID}}, formFilter)
+		if len(forms) == 0 {
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.form_not_found",
+				ctx.EscapeForCode(formFilter), bot.CommandPrefix(ctx))}}
 		}
-		if !matched {
-			// Also try English form names
-			for _, r := range resolved {
-				if r.PokemonID != pokemonID {
-					continue
-				}
-				formName := strings.ToLower(enTr.T(gamedata.FormTranslationKey(r.Form)))
-				if formName == formFilter {
-					form = r.Form
-					break
-				}
-			}
-		}
+		form = forms[0].Form
 	}
 
 	mon := ctx.GameData.Monsters[gamedata.MonsterKey{ID: pokemonID, Form: form}]
@@ -172,7 +175,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 
 	// Determine platform for emoji resolution
-	platform := strings.SplitN(ctx.TargetType, ":", 2)[0]
+	platform, _, _ := strings.Cut(ctx.TargetType, ":")
 	if platform == bot.TypeWebhook {
 		platform = "discord"
 	}

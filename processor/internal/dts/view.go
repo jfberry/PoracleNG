@@ -40,7 +40,10 @@ var singleEmojiKeys = []struct {
 	{"lureEmojiKey", "lureTypeEmoji"},
 	// Gym
 	{"teamEmojiKey", "teamEmoji"},
-	{"oldTeamEmojiKey", "previousControlTeamEmoji"},
+	{"oldTeamEmojiKey", "oldTeamEmoji"},
+	{"previousControlTeamEmojiKey", "previousControlTeamEmoji"},
+	// Showcase
+	{"showcaseFocusEmojiKey", "showcaseFocusEmoji"},
 	// Weather
 	{"weatherEmojiKey", "weatherEmoji"},
 	{"oldWeatherEmojiKey", "oldWeatherEmoji"},
@@ -114,6 +117,7 @@ var commonAliases = []aliasPair{
 // fields depending on webhook type ("gym_name" for raids vs "name" for gym changes).
 var typeAliases = map[string][]aliasPair{
 	"monster": {
+		{"formId", "form"},
 		{"formname", "formName"},
 		{"ivcolor", "ivColor"},
 		{"pokestopName", "pokestop_name"},
@@ -130,6 +134,7 @@ var typeAliases = map[string][]aliasPair{
 		{"pokemonId", "pokemon_id"},
 	},
 	"monsterNoIv": {
+		{"formId", "form"},
 		{"formname", "formName"},
 		{"pokestopId", "pokestop_id"},
 		{"spawnpointId", "spawnpoint_id"},
@@ -137,13 +142,13 @@ var typeAliases = map[string][]aliasPair{
 		{"pokemonId", "pokemon_id"},
 	},
 	"raid": {
+		{"formId", "form"},
 		{"gymName", "gym_name"},
 		{"gymUrl", "gym_url"},
 		{"gymColor", "gym_color"},
 		{"gymId", "gym_id"},
 		{"teamId", "team_id"},
 		{"hatchtime", "hatchTime"},
-		{"ex", "is_ex_raid_eligible"},
 		{"move1", "quickMoveName"},
 		{"move2", "chargeMoveName"},
 		{"formname", "formName"},
@@ -160,7 +165,6 @@ var typeAliases = map[string][]aliasPair{
 		{"gymId", "gym_id"},
 		{"teamId", "team_id"},
 		{"hatchtime", "hatchTime"},
-		{"ex", "is_ex_raid_eligible"},
 	},
 	// rsvpChanges is a single template type used for both raid and egg RSVP
 	// updates (the raid-rsvp branch's compact card). The source webhook is
@@ -169,13 +173,13 @@ var typeAliases = map[string][]aliasPair{
 	// are a subset of raid's (no moves/forms because eggs aren't hatched),
 	// and the extras are harmless when fields aren't populated.
 	"rsvpChanges": {
+		{"formId", "form"},
 		{"gymName", "gym_name"},
 		{"gymUrl", "gym_url"},
 		{"gymColor", "gym_color"},
 		{"gymId", "gym_id"},
 		{"teamId", "team_id"},
 		{"hatchtime", "hatchTime"},
-		{"ex", "is_ex_raid_eligible"},
 		{"move1", "quickMoveName"},
 		{"move2", "chargeMoveName"},
 		{"formname", "formName"},
@@ -252,6 +256,7 @@ var typeAliases = map[string][]aliasPair{
 		{"lureType", "lureTypeName"},
 	},
 	"nest": {
+		{"formId", "form"},
 		{"nestName", "nest_name"},
 		{"nestId", "nest_id"},
 	},
@@ -306,7 +311,11 @@ func escapeJSONString(s string) string {
 func escapeUserContentLayered(computed map[string]any, layers ...map[string]any) {
 	fields := []string{
 		"pokestop_name", "pokestop_url",
+		// Quest summary per-stop entries carry the camelCase key directly
+		// (see escapeQuestSummaryStops).
+		"pokestopName",
 		"gym_name",
+		"station_name",
 		"nest_name",
 		"name",
 		"description",

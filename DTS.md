@@ -175,6 +175,40 @@ Use this for conditional buttons that only make sense on certain alerts — PVP 
 
 `GET /api/dts/actions` returns each action's `name`, accepted `scopes`, whether `required_scope` is true, and the `params` keys the handler knows about. The PoracleWeb editor uses this to drive its button-authoring UI. See [`docs/CONFIG-EDITOR-INSTRUCTIONS.md`](docs/CONFIG-EDITOR-INSTRUCTIONS.md) for the editor-side spec.
 
+## Telegram Message Fields
+
+A Telegram template renders to a JSON object that the processor sends as a sequence of Telegram messages:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | string | Text message body (max 4096 characters, truncated) |
+| `parse_mode` | string | `Markdown` (default), `MarkdownV2` or `HTML` — applies to `content` and the photo caption |
+| `webpage_preview` | bool | Show link previews in the text message |
+| `sticker` | string | Sticker URL |
+| `photo` | string or object | Photo URL, or `{"url": "...", "caption": "..."}` to send the photo with a caption |
+| `location` | bool | Send a map pin at the alert's coordinates |
+| `venue` | object | `{"title": "...", "address": "..."}` — send a venue at the alert's coordinates |
+| `send_order` | array | Order of steps; default `["sticker", "photo", "text", "location", "venue"]`. Steps not listed are not sent |
+
+### Photo captions
+
+Give `photo` as an object to attach a caption, which uses the template's `parse_mode`. Telegram limits captions to 1024 characters; longer captions are truncated. A caption is independent of `content` — leave `text` out of `send_order` (or `content` empty) for a single photo-with-caption message:
+
+```json
+{
+  "photo": {
+    "url": "{{{staticMap}}}",
+    "caption": "<b>{{fullName}}</b> {{iv}}% — until {{time}}"
+  },
+  "parse_mode": "HTML",
+  "send_order": ["sticker", "photo"]
+}
+```
+
+**Notifications**: only one message per alert notifies. A captioned photo notifies unless a text message is also sent (that text is then the notifying message). Stickers, uncaptioned photos and locations are always silent.
+
+**Edits**: when an alert is edited (edit mode), a captioned photo's caption is updated in place alongside any text message. The photo itself is not replaced.
+
 ## Poracle Fields vs Raw Webhook Fields
 
 Templates have access to both **Poracle enriched fields** and **raw webhook fields** from Golbat. The enriched fields are recommended because they are:
@@ -188,7 +222,7 @@ Raw webhook fields use snake_case (e.g. `pokemon_id`, `team_id`, `move_1`) while
 
 ## Common Fields (all alert types)
 
-These fields are available in every template:
+These fields are available in every alert template, with the exceptions noted: the map links are not set for `weatherchange`; the time-remaining fields (`tthd`…`tths`) are not set for `weatherchange` (see `weatherTth`) or `fort-update`; the sun flags (`nightTime`, `dawnTime`, `duskTime`) are not set for `quest` or `nest`. The `greeting` template only receives `{{prefix}}`, and `questSummary` has its own top-level view (see [Quest Summary](#quest-summary-questsummary)).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -233,11 +267,9 @@ These fields are available in every template:
 | `tthm` | int | Minutes component of time remaining |
 | `tths` | int | Seconds component of time remaining |
 | `distime` | string | *Deprecated* — alias for `disappearTime` |
-| `distance` | number | Distance from the user's registered location to the alert, in metres |
-| `bearing` | int | Bearing from user to alert, in degrees |
-| `bearingEmoji` | string | Directional arrow emoji for `bearing` |
 | `userDistanceTrack` | bool | True when the matched tracking rule was distance-based (e.g. `!track pikachu d:500` or `!raid T5 d:1000`) rather than area-based. Useful for conditioning the template on *why* the user received the alert. |
-| `userTrackDistance` | int | The matched rule's distance threshold in metres. `0` when the rule was area-based. For pokemon alerts where multiple rules can match one user, this is the largest threshold across matching rules. |
+
+`distance`, `bearing`, `bearingEmoji` and `userTrackDistance` are per-user fields computed for **pokemon alerts only** — see [Distance and bearing](#distance-and-bearing-pokemon-only). Other alert types render once per (template, platform, language) group and have no per-user distance.
 
 ### Weather Fields (types with S2 cell data: pokemon, raid, egg, invasion, maxbattle)
 
@@ -309,7 +341,7 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 | `color` | string | Primary type color hex |
 | `emojiString` | string | Type emojis concatenated |
 | `typeEmoji` | string | Type emojis concatenated (resolved from emoji keys) |
-| `weaknessList` | array | Weakness categories: `{value, types: [{typeId, name, typeEmoji}]}` |
+| `weaknessList` | array | Weakness categories: `{value, typeName, typeEmoji, types: [{typeId, name, emoji}]}` |
 | `weaknessEmoji` | string | Flat space-separated `"<value>x<typeEmoji>"` per category, e.g. `"2x💧⚡ 4x🪨 "` — for templates that don't iterate `weaknessList`. |
 
 ### Moves
@@ -332,7 +364,7 @@ Weather boost fields (`boosted`, `boostWeatherId`, `boostWeatherName`, `boostWea
 | Field | Type | Description |
 |-------|------|-------------|
 | `weather` | int | Boosted weather ID (from webhook) |
-| `weatherChangeTime` | string | Time of next hour boundary (potential weather change) |
+| `weatherChangeTime` | string | Hour boundary (HH:MM) at which the weather may change — set only when the next-hour forecast may change this pokemon's boost before it despawns |
 | `weatherForecastCurrent` | int | Forecast current weather ID (if AccuWeather configured) |
 | `weatherForecastNext` | int | Forecast next-hour weather ID (if AccuWeather configured) |
 | `nextHourTimestamp` | int | Unix timestamp of next hour boundary |
@@ -348,10 +380,15 @@ Base enrichment (available to all users):
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `pvpBestRank` | object | Best rank across leagues |
-| `bestGreatLeagueRank` | object | Best Great League rank entry |
-| `bestUltraLeagueRank` | object | Best Ultra League rank entry |
-| `bestLittleLeagueRank` | object | Best Little League rank entry |
+| `pvpBestRank` | object | Best rank entries keyed by league cap (`500`, `1500`, `2500`), each a list of `{rank, cp, caps, form, evolution}` |
+| `bestGreatLeagueRank` | int | Best (lowest) Great League rank of the base form (megas excluded) |
+| `bestGreatLeagueRankCP` | int | CP at `bestGreatLeagueRank` |
+| `bestUltraLeagueRank` | int | Best Ultra League rank of the base form |
+| `bestUltraLeagueRankCP` | int | CP at `bestUltraLeagueRank` |
+| `bestLittleLeagueRank` | int | Best Little League rank of the base form |
+| `bestLittleLeagueRankCP` | int | CP at `bestLittleLeagueRank` |
+
+The `best*LeagueRank` fields are only set when the webhook carries PVP data for that league.
 
 Per-user enrichment (varies based on user's tracking filters):
 
@@ -368,9 +405,11 @@ Per-user enrichment (varies based on user's tracking filters):
 | `pvpUserRanking` | int | The matched rule's worst-rank threshold (0 when the rule was not PVP-based) |
 | `pvpDisplayGreatMinCP` | int | Minimum CP threshold for Great League display |
 | `pvpDisplayUltraMinCP` | int | Minimum CP threshold for Ultra League display |
+| `pvpDisplayLittleMinCP` | int | Minimum CP threshold for Little League display |
 
-Each PVP display entry has: `{pokemon, pokemonName, fullName, formName, rank, cp, percentage, level, evolution, cap, pokemon_id, form}`
-Each "best" object has the same fields as a display entry.
+Each PVP display entry (`{{#each pvpGreat}}` etc.) has: `rank`, `cp`, `level`, `levelWithCap`, `cap`, `capped`, `percentage`, `pokemon` (pokemon ID), `pokemonId` (same), `form`, `evolution`, `name`, `fullName`, `formName`, `formNormalised`, `nameEng`, `fullNameEng`, `formNormalisedEng`, `baseStats`, `baseAttack`, `baseDefense`, `baseStamina`, `matchesUserTrack` and `passesFilter`. There is no `pokemonName` or `pokemon_id` on an entry — use `name` / `pokemon`.
+
+Each "best" object (`pvpGreatBest` etc.) is `{rank, list, name}`: the best rank, the display entries at that rank, and their comma-joined `fullName`s.
 
 `evolution` is the game's temporary/mega-evolution id: `0`=base form, `1`=Mega, `2`=Mega X, `3`=Mega Y. `fullName` already incorporates the mega form name (e.g. "Mega Charizard X"). Users can match specific mega ranks with the `mega` / `mega:x` / `mega:y` keywords on `!track` (stored as the `pvp_ranking_evolution` tracking field).
 
@@ -416,16 +455,35 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `genderNameEng` | string | English gender name |
 | `typeNameEng` | array | Array of English type name strings |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
-| `evolutions` | array | Evolution chain entries |
+| `evolutions` | array | Evolution chain entries (see [Evolution entries](#evolution-entries)) |
 | `hasEvolutions` | bool | Has evolutions |
-| `megaEvolutions` | array | Mega evolution entries |
-| `hasMegaEvolutions` | bool | Has mega evolutions |
+| `megaEvolutions` | array | Mega evolution entries (see [Evolution entries](#evolution-entries)) |
+| `hasMegaEvolutions` | bool | A mega evolution exists anywhere in the chain (Electrike → Mega Manectric) |
 | `pokestopName` | string | Nearby pokestop name (if applicable) |
 | `costumeName` | string | Translated costume name (empty when no costume, i.e. `costume == 0` or the `costume_N` translation key is absent). |
 
-`distance`, `bearing`, `bearingEmoji`, `userDistanceTrack`, `userTrackDistance` are documented in Common Fields.
+### Distance and bearing (pokemon only)
+
+Computed per recipient, so only pokemon alerts (which render per user) have them:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `distance` | int | Distance from the user's location to the pokemon, in metres |
+| `bearing` | int | Bearing from the user to the pokemon, in degrees |
+| `bearingEmoji` | string | Directional arrow emoji for `bearing` |
+| `userTrackDistance` | int | The matched rule's distance threshold in metres. `0` when the rule was area-based. When several rules match one user, this is the largest threshold. |
+
+`userDistanceTrack` (all alert types) is in Common Fields.
 
 **Note:** `fullName` already includes the costume, parenthesised, when the pokemon is wearing one — e.g. `"Pikachu (Holiday 2016)"`. `costumeName` is provided separately for templates that want to style or place the costume text independently of `fullName`.
+
+#### Evolution entries
+
+Each `{{#each evolutions}}` entry (pokemon and raid) has: `id`, `form`, `name`, `nameEng`, `fullName`, `fullNameEng`, `formName`, `formNameEng`, `formNormalised`, `formNormalisedEng`, `typeName`, `typeEmoji` (joined emoji string for the platform), `emoji` (array), `typeEmojiKeys`, `baseStats` and `evolutionRequirement`. The chain is walked recursively, so Bulbasaur lists both Ivysaur and Venusaur.
+
+Each `{{#each megaEvolutions}}` entry has: `evolution` (temp evolution id), `fullName`, `fullNameEng`, `typeName`, `typeEmoji`, `emoji`, `typeEmojiKeys` and `baseStats`.
+
+Inside the loop, use `../` for the alert's own fields, e.g. `{{calculateCp baseStats ../level ../atk ../def ../sta}}`.
 
 ### seenType values
 
@@ -461,13 +519,18 @@ for the operator-facing summary.
 
 The template receives every field listed under [Pokemon (`monster` /
 `monsterNoIv`)](#pokemon-monster--monsternoiv) — those describe the **new**
-state. Additionally, `{{original.X}}` exposes the same field set for the
-**prior** sighting (minus PVP, which is stripped at storage time): identity
-(`original.fullName`, `original.formName`, `original.pokemonId`, …), battle
-stats (`original.cp`, `original.iv`, `original.atk/def/sta`,
-`original.level`), weather (`original.weatherName`, `original.gameWeatherId`),
-images and map URLs (`original.imgUrl`, `original.staticMap`,
-`original.mapurl`), and so on.
+state. Additionally, `{{original.X}}` exposes the **prior** sighting's
+enrichment (base + translated fields; PVP is stripped at storage time):
+identity (`original.fullName`, `original.formName`, `original.pokemonId`, …),
+battle stats (`original.cp`, `original.iv`, `original.atk/def/sta`,
+`original.level`), weather (`original.boostWeatherName`,
+`original.gameWeatherId`), icons and map links (`original.imgUrl`,
+`original.googleMapUrl`), and so on.
+
+`original` is a plain map, not a full view: it has no aliases (use
+`original.googleMapUrl`, not `original.mapurl`), no resolved emoji (only the
+`…EmojiKey` fields), no computed fields (`time`, `tthh`, …), no raw webhook
+fields and no `staticMap` (the prior sighting is enriched without a tile).
 
 `{{original.X}}` is rendered per recipient: each user's language picks the
 appropriate translated names (`original.fullName` for a German user is
@@ -538,8 +601,9 @@ Hatched raid with a boss pokemon.
 | `fullNameEng` | string | English name + form |
 | `formNormalisedEng` | string | English form name (empty if "Normal") |
 | `evolutionName` | string | Evolution name (for mega raids) |
-| `megaName` | string | Mega evolution name (fullName when evolved, name when not) |
+| `megaName` | string | Same as `fullName` (which already includes the mega/primal form when the boss is evolved) |
 | `form` | int | Form ID (from webhook) |
+| `formId` | int | Alias for `form` |
 | `level` | int | Raid level |
 
 ### Gym
@@ -590,9 +654,9 @@ Hatched raid with a boss pokemon.
 | `shinyPossible` | bool | Can raid boss be shiny |
 | `shinyPossibleEmoji` | string | Shiny sparkle emoji (empty if not shiny possible) |
 | `hasEvolutions` | bool | Boss has evolutions |
-| `evolutions` | array | Evolution chain entries |
-| `hasMegaEvolutions` | bool | Boss has mega evolutions |
-| `megaEvolutions` | array | Mega evolution entries |
+| `evolutions` | array | Evolution chain entries (see [Evolution entries](#evolution-entries)) |
+| `hasMegaEvolutions` | bool | A mega evolution exists anywhere in the boss's chain |
+| `megaEvolutions` | array | Mega evolution entries (see [Evolution entries](#evolution-entries)) |
 
 ### Timing
 
@@ -612,13 +676,12 @@ Weather and boost fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`
 | Field | Type | Description |
 |-------|------|-------------|
 | `boostingWeatherIds` | array | All weather IDs that boost this pokemon's types |
-| `weatherChangeTime` | string | Time of next hour boundary (potential weather change) |
+| `weatherChangeTime` | string | Hour boundary (HH:MM) at which the weather may change — set only for hatched raids when the next-hour forecast may change the boss's boost before the raid ends (never for eggs) |
 | `weatherForecastCurrent` | int | Forecast current weather ID (if AccuWeather configured) |
 | `weatherForecastNext` | int | Forecast next-hour weather ID (if AccuWeather configured) |
 | `nextHourTimestamp` | int | Unix timestamp of next hour boundary |
-
 | `boostingWeathersEmoji` | string | All boosting weather emojis concatenated |
-| `weatherChange` | string | Composed weather forecast text (e.g. "Warning Possible weather change at 14:00 : Clear -> Rain") |
+| `weatherChange` | string | Composed weather forecast text (e.g. "Warning Possible weather change at 14:00 : Clear -> Rain"); hatched raids only, set together with `weatherChangeTime` |
 | `weatherCurrentName` | string | Translated current forecast weather name |
 | `weatherCurrentEmoji` | string | Current forecast weather emoji |
 | `weatherNextName` | string | Translated next forecast weather name |
@@ -649,9 +712,9 @@ Unhatched raid egg.
 | `teamEmoji` | string | Team emoji |
 | `teamColor` | string | Team color hex |
 | `gymColor` | string | Gym color hex (alias for `gym_color`) |
-| `ex` | bool | EX raid eligible (alias for `is_ex_raid_eligible`) |
+| `ex` | bool | EX raid eligible (`ex_raid_eligible`, or the older `is_ex_raid_eligible`) |
 | `hatchTime` | string | Hatch time (formatted) |
-| `time` | string | Alias for `disappearTime` (raid end time) |
+| `time` | string | **Hatch** time (same as `hatchTime`). Intentional: for eggs `time` is when the egg hatches, unlike every other type where it is the expiry/end time. |
 | `disappearTime` | string | Raid end time (formatted) |
 | `start` | int | Hatch unix timestamp |
 | `end` | int | Raid end unix timestamp |
@@ -751,7 +814,7 @@ See `examples/dts/rsvpChanges/rsvp-update.json` for an installable starting poin
 
 Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
 
-Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `quest_title`, `target`) are also available.
+Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `title`, `target`, `template`, `with_ar`) are also available.
 
 ### Reward Name Strings
 
@@ -892,7 +955,7 @@ Always guard the leaderboard with `{{#if showcasePresent}}` and the focus line w
 | `showcaseFocusType` | string | Raw focus class: `pokemon`, `type`, `alignment`, `class`, `family`, `buddy`, `generation`, `hatched`, `mega`, `shiny`. |
 | `showcaseFocusCategory` | string | Translated focus category label, e.g. `Type`, `Buddy`. |
 | `showcaseFocusName` | string | Translated featured value, e.g. `Steel` (type focus) or `3+` (buddy focus). Empty for flag focuses (`hatched`/`shiny`/`mega`) — the category conveys it. |
-| `showcaseFocusEmoji` | string | Optional emoji key for the focus category (from `util.json` `showcaseFocus`). |
+| `showcaseFocusEmoji` | string | Emoji for the focus category. Keys are `showcase-focus-<type>` (e.g. `showcase-focus-type`), default 🏆, overridable in `emoji.json`. |
 
 The focus tells you *what the contest is featuring* (e.g. "Type: Steel"), separate from the `showcase` leaderboard of *who is winning*. Example: `{{#if showcaseFocusPresent}}Featuring {{showcaseFocusCategory}}: {{showcaseFocusName}}{{/if}}`.
 
@@ -1023,7 +1086,7 @@ Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `lure_id`) a
 | `gymUrl` | string | Gym image URL (alias for webhook `url`) |
 | `teamId` | int | New team ID (alias for `team_id`) |
 | `oldTeamId` | int | Previous team ID |
-| `previousControlId` | int | Previous controller's team ID (from `last_owner_id` webhook field) |
+| `previousControlId` | int | Previous controlling team ID — the last non-zero team the processor saw on this gym (Golbat doesn't send it); `-1` when unknown |
 | `teamName` | string | Translated new team name |
 | `teamNameEng` | string | English team name |
 | `teamColor` | string | Team color hex |
@@ -1034,7 +1097,8 @@ Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `lure_id`) a
 | `gymColor` | string | New team color hex |
 | `color` | string | Same as gymColor (*deprecated*) |
 | `teamEmoji` | string | New team emoji |
-| `previousControlTeamEmoji` | string | Previous team emoji |
+| `oldTeamEmoji` | string | Old team emoji (from `old_team_id`) |
+| `previousControlTeamEmoji` | string | Previous controlling team's emoji (see `previousControlId`) |
 | `slotsAvailable` | int | Available defender slots |
 | `oldSlotsAvailable` | int | Previous available slots |
 | `trainerCount` | int | Current defenders (6 - slots) |
@@ -1053,6 +1117,7 @@ Time-remaining fields are set with a fixed 1-hour TTH.
 |-------|------|-------------|
 | `nestName` | string | Nest/park name (from webhook) |
 | `pokemonId` | int | Pokemon ID (camelCase alias) |
+| `formId` | int | Form ID (alias for `form`) |
 | `pokemonCount` | int | Observed spawn count (from webhook) |
 | `pokemonSpawnAvg` | float | Average spawns per hour |
 | `name` | string | Translated pokemon name |
@@ -1075,7 +1140,9 @@ Time-remaining fields are set with a fixed 1-hour TTH.
 
 Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
 
-Raw webhook fields (`nest_id`, `nest_name`, `pokemon_id`, `form`, `pokemon_avg`) are also available.
+Raw webhook fields (`nest_id`, `nest_name`, `pokemon_id`, `form`, `pokemon_avg`, `pokemon_ratio`) are also available.
+
+There is no `{{id}}` on nests — use `pokemonId` for the pokemon or `nestId` (alias for `nest_id`) for the nest.
 
 Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for nests.
 
@@ -1091,14 +1158,14 @@ Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for n
 | `stationId` | string | Battle station ID |
 | `stationName` | string | Station name |
 | `pokemonId` | int | Battle pokemon ID |
-| `id` | int | Same as pokemonId |
+| `id` | int | Same as `pokemonId`. The raw webhook `id` is the station — use `stationId` for that. |
 | `name` | string | Translated pokemon name |
 | `formName` | string | Translated form name |
 | `fullName` | string | Name + form |
 | `level` | int | Battle level |
 | `levelName` | string | Translated level name |
-| `gmax` | bool | Is Gigantamax |
-| `megaName` | string | Mega/Gmax name |
+| `gmax` | int | `1` when Gigantamax, else `0` — test with `{{#if gmax}}` |
+| `megaName` | string | Same as `fullName` |
 | `quickMoveName` | string | Translated fast move |
 | `chargeMoveName` | string | Translated charged move |
 | `quickMoveEmoji` | string | Fast move type emoji |
@@ -1118,13 +1185,15 @@ Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for n
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
 | `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category |
-| `evolutions` | array | Evolution chain |
-| `megaEvolutions` | array | Mega evolutions |
+| `total_stationed_pokemon` | int | Pokemon stationed at the station |
+| `total_stationed_gmax` | int | Gigantamax pokemon stationed at the station |
 | `time` | string | Battle end time |
 | `tthd` | int | Days remaining |
 | `tthh` | int | Hours |
 | `tthm` | int | Minutes |
 | `tths` | int | Seconds |
+
+`evolutions` / `megaEvolutions` are not set for max battles.
 
 ---
 
@@ -1132,19 +1201,22 @@ Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for n
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `weatherId` | int | New weather condition ID |
-| `oldWeatherId` | int | Previous weather condition ID |
-| `condition` | int | Same as weatherId |
-| `weatherName` | string | Translated new weather name |
-| `oldWeatherName` | string | Translated previous weather name |
-| `weatherEmoji` | string | New weather emoji |
-| `oldWeatherEmoji` | string | Previous weather emoji |
-| `weatherCellId` | string | S2 cell ID |
-| `s2_cell_id` | string | Same as weatherCellId |
-| `source` | string | Change source ("webhook" or "fromMonster") |
-| `activePokemons` | array | Affected tracked pokemon (when configured) |
+| `gameplay_condition` | int | New weather ID (raw) |
+| `old_gameplay_condition` | int | Previous weather ID (raw) |
+| `s2_cell_id` | string | S2 weather cell ID (raw) |
+| `source` | string | How the change was detected: `webhook` or `fromMonster` (raw) |
+| `updated` | int | Unix timestamp of the weather update (raw) |
+| `weatherName` | string | Translated new weather name (`weather` / `weathername` are lowercase aliases) |
+| `oldWeatherName` | string | Translated previous weather name (`oldweather` / `oldweathername` are aliases) |
+| `weatherEmoji` | string | New weather emoji (`weatheremoji` alias) |
+| `oldWeatherEmoji` | string | Previous weather emoji (`oldweatheremoji` alias) |
+| `weatherTth` | object | Time until the next hourly weather update: `{days, hours, minutes, seconds}`, e.g. `{{weatherTth.minutes}}` |
+| `activePokemons` | array | The user's tracked pokemon affected by the change (requires `[weather] show_altered_pokemon = true`; independent of `show_altered_pokemon_static_map`) |
+| `enrichedActivePokemons` | array | Alias of `activePokemons` |
 
-Each `activePokemons` entry:
+There is no `weatherId`, `oldWeatherId`, `condition` or `weatherCellId` — use the raw fields above. Map links and the `tthd`…`tths` fields are not set for weather changes.
+
+Each `enrichedActivePokemons` / `activePokemons` entry:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -1154,10 +1226,13 @@ Each `activePokemons` entry:
 | `cp` | int | CP |
 | `latitude` | float | Pokemon latitude |
 | `longitude` | float | Pokemon longitude |
-| `disappearTime` | string | Disappear time |
+| `disappearTime` | int | Disappear time (unix timestamp) |
 | `name` | string | Translated pokemon name |
+| `nameEng` | string | English pokemon name |
 | `fullName` | string | Name + form |
+| `fullNameEng` | string | English name + form |
 | `formName` | string | Form name |
+| `formNormalised` | string | Form name (empty if "Normal") |
 | `imgUrl` | string | Pokemon icon URL |
 
 ---
@@ -1219,7 +1294,7 @@ All comparison helpers work both as block helpers (`{{#eq a b}}X{{else}}Y{{/eq}}
 
 **Math:** `{{add a b}}`, `{{plus a b}}`, `{{subtract a b}}`, `{{minus a b}}`, `{{multiply a b}}`, `{{divide a b}}`, `{{round v}}`, `{{floor v}}`, `{{ceil v}}`, `{{toFixed v decimals}}`, `{{toInt v}}`
 
-**String:** `{{contains str sub}}`, `{{join arr sep}}`, `{{concat a b ...}}` (variadic), `{{lowercase str}}`, `{{uppercase str}}`, `{{capitalize str}}`, `{{replace str old new}}` (all occurrences), `{{replaceFirst str old new}}` (first occurrence only), `{{truncate str maxLen [suffix="..."]}}`
+**String:** `{{contains str sub}}`, `{{join arr sep}}`, `{{concat a b ...}}` (variadic), `{{lowercase str}}`, `{{uppercase str}}`, `{{capitalize str}}`, `{{capitalizeAll str}}` (every word), `{{ellipsis str n}}` (first n characters + `…` if longer), `{{remove str sub}}` (all occurrences), `{{#startsWith prefix str}}...{{else}}...{{/startsWith}}` (also as a subexpression), `{{replace str old new}}` (all occurrences), `{{replaceFirst str old new}}` (first occurrence only), `{{truncate str maxLen [suffix="..."]}}`
 
 **Array:** `{{length arr}}`, `{{first arr [n=1]}}`, `{{last arr [n=1]}}`
 
@@ -1230,7 +1305,7 @@ All comparison helpers work both as block helpers (`{{#eq a b}}X{{else}}Y{{/eq}}
 - `{{pokemonNameEng id}}` — English pokemon name
 - `{{pokemonNameAlt id}}` — alt-language pokemon name
 - `{{pokemonForm formId}}` / `{{pokemonFormEng formId}}` / `{{pokemonFormAlt formId}}` — form names
-- `{{#pokemon id form}}...{{/pokemon}}` — block helper providing rich pokemon context (`name`, `nameEng`, `formName`, `fullName`, `typeName`, `typeEmoji`, `baseStats`, `hasEvolutions`)
+- `{{#pokemon id}}...{{/pokemon}}` or `{{#pokemon id form}}...{{/pokemon}}` — block helper providing rich pokemon context (`name`, `nameEng`, `formName`, `fullName`, `typeName`, `typeEmoji`, `baseStats`, `hasEvolutions`); `form` is optional
 - `{{pokemonBaseStats id form}}` — returns `{baseAttack, baseDefense, baseStamina}`
 - `{{calculateCp baseStats level ivAtk ivDef ivSta}}` or `{{calculateCp pokemonId formId level ivAtk ivDef ivSta}}` — calculate CP
 - `{{moveName id}}` / `{{moveNameEng id}}` / `{{moveNameAlt id}}` — move name lookups
@@ -1239,7 +1314,9 @@ All comparison helpers work both as block helpers (`{{#eq a b}}X{{else}}Y{{/eq}}
 - `{{getEmoji key}}` — emoji lookup by key (platform-aware)
 - `{{translateAlt text}}` — translate key in alt language
 - `{{#getPowerUpCost startLevel endLevel}}...{{/getPowerUpCost}}` — power-up costs (`stardust`, `candy`, `xlCandy`)
-- `{{#map "mapName" value}}...{{/map}}` / `{{#map2 "mapName" value fallback}}...{{/map2}}` — custom map lookups (from `config/customMaps/`)
+- `{{map "mapName" value}}` / `{{map2 "mapName" value fallback}}` — custom map lookups (from `config/customMaps/`). Inline use prints the value; a missing key prints nothing, so `{{#if (map "mapName" value)}}` works as a test. Block use `{{#map "generation" pokemonId}}Gen {{genNumber}} {{genName}}{{else}}?{{/map}}` renders the body with an object value as context; `{{else}}` runs on a miss.
+
+  Files use the PoracleJS format — `{"name": "generation", "language": "de", "map": {"1": {...}}}` (`language` optional), or an array of those — or a flat `{"key": "value"}` named after the file (`arealist.de.json` is the German `arealist`). Values may be strings, numbers or objects. The map is looked up by `name`, not by file name. A language variant is tried before the base map, key by key. Maps are loaded at startup; editors can fetch them from `GET /api/dts/custommaps`.
 
 **Utility:** `{{escape value}}` — explicit HTML escaping
 

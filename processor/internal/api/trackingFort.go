@@ -164,7 +164,7 @@ func HandleCreateFort(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Pre-fetch override context once so per-row validation doesn't re-query.
-		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
 		if ocMsg != "" {
 			trackingJSONError(c, ocCode, ocMsg)
 			return
@@ -185,7 +185,7 @@ func HandleCreateFort(deps *TrackingDeps) gin.HandlerFunc {
 				return
 			}
 
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -224,7 +224,7 @@ func HandleCreateFort(deps *TrackingDeps) gin.HandlerFunc {
 				IncludeEmpty:          includeEmpty,
 				ChangeTypes:           changeTypes,
 				OverrideLocationLabel: req.OverrideLocationLabel,
-				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+				OverrideAreas:         v1NormalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 
@@ -235,6 +235,10 @@ func HandleCreateFort(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.FortGetUID, store.FortSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.FortGetUID, store.FortSetUID)
 
 		// Build confirmation message before applying changes

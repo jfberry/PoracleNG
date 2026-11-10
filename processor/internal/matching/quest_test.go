@@ -482,6 +482,9 @@ func TestQuestRealSquirtleFormFilter(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct form 181, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "quest" {
+		t.Errorf("RuleTable = %q, want quest", matched[0].RuleTable)
+	}
 
 	// Different form from webhook (172 = Charmander form)
 	data.Rewards[0].FormID = 172

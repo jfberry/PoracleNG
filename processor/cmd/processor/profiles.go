@@ -7,6 +7,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/humanlock"
 )
 
 // profileScheduleMinutes are the minutes past each hour when the profile
@@ -95,10 +96,14 @@ func (ps *ProcessorService) checkProfileSwitches() {
 
 		log.Infof("Profile scheduler: setting %s to profile %d - %s", p.ID, p.ProfileNo, p.Name)
 
-		_, err := ps.database.Exec(
-			"UPDATE humans SET current_profile_no = ?, area = ?, latitude = ?, longitude = ? WHERE id = ?",
-			p.ProfileNo, p.Area, p.Latitude, p.Longitude, p.ID,
-		)
+		err := func() error {
+			defer humanlock.Lock(p.ID)()
+			_, err := ps.database.Exec(
+				"UPDATE humans SET current_profile_no = ?, area = ?, latitude = ?, longitude = ? WHERE id = ?",
+				p.ProfileNo, p.Area, p.Latitude, p.Longitude, p.ID,
+			)
+			return err
+		}()
 		if err != nil {
 			log.Errorf("Profile scheduler: failed to update human %s: %s", p.ID, err)
 			continue

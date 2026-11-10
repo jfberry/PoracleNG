@@ -186,8 +186,8 @@ func TestV2Incident_CrossTypeIsolation(t *testing.T) {
 	if len(invRules) != 1 {
 		t.Fatalf("invasion list: expected 1, got %d", len(invRules))
 	}
-	if _, ok := invRules[0]["type_id"]; !ok {
-		t.Fatalf("invasion list entry should carry type_id: %v", invRules[0])
+	if gt, _ := invRules[0]["grunt_type"].(string); gt != "grass" {
+		t.Fatalf("invasion list entry should carry grunt_type: %v", invRules[0])
 	}
 
 	// incident list → only the incident (showcase).
@@ -242,7 +242,7 @@ func TestV2Incident_DeleteSingle(t *testing.T) {
 	}
 }
 
-func TestV2Incident_PutFullReplace_NewUID(t *testing.T) {
+func TestV2Incident_PutFullReplace_KeepsUID(t *testing.T) {
 	r, is, _, restore := newV2IncidentTestAPI(t)
 	defer restore()
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/incident", `[{"display_type":9,"distance":500}]`)
@@ -253,8 +253,8 @@ func TestV2Incident_PutFullReplace_NewUID(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	newUID := int64(v2RulesArray(t, v2DecodeBody(t, w), "updated")[0]["uid"].(float64))
-	if newUID == oldUID {
-		t.Fatalf("PUT must yield a NEW uid")
+	if newUID != oldUID {
+		t.Fatalf("PUT must keep the rule uid: was %d, now %d", oldUID, newUID)
 	}
 	rows := is.AllRows()
 	if len(rows) != 1 || rows[0].GruntType != "showcase" || rows[0].Distance != 0 {

@@ -29,18 +29,23 @@ type Job struct {
 	Target string `json:"target"` // user/channel/thread/webhook ID or URL
 	Type   string `json:"type"`   // "discord:user", "discord:channel", "discord:thread", "webhook",
 	// "telegram:user", "telegram:group", "telegram:channel"
-	Message       json.RawMessage `json:"message"` // pre-rendered message JSON
-	TTH           TTH             `json:"tth"`
-	Clean         int             `json:"clean"`        // track for deletion on TTH expiry
-	EditKey       string          `json:"editKey"`      // non-empty = track for future edits
-	ReplyKey      string          `json:"replyKey"`     // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
-	MsgType       string          `json:"msgType"`      // alert type ("raid", "egg", "pokemon", etc.) stored in MessageTracker for per-lifecycle-type first-visible detection
-	Name          string          `json:"name"`         // human-readable destination name
-	LogReference  string          `json:"logReference"` // encounter/gym ID for tracing
-	Lat           float64         `json:"lat"`
-	Lon           float64         `json:"lon"`
-	StaticMapData []byte          `json:"-"` // inline tile image bytes
-	Language      string          `json:"-"` // matched user's language (for hooks notifications)
+	Message json.RawMessage `json:"message"` // pre-rendered message JSON
+	TTH     TTH             `json:"tth"`
+	Clean   int             `json:"clean"`   // track for deletion on TTH expiry
+	EditKey string          `json:"editKey"` // non-empty = track for future edits
+	// EditMaxAge bounds how old (since first send) a tracked message may be
+	// and still be edited in place. 0 = no limit (raid/egg/lure/showcase).
+	// Past it, the job is sent as a new message — threaded via ReplyKey —
+	// and tracked under its own key so the original keeps its clean-deletion.
+	EditMaxAge    time.Duration `json:"-"`
+	ReplyKey      string        `json:"replyKey"`     // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
+	MsgType       string        `json:"msgType"`      // alert type ("raid", "egg", "pokemon", etc.) stored in MessageTracker for per-lifecycle-type first-visible detection
+	Name          string        `json:"name"`         // human-readable destination name
+	LogReference  string        `json:"logReference"` // encounter/gym ID for tracing
+	Lat           float64       `json:"lat"`
+	Lon           float64       `json:"lon"`
+	StaticMapData []byte        `json:"-"` // inline tile image bytes
+	Language      string        `json:"-"` // matched user's language (for hooks notifications)
 
 	// Template is the per-user tracking-rule template as requested (the raw
 	// value, typically "" = config default). It is stored on the reply-index

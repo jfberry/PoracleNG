@@ -8,6 +8,35 @@
 
 ---
 
+## Changes
+
+**2026-10 — v2 API improvements for full client migration (#328).** Breaking for v2 clients:
+
+- **Mutes:** `tracking_type` is required when `scope=tracking` (`422` otherwise); an untyped tracking mute matches nothing. `DELETE …/mutes?scope=tracking&tracking_type=&value=`.
+- **401** from the secret check is `application/problem+json` on all huma routes (v2 and the unversioned routes). The frozen v1 routes keep `{"status":"authError",…}`.
+- **`PUT …/tracking/{type}/{uid}`** returns `409` ("would duplicate rule N") when the edit would make the rule a duplicate *or near-duplicate* (one updatable field apart) of another rule; it used to refuse only exact duplicates.
+- **`override_areas`** are returned as canonical fence names (lowercase); they used to come back space-normalised.
+- **Maxbattle** `clean`, `distance` and `template` are updatable fields, so edits squash into the existing rule like raid.
+
+Added (non-breaking): `?dry_run` on POST/PUT/DELETE/PATCH and the area operations; `previous` on rules in `updated`; bulk `PATCH` of delivery settings; bulk `DELETE` with a `{"uids":[…]}` body; `DELETE` and `PATCH …/areas` (remove / rename one area name everywhere); `servers` and `GET /health` in the OpenAPI spec.
+
+**2026-10 — v2 owns its response shapes (#294).** Breaking for v2 clients:
+
+- **Human** (`GET /v2/humans/{id}`, `POST /v2/humans`, snapshot `human`): `enabled` / `admin_disable` are booleans (were `1`/`0`); `area`, `community_membership`, `blocked_alerts` are arrays (were JSON-encoded strings); `area_restriction` is an array or `null` (was a JSON string or `null`); `language` is `""` when unset (was `null`). See [Human resource](#human-resource).
+- **Profiles** (`GET …/profiles`, snapshot `profiles`): `area` is an array (was a JSON-encoded string). The snapshot's profiles now also return `active_hours` as the typed array (was a raw string), matching `GET …/profiles`.
+- **Coordinates are `latitude` / `longitude` everywhere.** Request bodies of `POST …/location`, `POST …/locations` and `PUT …/locations/{label}`, and the `check-location` query parameters, change from `lat` / `lon`.
+- **`POST /v2/humans`**: `area` is an array of area names (was a JSON-encoded string).
+- **Snapshot `summaries`**: each entry is `{alert_type, active_hours}` with typed ISO-weekday entries; the redundant `id` is gone.
+- **Edited rules keep their `uid`** — both `PUT …/tracking/{type}/{uid}` and a `POST` that updates an existing rule (it used to return a new one).
+
+## API stability
+
+The unversioned routes (config, geofence, masterdata, geocode, test, summaries, reload and the rest of `/api` outside v1 tracking/humans/profiles) are treated as stable, with no plans for v2 copies. "v2" names the redesigned tracking and humans resources; the other routes already run on the same huma instance, are typed, appear in `/openapi.json`, and return problem+json errors.
+
+- Additive changes (new fields, new optional parameters) can arrive in any release.
+- A breaking change to one of these routes is listed under **Changed** in the changelog for that release, with a migration note. Where practical it is preceded by a release that accepts both shapes.
+- v1 tracking, humans and profiles routes stay frozen, as before.
+
 ## 1. Why v2 (and why freeze v1)
 
 The existing `/api/*` surface is undocumented, accreted, and tolerant of malformed input by necessity (the `flexBool`/`flexInt` coercion exists because real clients send wrong types). An attempt to retrofit OpenAPI docs onto it in place meant paying two costs on every endpoint — faithfully reproducing v1's quirks **and** cleaning up the representation — while still mutating v1's contract.
@@ -70,17 +99,21 @@ Tracking rules are **sub-resources of the human** (the human *is* the user). `ui
 | `GET` | `/api/v2/humans/{id}/tracking/{type}` | List one type |
 | `POST` | `/api/v2/humans/{id}/tracking/{type}` | Create rule(s) |
 | `GET` | `/api/v2/humans/{id}/tracking/{type}/{uid}` | Fetch one rule |
-| `PUT` | `/api/v2/humans/{id}/tracking/{type}/{uid}` | Full-replace one rule |
+| `PUT` | `/api/v2/humans/{id}/tracking/{type}/{uid}` | Full-replace one rule (the rule keeps its `uid`) |
 | `DELETE` | `/api/v2/humans/{id}/tracking/{type}/{uid}` | Delete one rule |
-| `DELETE` | `/api/v2/humans/{id}/tracking/{type}?uid=1,2,3` | Bulk delete |
+| `DELETE` | `/api/v2/humans/{id}/tracking/{type}?uid=1,2,3` | Bulk delete (or body `{"uids":[…]}`, not both) |
+| `PATCH` | `/api/v2/humans/{id}/tracking/{type}` | Bulk-set delivery settings on listed rules |
 
 - `{id}` (the human) is **always in the path** — required, and the ownership scope for every op. `profile` is a query param (`?profile={n}`, defaults to the human's active profile).
 - **Create** body is an **array** of rule objects (a single rule is a one-element array); the owner is the path `{id}`, not repeated per rule.
-- **List one type** returns `{ "rules": [ <rule>, … ] }`. **Full snapshot** (`…/tracking`, no `{type}`) returns `{ "human": {…}, "tracking": { "pokemon": [...], "raid": [...], … }, "profiles": [...], "locations": [...], "summaries": [...] }` — replaces v1's `all/{id}`; `?all_profiles=true` spans every profile (v1's `allProfiles/{id}`).
-- **Create** returns `{ "created": [<rule with uid>], "updated": [<rule>], "unchanged": [<rule>] }` (POST keeps v1's diff/upsert behaviour). Delete returns `{ "deleted": [<rule>] }`.
+- **List one type** returns `{ "rules": [ <rule>, … ] }`. **Full snapshot** (`…/tracking`, no `{type}`) returns `{ "human": {…}, "tracking": { "pokemon": [...], "raid": [...], … }, "profiles": [...], "locations": { "default": {…}, "named": [...] }, "summaries": [...], "mutes": [...] }`. Each sub-object has the same shape as its own v2 endpoint (`human` as `GET /v2/humans/{id}`, `profiles` as `GET …/profiles`, `locations` as `GET …/locations`) — replaces v1's `all/{id}`; `?all_profiles=true` spans every profile the human has rules on (v1's `allProfiles/{id}`), including profile numbers with no `profiles` entry: the active profile of a human who never created one, and rules left by a deleted profile. Each rule carries `profile_no`.
+- **Create** returns `{ "created": [<rule with uid>], "updated": [<rule>], "unchanged": [<rule>] }` (POST keeps v1's diff/upsert behaviour; a rule in `updated` keeps its `uid`). Delete returns `{ "deleted": [<rule>] }`.
+- **PUT** (full replace) returns `{ "updated": [<rule>] }`, or `{ "unchanged": [<rule>] }` with nothing written, reloaded or pushed when the body matches the stored rule (as POST and PATCH; an unchanged PUT is not refused as a conflict, since it writes nothing). `created`, `updated` and `unchanged` are always arrays. The rule **keeps its `uid`**, so ids held by clients, tracking mutes and `id:N` bot commands stay valid.
 - **`?include_descriptions=true`** works uniformly on **every** tracking endpoint — reads **and** mutations. When set, each rule object in the response (in `rules`, or `created`/`updated`/`unchanged`/`deleted`) carries a `description` (its human-readable rowtext, in the human's language). The status (added/updated/removed) is conveyed by which array the rule is in, so there is **no** separate assembled `message` field. (The prefixed, assembled confirmation message remains purely the Discord/Telegram push, gated by `?silent`.)
-- **PUT** is a **full replace**: the body fully specifies the rule's filter fields; omitted fields reset to documented defaults. (No `PATCH`/partial-update in v2.)
-- Mutations (`POST`/`PUT`/`DELETE`) accept **`?silent=true`** (default false) — apply without notifying the user. (Single param; replaces v1's `silent`+`suppressMessage`.)
+- **PUT** is a **full replace**: the body fully specifies the rule's filter fields; omitted fields reset to documented defaults. There is no per-rule partial update; use the bulk `PATCH` below to change delivery settings. A `PUT` that would make the rule a duplicate or near-duplicate (one updatable field apart) of another rule is refused with `409` ("would duplicate rule N").
+- **`previous`**: each rule in `updated` (POST, PUT, PATCH) carries `previous`, the rule as stored before the edit. **`?dry_run=true`** (POST, PUT, single and bulk DELETE, PATCH) runs the same validation and diff but writes nothing; created rules have `uid` 0 and the response has `"dry_run": true`.
+- **PATCH** on the collection is a **bulk settings update**: body `{"uids":[…],"set":{…}}`, where `set` names any of `distance`, `clean`, `edit`, `summary` (quest only), `template`, `ping`; filter fields are not settable. Each listed rule keeps its uid and every field not named, and goes through the PUT path (translate, validate, squash check). The response gives one outcome per rule, never all-or-nothing: `{ "updated": [<rule with previous>], "unchanged": [<rule>], "refused": [{"uid", "reason": "invalid"|"conflict"|"not_found", "detail", "conflicts_with"?}] }`. Rules are processed in `uids` order (a repeated uid once, at its first position); when two listed rules would collide, the first wins and the second is refused as `conflict`. An empty `set`, or a setting the type does not support (e.g. `clean` on fort, `edit` on gym), is a `422` for the whole request. Supports `?dry_run`, `?silent`, `?trusted`, `?include_descriptions`.
+- Mutations (`POST`/`PUT`/`PATCH`/`DELETE`) accept **`?silent=true`** (default false) — apply without notifying the user. (Single param; replaces v1's `silent`+`suppressMessage`.)
 - Unknown body **and** query params are rejected (`422`) — v2 is strict. Every rule carries its `uid` (int) in responses.
 - **Consistency note:** humans/profiles/locations are likewise under `/api/v2/humans/{id}/…` (see §2b), so everything user-scoped shares one prefix.
 
@@ -92,9 +125,13 @@ Tracking rules are **sub-resources of the human** (the human *is* the user). `ui
 
 ### Wildcard & sentinel conventions
 
+> **The `null` contract.** `null` means unconstrained. A v2 client never needs to know how that is stored, and the stored representation may change without notice. Read `null`, write `null` (or omit): a GET → PUT / POST of any stored rule results in `unchanged`, enforced by a test over every nullable field of all 11 types. Schemas carry display bounds (`minimum`/`maximum`) where a natural bound exists; a field whose only ceiling is a sentinel has no `maximum`.
+>
+> The sentinel table below is **internal, for readers of the v1 API and of the database only**. It is not part of the v2 contract and a v2 client must not depend on it. In the code, each field's wildcard is a shared named constant (`v2_wildcards.go`) used by both `Translate` and `ToRule`.
+
 **Request rule: to match "any", OMIT the field — never send the magic number.** A clean v2 client should not have to know the internal sentinel values. Every optional filter field, when omitted, is materialised to the engine's documented wildcard/sentinel by the handler. The OpenAPI `description` of each such field states both the omit-to-wildcard behaviour *and* the stored sentinel + its meaning (so the value is legible if you do read one back). You may still send the sentinel explicitly — it round-trips — but you never need to.
 
-The sentinels (verified against the matcher's "match any" semantics):
+The sentinels (internal; verified against the matcher's "match any" semantics):
 
 | sentinel | meaning | where it appears |
 |---|---|---|
@@ -128,7 +165,7 @@ Concretely, the projection rules are:
 
 - **`uid`** — always present.
 - **Required fields** (`pokemon.pokemon_id`, `quest.reward_type`, `incident.display_type`, `gym.team`, `lure.lure_id`, `egg.level`) — always present with their value; never nulled.
-- **Active invasion/incident mode** — exactly one of `type_id` (+ `gender` when meaningful) / `grunt_id` / `everything` / `boss` is reconstructed and stays present; the inactive mode fields are omitted. Invasion `gender` is `null` at its `any` default (shown only as male/female in `type_id` mode).
+- **Active invasion/incident mode** — an invasion read emits `grunt_type`, the stored value, for every rule (catch-alls included); `type_id` / `grunt_id` / `everything` / `boss` are write conveniences and are omitted. Invasion `gender` is `null` at its `any` default and shown as male/female on every rule, the `everything`/`boss` catch-alls included, since the matcher applies it to them.
 - **Every other optional filter** — `null` when the stored value equals its documented wildcard/default (the same sentinels listed above; enums null at their default — `team`/`gender` `any`, `rsvp_changes` `none`, `fort_type` `everything`; bools null when `false`; `include_empty` null at its `true` default; `change_types`/`override_areas` null when empty; `gym_id`/`station_id`/`override_location_label` null when unset). Otherwise the meaningful value is emitted.
 
 The wire form is **present-but-null** (e.g. `"min_iv": null`), not an omitted key, so a client can tell a filter is explicitly "unset/any". Because `null` (or an omitted key) on the request side materialises to the same documented default, a GET → PUT of the returned body leaves the stored rule unchanged. Implementation: the per-type `ToRule` projects wildcards to nil via the `ptrUnless`/`ptrUnlessSlice` helpers; the request structs keep `omitempty` (so request strictness — optional, not required — is preserved) plus `nullable:"true"` (so the response/OpenAPI schema models the field as nullable, `type: [X, "null"]`), and the rule-envelope marshaller re-emits the nilled optional fields as explicit `null`.
@@ -137,15 +174,15 @@ The wire form is **present-but-null** (e.g. `"min_iv": null`), not an omitted ke
 
 | field | type | notes |
 |---|---|---|
-| `uid` | int | response/identifier; required in `PUT` body |
+| `uid` | int | response/identifier; addressed by the `{uid}` path parameter (never sent in a body) |
 | `distance` | int | metres; `0` = use the profile's areas instead of a radius |
 | `template` | string | template name; empty = server default |
 | `clean` | bool | auto-delete the alert on expiry |
-| `edit` | bool | keep the message updated in place |
+| `edit` | bool | keep the message updated in place — honoured for pokemon (within the server's edit window), raid, egg, lure and incident (showcase); rejected with 422 for gym, invasion, nest, maxbattle and quest |
 | `summary` | bool | route into the summary digest (where supported) |
 | `ping` | string | mention string appended to the alert |
 | `override_location_label` | string? | use a saved named location instead of the profile location |
-| `override_areas` | string[] | restrict this rule to these geofence areas |
+| `override_areas` | string[] | restrict this rule to these geofence areas. Either spelling is accepted (spaces and underscores compare equal); stored and returned as the canonical lowercase fence name |
 
 (`clean`/`edit`/`summary` map to the stored `clean` bitmask: bit 1 / 2 / 4.)
 
@@ -159,7 +196,7 @@ The wire form is **present-but-null** (e.g. `"min_iv": null`), not an omitted ke
 
 **quest** — `reward_type`* (int — proto id: `2`=item, `3`=stardust, `4`=candy, `7`=pokemon, `12`=mega_energy), `reward` (int — the rewarded item/pokemon id; **omit or send 0 to match ANY reward of that category**, e.g. `{reward_type:2}` = all items, `{reward_type:7}` = all pokemon — the v2 equivalent of `!quest all items`/`all pokemon`), `amount` (int), `form` (int — for pokemon-reward forms), `shiny` (bool).
 
-**invasion** (Rocket grunts) — target via **exactly one** mode per rule: `type_id` (int, grunt poke-type — `gender` (enum `any|male|female`) applies only here) | `grunt_id` (int, the exact grunt character, implies type+gender) | `everything` (bool) | `boss` (bool).
+**invasion** (Rocket grunts) — target via **exactly one** mode per rule: `grunt_type` (string, stored name) | `type_id` (int, grunt poke-type) | `grunt_id` (int, the exact grunt character, implies type+gender) | `everything` (bool) | `boss` (bool). `gender` (enum `any|male|female`) goes with any mode except `grunt_id`; on the catch-alls it narrows them (`everything` + `male` fires only for male grunts).
 
 **incident** (events) — `display_type`* (int — game `PokestopEvent` id, e.g. `9` = Showcase; names documented in the field description).
 
@@ -224,7 +261,7 @@ Today this is stored as freeform JSON and the API dumps whatever the client send
 
 | field | type | required | bounds |
 |---|---|---|---|
-| `day` | int | yes | `0`–`6` (0 = Sunday) |
+| `day` | int | yes | `1`–`7` (ISO: 1 = Monday … 7 = Sunday) |
 | `hours` | int | yes | `0`–`23` |
 | `mins` | int | yes | `0`–`59` |
 | `step` | int | no | `≥ 0` hours; `> 0` ⇒ this is a **range** entry, else **single-fire** |
@@ -233,7 +270,35 @@ Today this is stored as freeform JSON and the API dumps whatever the client send
 
 - **Single-fire**: `{day, hours, mins}` → fires once that day at `HH:MM`.
 - **Range**: adds `{step, end_hours, end_mins}` → fires at `HH:MM`, `+step h`, … up to and including `end`. **No cross-midnight** — `end` must be ≥ start (reject otherwise, `422`).
-- v2 is **strict ints** (no `"00"` string coercion — that was the v1 leniency) with the bounds above. Same schema is shared by `POST /v2/summaries/{id}/{alertType}` and the profile-schedule update endpoint. (Confirm `day` indexing against the scheduler at build: comment indicates `0 = Sunday`, matching Go `time.Weekday`.)
+- v2 is **strict ints** (no `"00"` string coercion — that was the v1 leniency) with the bounds above. Same schema is shared by `POST /summaries/{id}/{alertType}` and the profile-schedule update endpoint. `day` is ISO 8601 (1 = Monday … 7 = Sunday), matching `isoDow` in `cmd/processor/profiles.go`, the bot, and v1. It was documented as 0–6 until #208: Sunday was unexpressible and `day: 0` stored a schedule that never fired.
+
+### Area operations
+
+- `DELETE /api/v2/humans/{id}/areas?name=[&profile=][&all_profiles=][&dry_run=]` removes one area name from the human's areas (profile, or every profile) and from every rule's `override_areas`. Returns `{name, removed_from, broadened{type:[uid]}, dry_run}`; `broadened` lists rules whose override list became empty and now match by the profile's areas.
+- `PATCH /api/v2/humans/{id}/areas?from=&to=[&profile=][&all_profiles=][&trusted=][&dry_run=]` renames one name everywhere. Returns `{from, to, renamed_in, dry_run}` with `to` in canonical form; `to` must be a permitted area, else `422` and nothing changes.
+- `POST …/areas` replaces the whole list; with `?all_profiles` it replaces it on every profile.
+- Area names are stored as canonical (lowercase) fence names; spaces versus underscores is only a comparison key, so either spelling is accepted on input.
+
+### Mutes
+
+`tracking_type` (any of the 11 type names; `incident` is stored as `invasion` and `GET` returns the canonical name) is required for `scope=tracking` and a `422` for any other scope. `POST` checks that the uid is the human's rule in that table (any profile). Delete with `DELETE …/mutes?scope=tracking&tracking_type=&value=`.
+
+### Human resource
+
+`GET /v2/humans/{id}`, `POST /v2/humans` and the snapshot's `human` all return the same typed object — v2 does not reuse v1's legacy human shape (0/1 flags, JSON-encoded string arrays):
+
+| field | type | notes |
+|---|---|---|
+| `id`, `type`, `name`, `notes` | string | |
+| `enabled`, `admin_disable` | bool | |
+| `area`, `community_membership`, `blocked_alerts` | `[]string` | `[]` when empty |
+| `area_restriction` | `[]string` \| `null` | `null` = unrestricted; `[]` = no areas allowed |
+| `latitude`, `longitude` | float | `0` when unset |
+| `language` | string | `""` when unset (the configured default locale applies) |
+| `current_profile_no`, `fails` | int | |
+| `last_checked`, `disabled_date` | timestamp \| `null` | |
+
+Profiles likewise return `area` as `[]string` and `active_hours` as the typed array below.
 
 ### `blocked_alerts` (read-only on the human resource)
 
@@ -247,8 +312,8 @@ A saved-locations API already exists (`user_locations`: `label` → `lat`/`lon`)
 |---|---|---|---|
 | GET | `/v2/humans/{id}/locations` | — | list |
 | GET | `/v2/humans/{id}/locations/{label}` | — | one |
-| POST | `/v2/humans/{id}/locations` | `{label, lat, lon}` | create (was `…/locations/add`) |
-| **PUT** | `/v2/humans/{id}/locations/{label}` | `{lat, lon}` | **NEW** — update a saved location's coordinates |
+| POST | `/v2/humans/{id}/locations` | `{label, latitude, longitude}` | create (was `…/locations/add`) |
+| **PUT** | `/v2/humans/{id}/locations/{label}` | `{latitude, longitude}` | **NEW** — update a saved location's coordinates |
 | DELETE | `/v2/humans/{id}/locations/{label}` | — | delete (`409` if referenced by a rule's `override_location_label`) |
 
 The **PUT** is net-new functionality (v1 forces delete+re-add to move a saved location).
@@ -279,7 +344,7 @@ Done on this branch for the (now-superseded) in-place approach; triage:
 - [ ] **Pagination/filtering** on list endpoints — out of scope for v1 parity, but the `{rules:[…]}` wrapper reserves room.
 
 **Decided (no longer open):**
-- **Update verb** — `PUT` full-replace only; no `PATCH` in v2 scope.
+- **Update verb** — `PUT` full-replace for one rule; tracking `PATCH` exists only as the bulk settings update on the collection (see above). (`PATCH /v2/humans/{id}/profiles/{profile_no}` is a separate, profile-only partial update.)
 - **Strictness** — strict throughout: unknown body and query params both rejected (`422`).
 - **v1 deprecation** — v1 stays fully supported with no sunset date yet; add a `Deprecation` marker + link to v2 on v1 responses once v2 is established; set a hard sunset date later.
 - **quest / nest / invasion fields** — quest (`reward_type`,`reward`,`amount`,`form`,`shiny`), nest `min_spawn_avg` = int, invasion exactly-one-mode (`type_id`|`grunt_id`|`everything`|`boss`).

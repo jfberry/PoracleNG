@@ -24,10 +24,11 @@ type HumanLookup interface {
 
 // ResolveDeps holds dependencies for the resolve handler.
 type ResolveDeps struct {
-	DiscordSession *discordgo.Session // nil if Discord not configured
-	TelegramAPI    *gotgbot.Bot       // nil if Telegram not configured
-	Humans         HumanLookup        // nil if not wired (lookup is skipped)
-	Cache          *ttlcache.Cache[string, any]
+	DiscordSession     *discordgo.Session        // nil if Discord not configured
+	DiscordSessionFunc func() *discordgo.Session // read for each request when the gateway may connect later
+	TelegramAPI        *gotgbot.Bot              // nil if Telegram not configured
+	Humans             HumanLookup               // nil if not wired (lookup is skipped)
+	Cache              *ttlcache.Cache[string, any]
 }
 
 // NewResolveCache creates a ttlcache for resolved IDs with 10 minute TTL.

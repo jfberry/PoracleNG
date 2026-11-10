@@ -168,21 +168,43 @@ func (g *Google) Forward(query string) ([]ForwardResult, error) {
 
 	out := make([]ForwardResult, 0, len(gResp.Results))
 	for _, r := range gResp.Results {
-		fr := ForwardResult{
-			Latitude:  r.Geometry.Location.Lat,
-			Longitude: r.Geometry.Location.Lng,
-		}
-		for _, c := range r.AddressComponents {
-			for _, t := range c.Types {
-				switch t {
-				case "locality":
-					fr.City = c.LongName
-				case "country":
-					fr.Country = c.LongName
-				}
-			}
-		}
-		out = append(out, fr)
+		out = append(out, googleForwardResult(r))
 	}
 	return out, nil
+}
+
+// googleForwardResult maps one Google result onto a ForwardResult.
+//
+// Split out from Forward because Forward hardcodes the API host and so cannot
+// be pointed at a test server; the component mapping is the part worth
+// testing.
+//
+// Google returns address parts as a typed component list rather than named
+// fields, so the mapping is a switch over the type tags. Anything not listed
+// is ignored — a result carrying only a locality still yields a usable row.
+func googleForwardResult(r googleResult) ForwardResult {
+	fr := ForwardResult{
+		Latitude:    r.Geometry.Location.Lat,
+		Longitude:   r.Geometry.Location.Lng,
+		DisplayName: r.FormattedAddress,
+	}
+	for _, c := range r.AddressComponents {
+		for _, t := range c.Types {
+			switch t {
+			case "street_number":
+				fr.StreetNumber = c.LongName
+			case "route":
+				fr.StreetName = c.LongName
+			case "locality":
+				fr.City = c.LongName
+			case "administrative_area_level_1":
+				fr.State = c.LongName
+			case "postal_code":
+				fr.Zipcode = c.LongName
+			case "country":
+				fr.Country = c.LongName
+			}
+		}
+	}
+	return fr
 }

@@ -166,7 +166,7 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Pre-fetch override context once so per-row validation doesn't re-query.
-		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID, false)
 		if ocMsg != "" {
 			trackingJSONError(c, ocCode, ocMsg)
 			return
@@ -185,7 +185,7 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 			}
 
 			reward := req.Reward.intValue(0)
-			distance := req.Distance.intValue(0)
+			distance := clampDistance(deps, oc.limitExempt, req.Distance.intValue(0))
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -219,7 +219,7 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 				Shiny:                 shiny,
 				Amount:                amount,
 				OverrideLocationLabel: req.OverrideLocationLabel,
-				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
+				OverrideAreas:         v1NormalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 
@@ -230,6 +230,10 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		if msg := overrideLimitMsg(deps, oc, tracked, insert, store.QuestGetUID, store.QuestSetUID); msg != "" {
+			trackingJSONError(c, http.StatusBadRequest, msg)
+			return
+		}
 		diff := store.DiffAndClassify(tracked, insert, store.QuestGetUID, store.QuestSetUID)
 
 		// Build confirmation message before applying changes

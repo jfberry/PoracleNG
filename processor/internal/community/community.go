@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
 
 // FilterAreas returns only those areas that are allowed by the user's community membership.
 // If the user belongs to communities "newyork" and "chicago", the returned areas
-// are the intersection of the input areas with the union of allowedAreas from both communities.
+// are the intersection of the input areas with the union of allowedAreas from both communities,
+// compared by geofence.NormalizeAreaKey.
 func FilterAreas(communities []config.CommunityConfig, membership []string, areas []string) []string {
 	allowed := make(map[string]bool)
 	for _, memberCommunity := range membership {
@@ -21,13 +23,16 @@ func FilterAreas(communities []config.CommunityConfig, membership []string, area
 			continue
 		}
 		for _, a := range comm.AllowedAreas {
-			allowed[strings.ToLower(a)] = true
+			allowed[geofence.NormalizeAreaKey(a)] = true
 		}
 	}
 
+	// Keyed by NormalizeAreaKey so underscores and spaces are interchangeable
+	// either way; the original entry is returned, so output spelling is the
+	// caller's.
 	var result []string
 	for _, a := range areas {
-		if allowed[strings.ToLower(a)] {
+		if allowed[geofence.NormalizeAreaKey(a)] {
 			result = append(result, a)
 		}
 	}

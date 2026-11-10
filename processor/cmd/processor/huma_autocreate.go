@@ -60,7 +60,7 @@ type autocreateSchemaOutput struct {
 // problem+json. The three MODERATE template endpoints (GET/POST templates,
 // POST templates/validate) intentionally stay on gin and are NOT registered
 // here.
-func registerAutocreateHuma(humaAPI huma.API, cfg *config.Config, bot *discordbot.Bot) {
+func registerAutocreateHuma(humaAPI huma.API, cfg *config.Config, getBot func() *discordbot.Bot) {
 	// POST /api/autocreate/run — sync one or all autocreate rules.
 	huma.Register(humaAPI, huma.Operation{
 		OperationID: "post-autocreate-run", Method: "POST", Path: "/autocreate/run",
@@ -71,6 +71,10 @@ func registerAutocreateHuma(humaAPI huma.API, cfg *config.Config, bot *discordbo
 	}, func(_ context.Context, in *autocreateRunInput) (*autocreateBodyOutput, error) {
 		req := in.Body
 
+		var bot *discordbot.Bot
+		if getBot != nil {
+			bot = getBot()
+		}
 		if bot == nil {
 			return nil, huma.Error503ServiceUnavailable("discord bot not running")
 		}

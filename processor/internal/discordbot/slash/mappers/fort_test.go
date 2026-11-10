@@ -69,13 +69,12 @@ func TestFortMapperAllOptions(t *testing.T) {
 		iopt("fort_type", 1),
 		bopt("include_empty", true),
 		iopt("distance", 1500),
-		bopt("clean", true),
 		sopt("template", "fancy"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"gym", "include empty", "d1500", "clean", "template:fancy"}
+	want := []string{"gym", "include empty", "d1500", "template:fancy"}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Errorf("tokens=%v want %v", tokens, want)
 	}
@@ -106,13 +105,30 @@ func TestFortTypeName(t *testing.T) {
 	cases := map[int]string{
 		0:   "pokestop",
 		1:   "gym",
-		2:   "",
+		2:   "station",
+		3:   "everything",
+		4:   "",
 		-1:  "",
 		999: "",
 	}
 	for v, want := range cases {
 		if got := fortTypeName(v); got != want {
 			t.Errorf("fortTypeName(%d)=%q want %q", v, got, want)
+		}
+	}
+}
+
+// station and everything are fort types !fort accepts; /fort must offer them.
+func TestFortMapperStationAndEverything(t *testing.T) {
+	for v, want := range map[int]string{2: "station", 3: "everything"} {
+		tokens, err := Fort([]*discordgo.ApplicationCommandInteractionDataOption{
+			iopt("fort_type", v),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(tokens, []string{want}) {
+			t.Errorf("fort_type %d: tokens=%v want [%s]", v, tokens, want)
 		}
 	}
 }

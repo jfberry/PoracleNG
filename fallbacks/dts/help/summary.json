@@ -1,42 +1,40 @@
-[{
-  "id": "summary",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!summary",
-      "description": "Buffered, scheduled delivery of alerts grouped by reward. Currently supports `quest` only. Opt a tracking rule in by adding `summary` (e.g. `{{prefix}}quest pikachu summary`); matched quests are held in memory and dispatched as grouped messages at the times you set here.",
-      "fields": [
-        {
-          "name": "Status",
-          "value": "`{{prefix}}summary quest` — show your current schedule and how many quests are currently buffered."
-        },
-        {
-          "name": "Set the schedule — examples",
-          "value": "`{{prefix}}summary quest settime mon07:30 weekday07:30 weekend10:00`\n`{{prefix}}summary quest settime every08:00` — fire every day at 08:00\n`{{prefix}}summary quest settime 08:00` — same; omitting the prefix means every day\n`{{prefix}}summary quest settime every:8-22/2` — fire every 2 hours, 8am–10pm, every day\n`{{prefix}}summary quest settime weekday:9-17/2` — fire every 2 hours, 9am–5pm, Mon–Fri\n\nList as many entries as you like; they replace any existing schedule."
-        },
-        {
-          "name": "Set the schedule — day prefixes and formats",
-          "value": "Day prefixes: `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun` — a single day • `weekday` — Mon–Fri • `weekend` — Sat–Sun • `every`/`everyday` — all seven days. Omitting the prefix entirely means every day.\n\nFormats:\n• `<prefix><HH>:<MM>` (e.g. `mon07:30`) — fire once at HH:MM on those days\n• `<prefix>:HH-HH[/N]` (e.g. `weekday:9-17/2`) — fire every N hours from start to end; N defaults to 1. End must be after start; cross-midnight is not supported."
-        },
-        {
-          "name": "Clear the schedule",
-          "value": "`{{prefix}}summary quest cleartime` — remove the schedule. Quests still buffer; you can flush them on demand with `{{prefix}}summary quest now`."
-        },
-        {
-          "name": "Dispatch now",
-          "value": "`{{prefix}}summary quest now` — dispatch everything currently in your buffer right away (does not affect the schedule)."
-        },
-        {
-          "name": "Opting a rule in",
-          "value": "Add `summary` when you create the rule:\n`{{prefix}}quest pikachu summary`\n`{{prefix}}quest rare_candy summary`\n\n`{{prefix}}tracked` shows `summary` on each rule that uses it."
-        },
-        {
-          "name": "Full manual",
-          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
-        }
-      ]
+[
+  {
+    "id": "summary",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!summary",
+        "description": "Collects matched quests and sends them as grouped digests at times you choose, instead of one alert per quest. Quests only for now. Add `summary` to a quest rule to opt it in, e.g. `{{prefix}}quest rare_candy summary`.",
+        "fields": [
+          {
+            "name": "Status",
+            "value": "`{{prefix}}summary quest` — your schedule and how many quests are waiting"
+          },
+          {
+            "name": "Set the schedule",
+            "value": "`{{prefix}}summary quest settime 8:00`\n`{{prefix}}summary quest settime weekday7:30 weekend10:00`\n`{{prefix}}summary quest settime weekday9-17/2` — every 2 hours, 9:00 to 17:00, Mon-Fri\n`{{prefix}}summary quest settime 8-20/4` — 8:00, 12:00, 16:00, 20:00 every day\nThe new schedule replaces the old one."
+          },
+          {
+            "name": "Time format",
+            "value": "Day (optional): `mon` ... `sun`, `weekday`, `weekend`, `every`. No day means every day.\nOne time: `7:30`, `0730` or `7`.\nRepeating: `start-end/N` fires every N hours from start up to end, e.g. `9-17/2` or `9:30-17:30/2`. End must be after start (no crossing midnight). N defaults to 1.\nSeparate several with spaces or commas. A colon after the day is optional: `mon:7:30` = `mon7:30`.\nTimes use your location's time zone (or the server's if you have none); `{{prefix}}summary quest` shows which once a schedule is set."
+          },
+          {
+            "name": "Clear or send now",
+            "value": "`{{prefix}}summary quest cleartime` — remove the schedule; quests keep collecting\n`{{prefix}}summary quest now` — send what is waiting now; the schedule is unchanged"
+          },
+          {
+            "name": "Which rules use it",
+            "value": "`{{prefix}}tracked` marks summary rules. `{{prefix}}quest remove rare_candy summary` removes only the summary rule."
+          },
+          {
+            "name": "Full manual",
+            "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+          }
+        ]
+      }
     }
   }
-}]
+]

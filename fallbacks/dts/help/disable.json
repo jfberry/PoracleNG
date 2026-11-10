@@ -1,26 +1,28 @@
-[{
-  "id": "disable",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!disable (admin)",
-      "description": "Admin-disable a user — they stop receiving alerts until an admin re-enables with `{{prefix}}enable`.",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}disable user:<discord_id>`\n`{{prefix}}disable user:12345 user:67890` — multiple"
-        },
-        {
-          "name": "Difference from unregister",
-          "value": "Disabled users keep their tracking rules; they just stop receiving alerts. A user `{{prefix}}unregister`ing themselves deletes everything; disable is reversible."
-        },
-        {
-          "name": "Related",
-          "value": "`{{prefix}}enable` — reverse this\n`{{prefix}}userlist` — see who's registered"
-        }
-      ]
+[
+  {
+    "id": "disable",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!disable (admin)",
+        "description": "Stop a user, channel or webhook getting alerts until an admin runs `{{prefix}}enable`.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}disable <id>` — by ID\n{{#if isDiscord}}`{{prefix}}disable @user` — by mention\n{{/if}}`{{prefix}}disable <id> <id>` — several at once\n`{{prefix}}disable mywebhook` — a webhook, by name\n\nGive bare IDs: `{{prefix}}disable user:<id>` doesn't work. IDs that aren't registered are listed in the reply."
+          },
+          {
+            "name": "What it does",
+            "value": "Their tracking, areas and profiles are kept, but they get no alerts and can't run commands other than `{{prefix}}poracle`.\n\nIf `[general] role_check_mode` is `\"disable-user\"`, a disabled user can switch themselves back on by running `{{prefix}}poracle` in a registration channel."
+          },
+          {
+            "name": "Compared with",
+            "value": "`{{prefix}}stop` — a user pausing their own alerts\n`{{prefix}}unregister <id>` — delete a user and all their tracking"
+          }
+        ]
+      }
     }
   }
-}]
+]

@@ -488,7 +488,7 @@ func TestStandardText_DefaultTemplate(t *testing.T) {
 	g := testGenerator(t)
 	tr := g.Translations.For("en")
 
-	result := standardText(tr, "1", g.DefaultTemplateName, 0)
+	result := standardText(tr, "1", g.DefaultTemplateName, 0, false)
 	if result != "" {
 		t.Errorf("expected empty for default template, got: %q", result)
 	}
@@ -498,7 +498,7 @@ func TestStandardText_CustomTemplateAndClean(t *testing.T) {
 	g := testGenerator(t)
 	tr := g.Translations.For("en")
 
-	result := standardText(tr, "3", g.DefaultTemplateName, 1)
+	result := standardText(tr, "3", g.DefaultTemplateName, 1, false)
 	if !strings.Contains(result, "template: 3") {
 		t.Errorf("expected template: 3, got: %q", result)
 	}
@@ -736,5 +736,114 @@ func TestTranslateMonsterName_FormSuppression(t *testing.T) {
 				t.Errorf("form %d: formName = %q, want %q", tt.form, gotForm, tt.wantForm)
 			}
 		})
+	}
+}
+
+// !tracked rendered invasion rules by looking the STORED grunt_type up as a
+// translation key. Stored values are lowercase ("grass"), while the
+// pogo-translations locale files are English-as-key and title-cased ("Grass"),
+// so every lookup missed and every non-English user saw the English type name
+// in their own tracking list.
+// gruntLocaleGenerator seeds the German translator the way production does:
+// pogo-translations locale files are English-as-key and title-cased, so the
+// key for the grass type is "Grass", not the stored "grass".
+func gruntLocaleGenerator(t *testing.T) *Generator {
+	t.Helper()
+	g := testGenerator(t)
+	g.Translations.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"Grass":                   "Pflanze",
+		"tracking.everything":     "_alle_",
+		"tracking.grunt_type_fmt": "Rüpel Typ **{0}**",
+		"tracking.gender_fmt":     "Geschlecht: {0}",
+		"tracking.any":            "_alle_",
+	}))
+	return g
+}
+
+func TestInvasionRowTextTranslatesTypeName(t *testing.T) {
+	g := gruntLocaleGenerator(t)
+	tr := g.Translations.For("de")
+
+	got := g.InvasionRowText(tr, &db.InvasionTracking{GruntType: "grass", Template: "1"})
+	if !strings.Contains(got, "Pflanze") {
+		t.Errorf("German invasion row = %q, want the translated type name %q", got, "Pflanze")
+	}
+	if strings.Contains(got, "Grass") {
+		t.Errorf("German invasion row still shows the English type name: %q", got)
+	}
+}
+
+// The catch-alls are not type names and have their own translated label.
+func TestInvasionRowTextTranslatesEverything(t *testing.T) {
+	g := gruntLocaleGenerator(t)
+	trDE := g.Translations.For("de")
+
+	got := g.InvasionRowText(trDE, &db.InvasionTracking{GruntType: "everything", Template: "1"})
+	// Assert on the TYPE slot specifically: the everything label ("_alle_")
+	// also happens to be the gender wildcard, so a whole-row Contains would
+	// pass without the type ever being translated.
+	want := trDE.T("tracking.everything")
+	if slot := boldSlot(got); slot != want {
+		t.Errorf("type slot = %q, want %q (full row: %q)", slot, want, got)
+	}
+}
+
+// A name with no translation anywhere (event names, npc_*) must still render
+// readably rather than leaking a bare key.
+func TestInvasionRowTextFallsBackForUntranslatedNames(t *testing.T) {
+	g := gruntLocaleGenerator(t)
+	tr := g.Translations.For("de")
+
+	got := g.InvasionRowText(tr, &db.InvasionTracking{GruntType: "kecleon", Template: "1"})
+	if !strings.Contains(got, "Kecleon") {
+		t.Errorf("row = %q, want the capitalised fallback %q", got, "Kecleon")
+	}
+}
+
+// boldSlot returns the text between the first pair of ** markers, which is the
+// type slot in tracking.grunt_type_fmt.
+func boldSlot(row string) string {
+	i := strings.Index(row, "**")
+	if i < 0 {
+		return ""
+	}
+	rest := row[i+2:]
+	j := strings.Index(rest, "**")
+	if j < 0 {
+		return ""
+	}
+	return rest[:j]
+}
+
+func TestStandardText_DefaultEdit(t *testing.T) {
+	g := testGenerator(t)
+	tr := g.Translations.For("en")
+
+	if got := standardText(tr, "1", g.DefaultTemplateName, 0, true); got != " edit (default)" {
+		t.Errorf("defaulted edit: got %q", got)
+	}
+	// An explicit edit bit wins over the default label.
+	if got := standardText(tr, "1", g.DefaultTemplateName, 2, true); got != " edit" {
+		t.Errorf("explicit edit: got %q", got)
+	}
+}
+
+func TestRowText_DefaultEditByType(t *testing.T) {
+	g := testGenerator(t)
+	g.DefaultEdit = func(alertType string) bool { return alertType == "lure" || alertType == "incident" }
+	tr := g.Translations.For("en")
+
+	if got := g.LureRowText(tr, &db.LureTracking{LureID: 501, Template: "1"}); !strings.Contains(got, "edit (default)") {
+		t.Errorf("lure in default_edit: got %s", got)
+	}
+	if got := g.NestRowText(tr, &db.NestTracking{Template: "1"}); strings.Contains(got, "edit") {
+		t.Errorf("nest has no edit default: got %s", got)
+	}
+	if got := g.InvasionRowText(tr, &db.InvasionTracking{GruntType: "showcase", Template: "1"}); !strings.Contains(got, "edit (default)") {
+		t.Errorf("showcase incident in default_edit: got %s", got)
+	}
+	// Grunt invasion alerts never edit, so plain invasion rules stay unlabelled.
+	if got := g.InvasionRowText(tr, &db.InvasionTracking{GruntType: "Water", Template: "1"}); strings.Contains(got, "edit") {
+		t.Errorf("grunt invasion: got %s", got)
 	}
 }

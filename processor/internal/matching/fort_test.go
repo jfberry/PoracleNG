@@ -53,6 +53,9 @@ func TestFortMatchNewPokestop(t *testing.T) {
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for new pokestop, got %d", len(matched))
 	}
+	if len(matched) == 1 && matched[0].RuleTable != "fort" {
+		t.Errorf("RuleTable = %q, want fort", matched[0].RuleTable)
+	}
 }
 
 func TestFortMatchEverything(t *testing.T) {

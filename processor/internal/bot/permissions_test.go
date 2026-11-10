@@ -157,3 +157,66 @@ func TestBlockedAlerts(t *testing.T) {
 		t.Errorf("expected nil blocked, got %v", *blocked)
 	}
 }
+
+// Admins bypass command_security on every surface. The slash dispatcher
+// already did this; text commands and /api/command didn't, so an admin not
+// in the allow list was refused the text form of a command they could run
+// as a slash command (#287).
+func TestCommandAllowed_AdminBypasses(t *testing.T) {
+	cfg := testConfig()
+	if !CommandAllowed(cfg, "discord", "cmd.raid", "admin1", []string{"role_other"}) {
+		t.Error("admin1 should bypass command_security for raid")
+	}
+}
+
+// Delegation keyed on a category (or a thread's parent channel) must grant
+// access to the channels under it (#286).
+func TestCalculateChannelPermissions_Ancestors(t *testing.T) {
+	cfg := testConfig()
+	cfg.Discord.DelegatedAdministration.ChannelTracking["category7"] = []string{"user60"}
+	if !CalculateChannelPermissions(cfg, "user60", nil, "textchan", "guild1", "category7") {
+		t.Error("user60 should manage a channel under category7")
+	}
+	if !CalculateChannelPermissions(cfg, "user60", nil, "thread1", "guild1", "parentchan", "category7") {
+		t.Error("user60 should manage a thread whose parent channel is under category7")
+	}
+	if CalculateChannelPermissions(cfg, "user60", nil, "textchan", "guild1", "othercat") {
+		t.Error("user60 should not manage channels under another category")
+	}
+}
+
+// Telegram delegated admins and community admins can manage tracking in
+// their groups (PoracleJS canAdminChannel); NG never set the permission
+// for Telegram (#286).
+func TestCalculateTelegramChannelPermissions(t *testing.T) {
+	cfg := testConfig()
+	cfg.Telegram.DelegatedAdministration.ChannelTracking = map[string][]string{"-100": {"tg7"}}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{{Name: "North"}}
+	cfg.Area.Communities[0].Telegram.Admins = []string{"tg9"}
+
+	cases := []struct {
+		name        string
+		user        string
+		chatIDs     []string
+		communities []string
+		want        bool
+	}{
+		{"delegated on the group", "tg7", []string{"-100"}, nil, true},
+		{"delegated group, inside a topic", "tg7", []string{"-100:5", "-100"}, nil, true},
+		{"delegated elsewhere", "tg7", []string{"-200"}, nil, false},
+		{"community admin of the group's community", "tg9", []string{"-300"}, []string{"north"}, true},
+		{"community admin, other community", "tg9", []string{"-300"}, []string{"south"}, false},
+		{"nobody", "tg1", []string{"-100"}, []string{"north"}, false},
+	}
+	for _, c := range cases {
+		if got := CalculateTelegramChannelPermissions(cfg, c.user, c.chatIDs, c.communities); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	cfg.Area.Enabled = false
+	if CalculateTelegramChannelPermissions(cfg, "tg9", []string{"-300"}, []string{"north"}) {
+		t.Error("community admins only apply when area security is enabled")
+	}
+}

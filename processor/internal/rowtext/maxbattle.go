@@ -36,7 +36,7 @@ func (g *Generator) MaxbattleRowText(tr *i18n.Translator, maxbattle *db.Maxbattl
 			s += " | " + tr.Tf("tracking.with_move_fmt", moveName)
 		}
 
-		s += " " + standardText(tr, maxbattle.Template, g.DefaultTemplateName, maxbattle.Clean)
+		s += " " + standardText(tr, maxbattle.Template, g.DefaultTemplateName, maxbattle.Clean, false)
 
 		if stationID != "" {
 			s += " " + tr.Tf("tracking.at_station_fmt", stationNameText)
@@ -59,7 +59,7 @@ func (g *Generator) MaxbattleRowText(tr *i18n.Translator, maxbattle *db.Maxbattl
 		s += " | " + tr.Tf("tracking.with_move_fmt", moveName)
 	}
 
-	s += " " + standardText(tr, maxbattle.Template, g.DefaultTemplateName, maxbattle.Clean)
+	s += " " + standardText(tr, maxbattle.Template, g.DefaultTemplateName, maxbattle.Clean, false)
 
 	if stationID != "" {
 		s += " " + tr.Tf("tracking.at_station_fmt", stationNameText)

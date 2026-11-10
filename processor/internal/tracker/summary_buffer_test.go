@@ -354,3 +354,25 @@ func TestSummaryBuffer_EnumerateUsers_Multi(t *testing.T) {
 		}
 	}
 }
+
+// Repeat firings of the same quest matched by different rules union their
+// rule UIDs, so a fire-time tracking mute only suppresses the entry when
+// every contributing rule is muted.
+func TestSummaryBuffer_AppendUnionsRuleUIDs(t *testing.T) {
+	sb := NewSummaryBuffer("")
+	q := BufferedQuest{RewardType: 3, Reward: 200, PokestopID: "s1"}
+	q.RuleUIDs = []int64{1}
+	sb.Append("u", "quest", q)
+	q.RuleUIDs = []int64{2}
+	sb.Append("u", "quest", q)
+	q.RuleUIDs = []int64{1}
+	sb.Append("u", "quest", q)
+
+	got := sb.List("u", "quest")
+	if len(got) != 1 {
+		t.Fatalf("List len = %d, want 1", len(got))
+	}
+	if len(got[0].RuleUIDs) != 2 {
+		t.Errorf("RuleUIDs = %v, want union of 1 and 2", got[0].RuleUIDs)
+	}
+}

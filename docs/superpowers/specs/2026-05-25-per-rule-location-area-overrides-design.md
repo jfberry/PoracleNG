@@ -155,6 +155,8 @@ When a user loses access to an area (community-role change, manual `!area remove
 - Piggybacks on the existing `AreaLogic.ValidateAndPrune` path
 - No effect when area-security mode is off
 
+> Correction (#243): ValidateAndPrune never had a caller and was deleted; the prune runs through bot.PruneForMembership.
+
 ## REST API
 
 New endpoints nested under the existing `/api/humans/{id}` resource. Follows project verb-in-path style (matches `/api/profiles/{id}/add`, `.../update`, `.../delete`, `DELETE .../byUid/{uid}`):

@@ -1,8 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-
 	"github.com/jmoiron/sqlx"
 )
 
@@ -42,9 +40,7 @@ func LoadMaxbattles(db *sqlx.DB) ([]*MaxbattleTracking, error) {
 
 	result := make([]*MaxbattleTracking, len(maxbattles))
 	for i := range maxbattles {
-		if maxbattles[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(maxbattles[i].OverrideAreasRaw), &maxbattles[i].OverrideAreas)
-		}
+		maxbattles[i].OverrideAreas = loadOverrideKeys(maxbattles[i].OverrideAreasRaw)
 		result[i] = &maxbattles[i]
 	}
 	return result, nil

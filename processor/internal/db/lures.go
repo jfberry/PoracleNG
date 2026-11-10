@@ -1,8 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-
 	"github.com/jmoiron/sqlx"
 )
 
@@ -36,9 +34,7 @@ func LoadLures(db *sqlx.DB) ([]*LureTracking, error) {
 
 	result := make([]*LureTracking, len(lures))
 	for i := range lures {
-		if lures[i].OverrideAreasRaw != "" {
-			_ = json.Unmarshal([]byte(lures[i].OverrideAreasRaw), &lures[i].OverrideAreas)
-		}
+		lures[i].OverrideAreas = loadOverrideKeys(lures[i].OverrideAreasRaw)
 		result[i] = &lures[i]
 	}
 	return result, nil

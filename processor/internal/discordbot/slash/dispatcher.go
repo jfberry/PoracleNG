@@ -74,6 +74,8 @@ func NewDispatcher(cfg Config) *Dispatcher {
 	}
 	d.autocompleteRegistry.Register("tracking", listers.ListTracking)
 	d.autocompleteRegistry.Register("areas", listers.ListAreas)
+	d.autocompleteRegistry.Register("areas_available", listers.ListAvailableAreas)
+	d.autocompleteRegistry.Register("areas_addable", listers.ListAddableAreas)
 	d.autocompleteRegistry.Register("profiles", listers.ListProfiles)
 	d.autocompleteRegistry.Register("locations", listers.ListUserLocations)
 	return d
@@ -231,7 +233,7 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 	// id:N"). The mapper emits the right token grammar for each branch.
 	runKey := cmdKey
 	if canon == "untrack" {
-		if sub := findUntrackSubtype(ic); sub != "" && sub != "pokemon" {
+		if sub := subCommandName(ic); sub != "" && sub != "pokemon" {
 			runKey = "cmd." + sub
 		}
 	}
@@ -240,7 +242,7 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 		d.respondError(s, ic, "🛑 Command not implemented.")
 		return
 	}
-	replies := cmd.Run(ctx, tokens)
+	replies := bot.RunLocked(cmd, ctx, tokens)
 	// Apply maintenance suffix so slash users see the paused-delivery
 	// warning, matching the gateway (discordbot/bot.go) and Telegram surfaces.
 	if d.bundle != nil && ctx != nil && d.deps != nil {
@@ -338,6 +340,10 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
 	case opt == "iv":
 		return autocomplete.IVRange(focused)
+	// /profile settime and /summary … settime share the `times` option and
+	// the same settime grammar, so one route covers both.
+	case opt == "times":
+		return autocomplete.TimeSpec(focused, d.autocompleteTranslator(userLang))
 	case opt == "boss" && cmd == "raid":
 		return autocomplete.RaidBoss(context.Background(), d.deps, focused, userLang)
 	// /raid costume is a flat, non-species-scoped list, same shape as
@@ -367,18 +373,33 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return base
 	case opt == "template":
 		return autocomplete.Template(context.Background(), d.deps, focused, dtsTypeFor(cmd), "discord", userLang)
+	// /help topic — the installed "help" DTS entry ids. The option has
+	// always declared Autocomplete:true, but without a route here Discord
+	// got an empty response and showed "no options" forever.
+	case opt == "topic" && cmd == "help":
+		return autocomplete.HelpTopic(d.deps, focused, "discord", d.isAdmin(interactionUserID(ic)))
 	case opt == "tracking" && cmd == "untrack":
-		subtype := findUntrackSubtype(ic)
+		subtype := subCommandName(ic)
 		return d.userstateAutocomplete(ic, "tracking", subtype, focused)
+	// /area add offers what the user could still add (available minus
+	// already-selected); /area remove offers what they currently have.
+	// Both options hold a comma-separated list, so picks compose.
+	case opt == "area" && cmd == "area":
+		lister := "areas"
+		if subCommandName(ic) == "add" {
+			lister = "areas_addable"
+		}
+		return d.userstateAutocompleteMulti(ic, lister, focused)
 	case opt == "area":
 		return d.userstateAutocomplete(ic, "areas", "", focused)
 	case opt == "name" && cmd == "profile":
 		return d.userstateAutocomplete(ic, "profiles", "", focused)
 	// /profile copyto target — pick another profile of the same user.
 	// Reuses the same profiles lister as `name`; the sub-command name
-	// (copyto) selects the option name (profile), not a different list.
+	// (copyto) selects the option name (profile), not a different list,
+	// and is passed as the subtype so the lister omits the current profile.
 	case opt == "profile" && cmd == "profile":
-		return d.userstateAutocomplete(ic, "profiles", "", focused)
+		return d.userstateAutocomplete(ic, "profiles", subCommandName(ic), focused)
 	// /location show name and /location remove name — autocomplete from
 	// the user's saved named locations. Both sub-commands use the same
 	// option name ("name"), so a single (opt, cmd) pair covers both.
@@ -451,11 +472,13 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 	// pick a saved location by name rather than typing coordinates.
 	case opt == "location" && isTrackerCommand(cmd):
 		return d.userstateAutocomplete(ic, "locations", "", focused)
-	// Tracker areas: autocomplete from the user's currently-selected areas.
-	// The `areas` option accepts a comma-separated string, so we suggest
-	// individual area names for the user to type/select.
+	// Tracker areas: autocomplete from every area available to the user,
+	// not just the ones they have selected — `areas:` overrides the rule's
+	// areas outright, and parseOverride validates it against the available
+	// set. The option holds a comma-separated list, so the multi variant
+	// composes each pick onto what the user has already typed.
 	case opt == "areas" && isTrackerCommand(cmd):
-		return d.userstateAutocomplete(ic, "areas", "", focused)
+		return d.userstateAutocompleteMulti(ic, "areas_available", focused)
 	}
 	return nil
 }
@@ -498,19 +521,51 @@ func siblingOptionString(ic *discordgo.InteractionCreate, name string) string {
 // the lister errors — autocomplete shouldn't surface infrastructure errors
 // to the end user, so we degrade silently to "no suggestions".
 func (d *Dispatcher) userstateAutocomplete(ic *discordgo.InteractionCreate, listerName, subtype, focused string) []*discordgo.ApplicationCommandOptionChoice {
-	if d.autocompleteRegistry == nil {
-		return nil
-	}
-	lister := d.autocompleteRegistry.Lookup(listerName)
-	if lister == nil {
-		return nil
-	}
-	userID := interactionUserID(ic)
-	out, err := lister(context.Background(), d.deps, userID, autocomplete.UserStateHint{Subtype: subtype, Focused: focused})
-	if err != nil {
+	out, ok := d.listerChoices(ic, listerName, subtype, focused)
+	if !ok {
 		return nil
 	}
 	return autocomplete.FilterAndCap(out, focused)
+}
+
+// userstateAutocompleteMulti is userstateAutocomplete for options that
+// hold a comma-separated list (the tracker `areas:` option). The lister
+// still produces one Choice per candidate; FilterAndCapMulti composes them
+// onto whatever the user has already typed so each pick appends.
+//
+// The lister sees only the segment being typed, not the whole field, so
+// any lister that filters on hint.Focused behaves the same either way.
+func (d *Dispatcher) userstateAutocompleteMulti(ic *discordgo.InteractionCreate, listerName, focused string) []*discordgo.ApplicationCommandOptionChoice {
+	_, typing := autocomplete.SplitLastSegment(focused)
+	out, ok := d.listerChoices(ic, listerName, "", typing)
+	if !ok {
+		return nil
+	}
+	return autocomplete.FilterAndCapMulti(out, focused)
+}
+
+// listerChoices resolves a lister by name and runs it for the invoking
+// user. ok is false when the registry has no such lister or the lister
+// errored — autocomplete shouldn't surface infrastructure errors to the
+// end user, so callers degrade silently to "no suggestions".
+func (d *Dispatcher) listerChoices(ic *discordgo.InteractionCreate, listerName, subtype, focused string) ([]autocomplete.Choice, bool) {
+	if d.autocompleteRegistry == nil {
+		return nil, false
+	}
+	lister := d.autocompleteRegistry.Lookup(listerName)
+	if lister == nil {
+		return nil, false
+	}
+	userID := interactionUserID(ic)
+	out, err := lister(context.Background(), d.deps, userID, autocomplete.UserStateHint{
+		Subtype: subtype,
+		Focused: focused,
+		IsAdmin: d.isAdmin(userID),
+	})
+	if err != nil {
+		return nil, false
+	}
+	return out, true
 }
 
 // focusedOption returns the option flagged Focused=true. Walks into
@@ -555,11 +610,14 @@ func focusedStringValue(opt *discordgo.ApplicationCommandInteractionDataOption) 
 	return ""
 }
 
-// findUntrackSubtype walks the top-level interaction options for an
-// /untrack invocation and returns the chosen sub-command's name (which IS
-// the tracking subtype: "raid", "egg", ...). Returns "" when no
-// sub-command option is present — caller treats that as "no subtype hint".
-func findUntrackSubtype(ic *discordgo.InteractionCreate) string {
+// subCommandName walks the top-level interaction options and returns the
+// chosen sub-command's name, or "" when the command has no sub-command
+// layer (callers treat that as "no hint"). For /untrack the sub-command
+// name IS the tracking subtype ("raid", "egg", ...); for /area it is the
+// verb ("add", "remove", ...). Discord sends the canonical (default) name
+// here even when the user sees a localized one, so callers can compare
+// against the English names used in the definitions.
+func subCommandName(ic *discordgo.InteractionCreate) string {
 	if ic == nil || ic.Interaction == nil {
 		return ""
 	}
@@ -581,6 +639,16 @@ func findUntrackSubtype(ic *discordgo.InteractionCreate) string {
 //
 // The DTS types come from fallbacks/dts.json: monster, raid, egg, quest,
 // invasion, lure, nest, gym, fort-update, maxbattle.
+// autocompleteTranslator resolves a translator for autocomplete suggestions,
+// returning nil when no bundle is wired (tests) so callers fall back to their
+// English defaults rather than panicking.
+func (d *Dispatcher) autocompleteTranslator(lang string) *i18n.Translator {
+	if d == nil || d.bundle == nil {
+		return nil
+	}
+	return d.bundle.For(lang)
+}
+
 func dtsTypeFor(cmd string) string {
 	switch cmd {
 	case "track":
@@ -629,13 +697,14 @@ func (d *Dispatcher) commandAllowed(ic *discordgo.InteractionCreate, cmdKey stri
 // code paths:
 //
 //   - Guild interaction (ic.Member non-nil): use ic.Member.Roles —
-//     Discord already populated them in the interaction payload.
+//     Discord already populated them in the interaction payload — plus
+//     the guild's @everyone role (see discordroles.MemberRoleIDs).
 //   - DM interaction: union the user's roles across every guild in
 //     cfg.Discord.Guilds via discordroles.GetUserRoleIDs. Mirrors the
 //     text bot's fetchRoles DM branch and PoracleJS's getUserRoles.
 func (d *Dispatcher) lookupRoles(ic *discordgo.InteractionCreate, userID string) []string {
 	if ic != nil && ic.Member != nil {
-		return ic.Member.Roles
+		return discordroles.MemberRoleIDs(ic.GuildID, ic.Member.Roles)
 	}
 	if d.session == nil || d.cfgRoot == nil || len(d.cfgRoot.Discord.Guilds) == 0 || userID == "" {
 		return nil

@@ -5,9 +5,23 @@
 [processor]
 host = "127.0.0.1"                      # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces. Defaults to 127.0.0.1 if unset, or the PORACLE_HOST env var if set (Dockerfile exports this as 0.0.0.0)
 port = 3030                              # processor takes the original Poracle port
+# ip_whitelist / ip_blacklist accept exact IPs ("192.0.2.10", "2001:db8::1") and
+# CIDR ranges ("10.0.0.0/8", "2001:db8::/32"). Blacklist is checked first; a
+# non-empty whitelist then allows only matching addresses. Invalid entries stop startup.
 ip_whitelist = []
 ip_blacklist = []
+# trusted_proxies: reverse proxies (IPs or CIDRs) whose X-Forwarded-For / X-Real-IP
+# headers are believed when working out the client IP. Default empty = trust none, so
+# the client IP is always the TCP peer and forwarded headers cannot be spoofed.
+# If you run behind a reverse proxy (nginx, Traefik, Docker network, ...) and rely on
+# ip_whitelist/ip_blacklist, you MUST list the proxy here, e.g. ["172.16.0.0/12"] —
+# otherwise every request appears to come from the proxy's address.
+trusted_proxies = []
+# api_secret: value required in the X-Poracle-Secret header on /api/*. Blank disables
+# API authentication entirely; a startup warning is logged if it is blank and host is
+# not loopback (e.g. Docker's 0.0.0.0).
 api_secret = ""
+enable_pprof = false                     # serve Go profiling at /debug/pprof (requires api_secret via X-Poracle-Secret); leave off unless diagnosing
 
 # ---- Databases ----
 
@@ -43,7 +57,11 @@ cache_dir = ".cache/geofences"           # shared cache directory for downloaded
 #   (eg vaporeon would match an eevee)
 
 [pvp]
-level_caps = [50]                        # level caps to include in rank calculations, eg [50, 51]
+# level_caps - level caps to include in rank calculations, eg [50, 51].
+#   Should match the level caps configured in Golbat's PVP settings. Ranks Golbat
+#   sends for a cap not listed here are ignored, so with [50] a rank-5 cap-51
+#   (best buddy) result will not match any PVP tracking.
+level_caps = [50]
 # include_mega_evolution - server default for PVP rules that do NOT specify a
 # mega keyword (i.e. pvp_ranking_evolution = 0). false: those rules match base
 # forms only; true: they also match mega/temporary-evolution ranks. Per-rule
@@ -53,11 +71,17 @@ include_mega_evolution = false
 evolution_direct_tracking = false
 filter_by_track = false                  # whether PVP listings are auto-filtered by user's track requirements
 # filter_* - minimums on the track command to help users get PVP tracking right
-#   and to eliminate unexpectedly large tracks
-filter_max_rank = 10
+#   and to eliminate unexpectedly large tracks. filter_max_rank caps the worst
+#   rank a user can request (e.g. great100 is clamped to this value).
+filter_max_rank = 100
 filter_great_min_cp = 1400
 filter_ultra_min_cp = 2350
 filter_little_min_cp = 450
+# force_min_cp - client hint only: reported to web clients (PoracleWeb) as
+#   pvpRequiresMinCp in /api/config/poracleWeb so they ask for a min CP on PVP
+#   rules. It does NOT switch enforcement: the filter_*_min_cp floors above are
+#   always applied by the track command whatever this is set to.
+#force_min_cp = false
 # display_* - variables passed into DTS to allow filtering calculations
 display_max_rank = 10
 display_great_min_cp = 1400
@@ -96,6 +120,7 @@ strict_locations = false
 #   allowed_areas  - fences users are allowed to !area add
 #   location_fence - the single area used for checking strict_locations against
 #   discord        - registration channels and user roles for this community
+#                    (use the guild ID as a user_role for "every member of the server" — @everyone)
 #   telegram       - membership groups that qualify for access to this community
 #
 # [[area_security.communities]]
@@ -161,7 +186,6 @@ language = "en"
 # ---- General ----
 
 [general]
-environment = "production"               # leave as 'production'
 alert_minimum_time = 120                 # seconds before expiry inside which alerts will not be generated
 ignore_long_raids = false                # ignore raids > 47m to reduce raid hour/special event spam
 # img_url - base url for {{imgUrl}} reference (uicons repository)
@@ -170,12 +194,6 @@ img_url = "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UIC
 img_url_alt = ""
 # sticker_url - base url for {{stickerUrl}} reference for telegram webp stickers
 sticker_url = "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle"
-# images/stickers - override uicons repository per alert type
-#   controller types: monster, gym, nest, invasion, lure, quest, raid, weather
-# [general.images]
-# monster = "repositoryUrl"
-# [general.stickers]
-# monster = "repositoryUrl"
 request_shiny_images = false
 populate_pokestop_name = false           # [RDM] lookup nearby pokestop names in scanner db
 locale = "en"                            # default locale - eg en, fr, de, it, ru
@@ -197,8 +215,9 @@ default_template_name = "1"              # default template name/number for new 
 # [general.available_languages.de]
 # poracle = "dasporacle"
 # help = "hilfe"
-# shortlink provider - supported: hideuri, shlink, yourls
-shortlink_provider = "hideuri"
+# shortlink provider - only "shlink" is supported; leave empty to disable
+#   URL shortening (<S< ... >S> markers in templates then keep the original URL)
+shortlink_provider = ""
 shortlink_provider_url = ""
 shortlink_provider_key = ""
 shortlink_provider_domain = ""           # if supported, select domain to be used
@@ -229,25 +248,21 @@ disable_gym = false
 disable_fort_update = false
 disable_max_battle = false
 disable_showcase = false                 # disable Showcase (pokestop contest) processing
-process_confirmed_invasion_lineups = false
-disable_unconfirmed_invasion = false
 
 # ---- Discord ----
 
 [discord]
 enabled = true
 activity = "PoracleNG"                   # bot activity text
-worker_status = "invisible"              # available, dnd, idle, invisible
-worker_activity = "PoracleNG Helper"
 disable_auto_greetings = false           # whether to greet users who get role access
 upload_embed_images = false              # retrieve and upload images direct to discord CDN
 # check_role - check all discord users for role membership every check_role_interval hours
 #   (note: general.role_check_mode must be set to actually carry out deletions)
 check_role = false
 check_role_interval = 6
-# token - array of discord tokens; poracle can support multiple bots for sending
-#   messages. When command_token is empty, the first entry also drives the
-#   gateway side (commands, reconciliation, role management).
+# token - discord bot token. Accepts a string or an array, but only the first
+#   entry is used: it sends all alerts, and when command_token is empty it also
+#   drives the gateway side (commands, reconciliation, role management).
 token = [""]
 # command_token (optional) - separate bot token for command processing,
 #   reconciliation, and role management. When set, splits poracle into two
@@ -266,6 +281,7 @@ guilds = [""]
 #   not used in multi community (area security) mode
 channels = [""]
 # user_role - role IDs which automatically grant poracle access (without registration)
+#   the guild ID is the @everyone role and matches every member of that server
 #   not used in multi community (area security) mode
 user_role = [""]
 # admins - IDs of admins (can add channels with !channel add and perform other admin functions)
@@ -288,6 +304,7 @@ admin_channel_id = ""
 # thread_keep_alive_interval_hours: cadence (in hours) of the background
 # sweeper that unarchives Poracle-managed Discord threads so they stay
 # accessible. 0 disables. Max 168 (7 days, Discord's archive ceiling).
+# 24 is recommended; if this key is omitted the default is 0 (disabled).
 thread_keep_alive_interval_hours = 24
 
 # ---------------------------------------------------------------------------
@@ -389,6 +406,8 @@ enable = []
 # ---- Telegram ----
 
 [telegram]
+# enabled - false stops all Telegram alerts and commands. If this key is
+#   omitted the default is true (Telegram runs whenever a token is set).
 enabled = false
 token = ""
 # admins - admin user ids (array)
@@ -434,6 +453,12 @@ provider_url = ""                               # nominatim or photon URL, e.g. 
 # "{{{formattedAddress}}}" for the country-idiomatic string, or build your
 # own template like "{{{streetName}}} {{streetNumber}}, {{{city}}}".
 forward_only = false                     # when true, disable reverse geocoding lookup
+# local_language - language of the local place names in your area (e.g. "pl").
+#   Lookups in this language are sent without a language parameter, so the
+#   provider returns its native names. Set it with Photon prebuilt indexes,
+#   which only accept default/en/de/fr and answer HTTP 400 ({{addr}} = Unknown)
+#   for anything else, e.g. a [general] locale of "pl".
+local_language = ""
 cache_detail = 3                         # decimal places of lon/lat for caching (3 or 4 for 100x more detail)
 # intersection_users - list of GeoNames usernames (https://www.geonames.org)
 #   used to populate the {{intersection}} DTS field with the nearest street
@@ -472,9 +497,6 @@ static_key = [""]
 width = 320
 height = 200
 zoom = 15
-sprite_height = 20
-sprite_width = 20
-scale = 2
 type = "klokantech-basic"
 
 # Tileserver settings - default is unlikely to need changing
@@ -508,10 +530,7 @@ include_stops = false
 [tuning]
 # Processor tuning
 reload_interval_secs = 60
-encounter_cache_ttl = 3600
 worker_pool_size = 4
-batch_size = 50
-flush_interval_millis = 100
 # Tileserver tuning — controls how the processor generates static map tiles
 # Tiles are generated asynchronously: webhook handlers submit tile requests to a
 # queue and dedicated tile workers POST to the tileserver in the background.
@@ -527,10 +546,7 @@ tileserver_cooldown_ms = 30000           # how long circuit breaker stays open b
 render_pool_size = 8                             # concurrent render goroutines
 render_queue_size = 100                          # max buffered render jobs
 delivery_queue_size = 200                        # per-destination lane buffer (memory scales with active destinations)
-# Alerter tuning
-max_database_connections = 15            # max database connections (per worker)
-concurrent_matched_processors = 10       # pre-matched payloads processed concurrently
-matched_max_queue_size = 5000            # max items buffered before backpressure
+# Delivery tuning
 concurrent_discord_destinations = 10     # concurrent discord DM/channel sends per bot
 concurrent_telegram_destinations = 10    # concurrent telegram sends per bot
 concurrent_discord_webhooks = 10         # concurrent discord webhook sends
@@ -548,12 +564,14 @@ channel_summary_limit = 40               # max summary dispatches a channel/grou
 max_limits_before_stop = 10              # times user can hit rate limit (within 24hrs) before being stopped
 disable_on_stop = false                  # admin disable rather than just stop (requires admin to restart)
 shame_channel = ""                       # name and shame stopped/disabled users to this discord channel
-# overrides - override limits for specific channels/users/webhooks
+# overrides - override limits for specific channels/users/webhooks. target is
+#   the Poracle human ID: the Discord/Telegram user or channel ID, or for a
+#   webhook the full webhook URL (webhooks are registered by URL, not name).
 # [[alert_limits.overrides]]
 # target = "channel_or_user_id"
 # limit = 100
 # [[alert_limits.overrides]]
-# target = "webhook_name"
+# target = "https://discord.com/api/webhooks/<id>/<token>"
 # limit = 200
 
 # ---- Tracking ----
@@ -567,7 +585,13 @@ shame_channel = ""                       # name and shame stopped/disabled users
 #   "deny"                           - users must track individual pokemon
 everything_flag_permissions = "allow-any"
 default_distance = 0                     # default distance for distance-only tracking (no areas)
-max_distance = 0                         # max tracking circle radius (0 = no limit)
+max_distance = 0                         # max tracking circle radius in metres (0 = no limit)
+# max_areas - most areas a user may select per profile (!area, setAreas), and
+# per rule in area:/override_areas (0 = no limit). Writes over the limit are
+# refused; a list already over it (limit lowered later) can only be kept or
+# shrunk. Both limits apply to users only: admins, and channels, webhooks,
+# groups and threads (which only admins configure), are exempt.
+max_areas = 0
 # enable_gym_battle - allow the "battle_changes" keyword on !gym tracking.
 # Off by default: a gym emits an in-battle webhook whenever it's attacked, so
 # battle tracking can be very chatty. While false, "!gym battle_changes" is
@@ -579,8 +603,26 @@ default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = a
 # gender, weather-boost shift) and the non-IV → IV transition for users with
 # a prior message fire a reply-threaded `monsterChanged` (or threaded
 # `monster` for the encounter event). Set to false to suppress all of this:
-# change events still re-render as a regular `monster` send to matched users.
+# change events still re-render as a regular `monster` send to matched users
+# (rules with `edit` still edit the original in place while pokemon_edit is on
+# and the alert is within pokemon_edit_window_mins).
 pokemon_change_tracking = true
+# pokemon_edit - honour the `edit` flag on pokemon tracking. When true, a
+#   follow-up for the same encounter (IV reveal, weather boost, species/form
+#   change) edits the original alert in place while it is recent enough.
+#   When false, pokemon rules with `edit` behave as if it were not set:
+#   follow-ups arrive as threaded replies.
+pokemon_edit = true
+# pokemon_edit_window_mins - only edit while the original alert is at most
+#   this many minutes old; after that, follow-ups arrive as threaded replies
+#   so they aren't lost further up a busy channel. 0 = no limit.
+pokemon_edit_window_mins = 5
+# default_edit - alert types that edit the original alert in place even when
+#   the rule doesn't set `edit` (as if every rule of that type had `edit`).
+#   Applies to existing and new rules while the type is listed; remove it to
+#   revert. Supported (case-insensitive): pokemon, raid, egg, lure, incident.
+#   e.g. default_edit = ["pokemon", "raid", "egg"]
+default_edit = []
 
 # Quest summary — when on, quest tracking rules with the summary clean bit set
 # (clean & 4) defer matched quests into a per-user in-memory buffer instead of
@@ -618,7 +660,8 @@ max_per_message = 25
 # removal_safety_max_percent: when a sync requests orphan removal, abort the
 # removal phase if more than this percent of the cached fences would be removed
 # (only applies when the cache has ≥10 entries). 0 disables the check.
-# `force` keyword on the trigger bypasses.
+# `force` keyword on the trigger bypasses. 20 is a recommended value; if this
+# key is omitted the default is 0 (check disabled).
 removal_safety_max_percent = 20
 
 # Each [[autocreate.rules]] entry maps one channel template across a filtered
@@ -639,6 +682,10 @@ removal_safety_max_percent = 20
 [reconciliation.discord]
 update_user_names = false                # follow discord username changes
 remove_invalid_users = true              # de-register users who lose roles on role-check
+prune_user_areas = false                 # on a community change, delete areas the user may no longer select from
+                                         # humans.area and every profile. IRREVERSIBLE: an incomplete allowed_areas
+                                         # empties that community's members, and fixing the config won't restore them.
+                                         # Fences marked exemptFromAreaSecurity are never pruned.
 register_new_users = false               # auto-register users granted roles on role-check
 update_channel_names = true              # keep channel names in sync
 update_channel_notes = false             # update channel notes with guild name / category
@@ -647,6 +694,10 @@ unregister_missing_channels = false      # remove channels deleted from discord
 [reconciliation.telegram]
 update_user_names = false                # follow telegram username changes
 remove_invalid_users = true              # automatically remove users who lose access
+prune_user_areas = false                 # on a community change, delete areas the user may no longer select from
+                                         # humans.area and every profile. IRREVERSIBLE: an incomplete allowed_areas
+                                         # empties that community's members, and fixing the config won't restore them.
+                                         # Fences marked exemptFromAreaSecurity are never pruned.
 
 # ---- Stats ----
 
@@ -682,7 +733,8 @@ suggest_on_dm = false                    # when true, DMs that don't match a com
 
 # ---- Logging ----
 # Log levels (most to least verbose): trace, debug, info, warn
-# Suggestion: start at info; debug adds hot-path detail; trace is everything.
+# Suggestion: start at info; debug adds hot-path detail. Nothing currently
+# logs at trace, so "trace" behaves the same as "debug".
 # Legacy names are still accepted: "verbose" maps to info, "silly" to trace.
 
 [logging]

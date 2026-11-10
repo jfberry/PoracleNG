@@ -665,3 +665,58 @@ func TestLimiter_Reset_NoChange(t *testing.T) {
 		t.Fatal("Reset on unknown target should return false")
 	}
 }
+
+// TestBannedFiresOnlyOnce guards the edge-trigger contract on Banned:
+// crossing MaxLimitsBeforeStop must set Banned exactly once per 24h
+// violation window, not on every subsequent breach. OnBan is a heavy,
+// user-visible side effect (disable + farewell DM + shame post + admin
+// notice + state reload); re-firing it once per timing_period spams the
+// shame and admin channels for hours while the backlog for an
+// already-disabled target drains.
+func TestBannedFiresOnlyOnce(t *testing.T) {
+	l := New(Config{TimingPeriod: 1, DMLimit: 1, ChannelLimit: 5, MaxLimitsBeforeStop: 2})
+	defer l.Close()
+
+	bans := 0
+	for breach := range 5 {
+		l.Check("user1", "discord:user")
+		r := l.Check("user1", "discord:user")
+		if !r.JustBreached {
+			t.Fatalf("breach %d: should be JustBreached", breach+1)
+		}
+		if r.Banned {
+			bans++
+			if breach != 1 {
+				t.Fatalf("breach %d: Banned should only fire on the threshold-crossing breach", breach+1)
+			}
+		}
+		time.Sleep(1100 * time.Millisecond)
+	}
+
+	if bans != 1 {
+		t.Fatalf("Banned fired %d times across 5 breaches past the threshold, want exactly 1", bans)
+	}
+}
+
+// The ban latches for the 24h violation window, so a user re-enabled
+// after a ban (!start / !enable) was never banned again inside that window
+// however much they flooded (#285). ClearViolations restarts the history so
+// they are re-banned after another MaxLimitsBeforeStop breaches.
+func TestClearViolationsRearmsBan(t *testing.T) {
+	l := New(Config{TimingPeriod: 1, DMLimit: 1, ChannelLimit: 5, MaxLimitsBeforeStop: 1})
+	defer l.Close()
+
+	breach := func() RateResult {
+		l.Check("user1", "discord:user")
+		return l.Check("user1", "discord:user")
+	}
+
+	if r := breach(); !r.Banned {
+		t.Fatal("first breach should ban")
+	}
+	l.ClearViolations("user1")
+	time.Sleep(1100 * time.Millisecond)
+	if r := breach(); !r.Banned {
+		t.Fatal("after ClearViolations the next breach should ban again")
+	}
+}

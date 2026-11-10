@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"slices"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -49,6 +51,10 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	parsed := ctx.ArgMatcher.Match(args, lureParams, ctx.Language)
 
+	if parsed.HasKeyword("arg.remove") {
+		return removeLures(ctx, parsed)
+	}
+
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
 	}
@@ -81,17 +87,6 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_lure_type")}}
 	}
 
-	if parsed.HasKeyword("arg.remove") {
-		if len(parsed.RemoveUIDs) > 0 {
-			tr := ctx.Tr()
-			return removeByUIDs(ctx, ctx.Tracking.Lures, parsed.RemoveUIDs,
-				store.LureGetUID,
-				func(r *db.LureTrackingAPI) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(r)) },
-			)
-		}
-		return removeLures(ctx, lureIDs)
-	}
-
 	insert := make([]db.LureTrackingAPI, 0, len(lureIDs))
 	for _, id := range lureIDs {
 		insert = append(insert, db.LureTrackingAPI{
@@ -113,6 +108,9 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	if r := overrideLimitReply(ctx, tracked, insert, store.LureGetUID, store.LureSetUID); r != nil {
+		return r
+	}
 	diff, err := store.ApplyDiff(ctx.Tracking.Lures, ctx.TargetID, tracked, insert,
 		store.LureGetUID, store.LureSetUID)
 	if err != nil {
@@ -141,35 +139,22 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: react, Text: message}}
 }
 
-func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
-	tracked, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		return []bot.Reply{{React: "🙅"}}
+// lureRemoveSpec: lure rules are removed by lure type.
+var lureRemoveSpec = removeSpec{
+	selectors: []bot.ParamDef{lureTypeParam},
+}
+
+func removeLures(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	if reply := checkRemoveArgs(ctx, parsed, lureRemoveSpec, nil); reply != nil {
+		return []bot.Reply{*reply}
 	}
-	idSet := make(map[int]bool)
-	for _, id := range lureIDs {
-		idSet[id] = true
-	}
-	var uids []int64
-	var removed []db.LureTrackingAPI
-	for _, existing := range tracked {
-		if idSet[existing.LureID] || idSet[0] {
-			uids = append(uids, existing.UID)
-			removed = append(removed, existing)
-		}
-	}
-	if len(uids) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-	if err := ctx.Tracking.Lures.DeleteByUIDs(ctx.TargetID, uids); err != nil {
-		log.Errorf("lure command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-	ctx.TriggerReload()
 	tr := ctx.Tr()
-	var descriptions []string
-	for i := range removed {
-		descriptions = append(descriptions, ctx.RowText.LureRowText(tr, lureAPIToTracking(&removed[i])))
-	}
-	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
+	return ruleRemover[db.LureTrackingAPI]{
+		store:    ctx.Tracking.Lures,
+		getUID:   store.LureGetUID,
+		describe: func(r *db.LureTrackingAPI) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(r)) },
+		logName:  "lure",
+	}.run(ctx, parsed, func(r *db.LureTrackingAPI) bool {
+		return slices.Contains(parsed.LureTypes, r.LureID)
+	}, nil)
 }

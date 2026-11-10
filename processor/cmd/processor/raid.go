@@ -171,6 +171,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			GymID:     raid.GymID,
 			PokemonID: raid.PokemonID,
 		})
+		applyDefaultEdit(matched, ps.cfg.Tracking, raidType)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("raid").Inc()

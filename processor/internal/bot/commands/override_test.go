@@ -92,3 +92,56 @@ func TestParseOverride_ValidAreas(t *testing.T) {
 		t.Fatalf("areas not stored: %+v", got)
 	}
 }
+
+// TestOverrideCommand_StoresCanonicalName: `!track pikachu area:gent_centrum`
+// reaches the command as "gent centrum" (the parser turns unquoted underscores
+// into spaces), must be permitted against fence Gent_Centrum, and is stored as
+// the fence's own spelling.
+func TestOverrideCommand_StoresCanonicalName(t *testing.T) {
+	ctx, _ := newTestTrackCtx(t)
+	ctx.AreaLogic = bot.NewAreaLogic([]geofence.Fence{
+		{Name: "Gent_Centrum", Group: "BE", UserSelectable: true},
+		{Name: "london", Group: "UK", UserSelectable: true},
+	}, ctx.Config)
+
+	replies := (&TrackCommand{}).Run(ctx, []string{"25", "iv100", "area:gent centrum"})
+	if anyReact(replies, "🙅") {
+		t.Fatalf("spaced spelling of fence Gent_Centrum refused: %+v", replies)
+	}
+	rules, _ := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
+	if len(rules) != 1 || len(rules[0].OverrideAreas) != 1 || rules[0].OverrideAreas[0] != "gent_centrum" {
+		t.Fatalf("stored override_areas = %+v, want [gent_centrum]", rules)
+	}
+}
+
+func TestParseOverride_DedupesBySpellingKey(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+	ctx.AreaLogic = bot.NewAreaLogic([]geofence.Fence{
+		{Name: "Gent_Centrum", UserSelectable: true},
+		{Name: "london", UserSelectable: true},
+	}, ctx.Config)
+	got, reply := parseOverride(ctx, "", []string{"gent centrum", "London", "GENT_CENTRUM"}, 0)
+	if reply != nil {
+		t.Fatalf("rejected: %+v", reply)
+	}
+	if len(got.Areas) != 2 || got.Areas[0] != "gent_centrum" || got.Areas[1] != "london" {
+		t.Fatalf("areas = %v, want [gent_centrum london]", got.Areas)
+	}
+}
+
+func TestEnforceDistance_MaxDistance(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+	ctx.Config.Tracking.MaxDistance = 1000
+	if got := enforceDistance(ctx, 5000, false); got != 1000 {
+		t.Errorf("non-admin: got %d, want 1000", got)
+	}
+	ctx.TargetType = bot.TypeDiscordChannel
+	if got := enforceDistance(ctx, 5000, false); got != 5000 {
+		t.Errorf("channel target: got %d, want 5000 (exempt)", got)
+	}
+	ctx.TargetType = bot.TypeDiscordUser
+	ctx.IsAdmin = true
+	if got := enforceDistance(ctx, 5000, false); got != 5000 {
+		t.Errorf("admin: got %d, want 5000 (exempt)", got)
+	}
+}

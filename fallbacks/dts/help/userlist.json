@@ -1,22 +1,24 @@
-[{
-  "id": "userlist",
-  "type": "help",
-  "platform": "",
-  "language": "",
-  "template": {
-    "embed": {
-      "title": "!userlist (admin)",
-      "description": "List registered users. Useful for auditing membership, spotting disabled accounts, and finding IDs for `{{prefix}}enable`/`{{prefix}}disable`.",
-      "fields": [
-        {
-          "name": "Usage",
-          "value": "`{{prefix}}userlist` — every user\n`{{prefix}}userlist type:discord:user` — only Discord user accounts\n`{{prefix}}userlist type:discord:channel` — only Discord channel subscriptions\n`{{prefix}}userlist type:telegram:user` — only Telegram users\n`{{prefix}}userlist type:webhook` — only webhook destinations"
-        },
-        {
-          "name": "Output",
-          "value": "For each user: display name, ID, type, registration date, current profile, enabled/disabled status. Long lists come as a file attachment on Discord."
-        }
-      ]
+[
+  {
+    "id": "userlist",
+    "type": "help",
+    "platform": "",
+    "language": "",
+    "template": {
+      "embed": {
+        "title": "!userlist (admin)",
+        "description": "List registered users, channels, groups and webhooks, with their IDs, areas and status — for auditing, and for finding IDs for `{{prefix}}enable` / `{{prefix}}disable`.",
+        "fields": [
+          {
+            "name": "Usage",
+            "value": "`{{prefix}}userlist` — everything registered\n`{{prefix}}userlist discord user` — only Discord users\n`{{prefix}}userlist telegram group disabled` — Telegram groups that are stopped or disabled\n\nFilters are plain words and can be combined:\n• platform: `discord`, `telegram`\n• kind: `user`, `channel`, `group`, `webhook`\n• status: `enabled`, `disabled` (`disabled` includes stopped)"
+          },
+          {
+            "name": "Output",
+            "value": "One line each: `type • name | (ID) [areas] status`. The areas are those of the active profile. Status is 🛑stopped (paused with `{{prefix}}stop`), ⛔disabled (by an admin or the bot), both, or blank when active. Webhooks show just their name. Long lists come as several messages.\n\nTelegram community admins can run it too, and see only members of their own communities."
+          }
+        ]
+      }
     }
   }
-}]
+]

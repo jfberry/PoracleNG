@@ -23,4 +23,4 @@ Slash is:
 
 18 commands surfaced: `/version /tracked /help /info /language /track /raid /egg /quest /invasion /lure /nest /maxbattle /gym /fort /untrack /area /profile /location`.
 
-Text-only commands (deliberately): `!poracle`, `!poracle-test`, admin operations (`!broadcast`, `!apply`, `!enable`, `!disable`, `!unregister`, `!channel`, `!webhook`, `!autocreate`, `!role`, `!ask`, `!script`, `!userlist`, `!backup`, `!restore`, `!start`, `!stop`, `!weather`).
+Text-only commands (deliberately): `!poracle`, `!poracle-test`, admin operations (`!broadcast`, `!apply`, `!enable`, `!disable`, `!unregister`, `!channel`, `!webhook`, `!autocreate`, `!role`, `!ask`, `!script`, `!userlist`, `!backup`, `!restore`, `!start`, `!stop`).

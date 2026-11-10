@@ -63,7 +63,7 @@ func Setup(cfg Config) {
 
 	logFormatter := &PlainFormatter{
 		TimestampFormat: "2006-01-02 15:04:05",
-		LevelDesc:       []string{"PANC", "FATL", "ERRO", "WARN", "INFO", "DEBG"},
+		LevelDesc:       levelDesc,
 	}
 
 	log.SetFormatter(logFormatter)
@@ -84,6 +84,10 @@ func RotateLogs() {
 	}
 }
 
+// levelDesc labels each logrus level, indexed by log.Level (Panic=0 …
+// Trace=6).
+var levelDesc = []string{"PANC", "FATL", "ERRO", "WARN", "INFO", "DEBG", "TRCE"}
+
 // PlainFormatter matches Golbat's log format: LEVL 2006-01-02 15:04:05 message
 type PlainFormatter struct {
 	TimestampFormat string
@@ -93,8 +97,12 @@ type PlainFormatter struct {
 // Format implements logrus.Formatter.
 func (f *PlainFormatter) Format(entry *log.Entry) ([]byte, error) {
 	timestamp := entry.Time.Format(f.TimestampFormat)
-	if ref, ok := entry.Data["ref"]; ok {
-		return fmt.Appendf(nil, "%s %s [%v] %s\n", f.LevelDesc[entry.Level], timestamp, ref, entry.Message), nil
+	level := "????"
+	if int(entry.Level) < len(f.LevelDesc) {
+		level = f.LevelDesc[entry.Level]
 	}
-	return fmt.Appendf(nil, "%s %s %s\n", f.LevelDesc[entry.Level], timestamp, entry.Message), nil
+	if ref, ok := entry.Data["ref"]; ok {
+		return fmt.Appendf(nil, "%s %s [%v] %s\n", level, timestamp, ref, entry.Message), nil
+	}
+	return fmt.Appendf(nil, "%s %s %s\n", level, timestamp, entry.Message), nil
 }

@@ -3,8 +3,13 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
+
+	"github.com/bwmarrin/discordgo"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
@@ -317,6 +322,60 @@ func TestHumaDeliverMessages_MalformedJSON400(t *testing.T) {
 }
 
 // --- /resolve --------------------------------------------------------------
+
+type resolveTransport func(*http.Request) (*http.Response, error)
+
+func (f resolveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestHumaResolve_DiscordBecomesAvailableAfterStartup(t *testing.T) {
+	r, api := newFeaturesTestAPI(t)
+	session, err := discordgo.New("Bot test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.Client = &http.Client{Transport: resolveTransport(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"id":"111","username":"Trainer"}`)),
+			Request:    req,
+		}, nil
+	})}
+	cache := NewResolveCache()
+	defer cache.Stop()
+	var connected atomic.Pointer[discordgo.Session]
+	RegisterResolve(api, ResolveDeps{DiscordSessionFunc: connected.Load, Cache: cache})
+	request := []byte(`{"discord":{"users":["111"]}}`)
+
+	before := postJSON(t, r, "/api/resolve", request)
+	if before.Code != http.StatusOK {
+		t.Fatalf("before connection: %d: %s", before.Code, before.Body.String())
+	}
+	var beforeBody map[string]any
+	if err := json.Unmarshal(before.Body.Bytes(), &beforeBody); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := beforeBody["discord"]; ok {
+		t.Fatalf("Discord resolved before connection: %v", beforeBody["discord"])
+	}
+
+	connected.Store(session)
+	after := postJSON(t, r, "/api/resolve", request)
+	if after.Code != http.StatusOK {
+		t.Fatalf("after connection: %d: %s", after.Code, after.Body.String())
+	}
+	var afterBody struct {
+		Discord map[string]map[string]map[string]any `json:"discord"`
+	}
+	if err := json.Unmarshal(after.Body.Bytes(), &afterBody); err != nil {
+		t.Fatal(err)
+	}
+	if got := afterBody.Discord["users"]["111"]["name"]; got != "Trainer" {
+		t.Fatalf("resolved name = %v, want Trainer", got)
+	}
+}
 
 func TestHumaResolve_OK_NoPlatforms(t *testing.T) {
 	r, api := newFeaturesTestAPI(t)

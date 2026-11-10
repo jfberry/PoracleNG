@@ -620,3 +620,26 @@ func TestFallbackDtsSubdir(t *testing.T) {
 		t.Error("fallbacks/dts/help/track.json entry should load for telegram (platform wildcard)")
 	}
 }
+
+// Step 3 (the user's language default) must win over step 4 (the
+// language-less default). The step-3 match used to fall through and be
+// overwritten by step 4, so a language-specific default was never used
+// whenever a language-less one also existed (#270).
+func TestSelectionPrefersLanguageDefaultOverLanguageless(t *testing.T) {
+	configDir := t.TempDir()
+	writeDTS(t, configDir, `[
+		{"type":"monster","id":"1","platform":"discord","language":"de","default":true,"template":{"content":"default-de"}},
+		{"type":"monster","id":"1","platform":"discord","language":"","default":true,"template":{"content":"default-nolang"}}
+	]`)
+	ts, err := LoadTemplates(configDir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := ts.selectEntry("monster", "discord", "99", "de"); e == nil || e.Language != "de" {
+		t.Errorf("German user: got %+v, want the de default", e)
+	}
+	// A language with no default of its own still gets the language-less one.
+	if e := ts.selectEntry("monster", "discord", "99", "fr"); e == nil || e.Language != "" {
+		t.Errorf("French user: got %+v, want the language-less default", e)
+	}
+}

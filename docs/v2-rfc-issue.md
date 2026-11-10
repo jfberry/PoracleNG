@@ -97,7 +97,7 @@ Discrete, typed endpoints under `/api/v2` (problem+json, strict):
 
 | field | type | required | bounds |
 |---|---|---|---|
-| `day` | int | yes | 0–6 (0 = Sunday) |
+| `day` | int | yes | 1–7 (ISO: 1 = Monday … 7 = Sunday) |
 | `hours` | int | yes | 0–23 |
 | `mins` | int | yes | 0–59 |
 | `step` | int | no | ≥0 hours; `>0` ⇒ range entry |
