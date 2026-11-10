@@ -4,6 +4,17 @@ All notable changes to PoracleNG are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`distance`, `bearing`, `bearingEmoji` and `userTrackDistance` now work in
+  non-pokemon templates** (raid, egg, quest, invasion, incident, lure, nest,
+  gym, fort-update, maxbattle). They used to render as 0 or empty, because
+  those alerts render once and share the result between users. A template
+  that uses any of these fields, directly or in a partial, is now rendered once
+  per user. Templates that don't use them are still shared.
+
 ## [5.4.0] - 2026-11-10
 
 Covers everything merged to `develop` since 5.2.1 (develop builds briefly

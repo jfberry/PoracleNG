@@ -19,12 +19,13 @@ func newTestStore(t *testing.T, entries []DTSEntry) (*TemplateStore, string) {
 	t.Helper()
 	tmp := t.TempDir()
 	ts := &TemplateStore{
-		entries:     entries,
-		cache:       make(map[string]*raymond.Template),
-		sourceCache: make(map[string]string),
-		tileUsage:   make(map[string]bool),
-		configDir:   tmp,
-		fallbackDir: filepath.Join(tmp, "fallback"),
+		entries:      entries,
+		cache:        make(map[string]*raymond.Template),
+		sourceCache:  make(map[string]string),
+		tileUsage:    make(map[string]bool),
+		perUserUsage: make(map[string]bool),
+		configDir:    tmp,
+		fallbackDir:  filepath.Join(tmp, "fallback"),
 	}
 	return ts, tmp
 }
@@ -283,11 +284,12 @@ func TestSaveEntryCleansAllStaleDuplicates(t *testing.T) {
 	}
 
 	ts := &TemplateStore{
-		cache:       make(map[string]*raymond.Template),
-		sourceCache: make(map[string]string),
-		tileUsage:   make(map[string]bool),
-		configDir:   tmp,
-		fallbackDir: filepath.Join(tmp, "fallback"),
+		cache:        make(map[string]*raymond.Template),
+		sourceCache:  make(map[string]string),
+		tileUsage:    make(map[string]bool),
+		perUserUsage: make(map[string]bool),
+		configDir:    tmp,
+		fallbackDir:  filepath.Join(tmp, "fallback"),
 		entries: []DTSEntry{
 			{Type: "monster", ID: "1", Platform: "discord", Language: "", Template: "stale-main", sourceFile: dtsJSON},
 			{Type: "monster", ID: "1", Platform: "discord", Language: "", Template: "stale-fabio", sourceFile: oddPath},

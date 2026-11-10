@@ -269,7 +269,7 @@ These fields are available in every alert template, with the exceptions noted: t
 | `distime` | string | *Deprecated* — alias for `disappearTime` |
 | `userDistanceTrack` | bool | True when the matched tracking rule was distance-based (e.g. `!track pikachu d:500` or `!raid T5 d:1000`) rather than area-based. Useful for conditioning the template on *why* the user received the alert. |
 
-`distance`, `bearing`, `bearingEmoji` and `userTrackDistance` are per-user fields computed for **pokemon alerts only** — see [Distance and bearing](#distance-and-bearing-pokemon-only). Other alert types render once per (template, platform, language) group and have no per-user distance.
+`distance`, `bearing`, `bearingEmoji` and `userTrackDistance` are per-user fields — see [Distance and bearing](#distance-and-bearing).
 
 ### Weather Fields (types with S2 cell data: pokemon, raid, egg, invasion, maxbattle)
 
@@ -462,16 +462,18 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `pokestopName` | string | Nearby pokestop name (if applicable) |
 | `costumeName` | string | Translated costume name (empty when no costume, i.e. `costume == 0` or the `costume_N` translation key is absent). |
 
-### Distance and bearing (pokemon only)
+### Distance and bearing
 
-Computed per recipient, so only pokemon alerts (which render per user) have them:
+Computed per recipient, for every alert type with a single location (pokemon, raid, egg, quest, invasion, incident/showcase, lure, nest, gym, fort-update, maxbattle; not weather change or quest summaries). The location is the matched rule's saved location, else the profile's, else the user's.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `distance` | int | Distance from the user's location to the pokemon, in metres |
-| `bearing` | int | Bearing from the user to the pokemon, in degrees |
+| `distance` | int | Distance from the user's location to the alert, in metres |
+| `bearing` | int | Bearing from the user to the alert, in degrees |
 | `bearingEmoji` | string | Directional arrow emoji for `bearing` |
-| `userTrackDistance` | int | The matched rule's distance threshold in metres. `0` when the rule was area-based. When several rules match one user, this is the largest threshold. |
+| `userTrackDistance` | int | The matched rule's distance threshold in metres. `0` when the rule was area-based. For pokemon, when several rules match one user, this is the largest threshold. |
+
+Pokemon alerts are always rendered per user. Other alert types are normally rendered once and shared by every user with the same template, platform and language; a template that references any of these four fields (directly or in a partial it calls) is rendered once per user instead, so it costs one render per recipient.
 
 `userDistanceTrack` (all alert types) is in Common Fields.
 

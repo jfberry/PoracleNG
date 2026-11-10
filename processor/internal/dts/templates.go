@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -97,9 +98,11 @@ type TemplateStore struct {
 	cache       map[string]*raymond.Template
 	sourceCache map[string]string
 	tileUsage   map[string]bool
-	partials    map[string]string
-	configDir   string
-	fallbackDir string
+	// perUserUsage caches UsesPerUserFields per resolved template key.
+	perUserUsage map[string]bool
+	partials     map[string]string
+	configDir    string
+	fallbackDir  string
 	// defaultLocale is the configured [general] locale, used as a last
 	// resort before "any language" in selectEntry. Without it, a user
 	// whose language has no template (e.g. legacy lang="nl" with no NL
@@ -112,11 +115,12 @@ type TemplateStore struct {
 // LoadTemplates reads dts.json from configDir (preferred) or fallbackDir.
 func LoadTemplates(configDir, fallbackDir string) (*TemplateStore, error) {
 	ts := &TemplateStore{
-		cache:       make(map[string]*raymond.Template),
-		sourceCache: make(map[string]string),
-		tileUsage:   make(map[string]bool),
-		configDir:   configDir,
-		fallbackDir: fallbackDir,
+		cache:        make(map[string]*raymond.Template),
+		sourceCache:  make(map[string]string),
+		tileUsage:    make(map[string]bool),
+		perUserUsage: make(map[string]bool),
+		configDir:    configDir,
+		fallbackDir:  fallbackDir,
 	}
 
 	ts.partials = loadPartials(configDir, fallbackDir)
@@ -346,6 +350,7 @@ func (ts *TemplateStore) Reload(configDir, fallbackDir string) error {
 	ts.cache = make(map[string]*raymond.Template)
 	ts.sourceCache = make(map[string]string)
 	ts.tileUsage = make(map[string]bool)
+	ts.perUserUsage = make(map[string]bool)
 	ts.configDir = configDir
 	ts.fallbackDir = fallbackDir
 	ts.mu.Unlock()
@@ -478,6 +483,7 @@ func (ts *TemplateStore) ClearCache() {
 	ts.cache = make(map[string]*raymond.Template)
 	ts.sourceCache = make(map[string]string)
 	ts.tileUsage = make(map[string]bool)
+	ts.perUserUsage = make(map[string]bool)
 	ts.mu.Unlock()
 }
 
@@ -485,10 +491,56 @@ func (ts *TemplateStore) ClearCache() {
 // references staticMap/staticmap. Uses the same selection chain as Get().
 // Returns true (conservative) if the template can't be found.
 func (ts *TemplateStore) UsesTile(templateType, platform, templateID, language string) bool {
+	return ts.sourceUses(func(t *TemplateStore) map[string]bool { return t.tileUsage }, templateType, platform, templateID, language, func(source string) bool {
+		return strings.Contains(strings.ToLower(source), "staticmap")
+	})
+}
+
+// perUserFieldRe matches a reference to one of the per-user fields the group
+// renderer only supplies when it renders a user on their own: distance,
+// bearing, bearingEmoji and userTrackDistance. Case-sensitive with identifier
+// boundaries, so userDistanceTrack (a group-level field) and literal text
+// such as "Distance:" do not count.
+var perUserFieldRe = regexp.MustCompile(`(^|[^A-Za-z0-9_])(distance|bearing|bearingEmoji|userTrackDistance)([^A-Za-z0-9_]|$)`)
+
+// partialRefRe matches a partial call ({{> name}} or {{#> name}}).
+var partialRefRe = regexp.MustCompile(`\{\{~?#?>`)
+
+// UsesPerUserFields reports whether the resolved template for the given
+// parameters references a per-user field (distance, bearing, bearingEmoji,
+// userTrackDistance). Group rendering uses this to render such templates
+// once per user instead of once per group. A template that calls a partial
+// is checked against every partial as well, since partials can reference
+// the fields. Returns true (conservative) if the template can't be found.
+func (ts *TemplateStore) UsesPerUserFields(templateType, platform, templateID, language string) bool {
+	return ts.sourceUses(func(t *TemplateStore) map[string]bool { return t.perUserUsage }, templateType, platform, templateID, language, func(source string) bool {
+		if perUserFieldRe.MatchString(source) {
+			return true
+		}
+		if !partialRefRe.MatchString(source) {
+			return false
+		}
+		ts.mu.RLock()
+		defer ts.mu.RUnlock()
+		for _, p := range ts.partials {
+			if perUserFieldRe.MatchString(p) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// sourceUses resolves the template for the given parameters, applies uses to
+// its source and caches the answer in the usage map that usage selects (one of
+// the TemplateStore's per-key maps, cleared whenever the template cache is;
+// selected under the lock because reloads replace it). Returns true
+// (conservative) if the template can't be found.
+func (ts *TemplateStore) sourceUses(usage func(*TemplateStore) map[string]bool, templateType, platform, templateID, language string, uses func(source string) bool) bool {
 	key := cacheKey(templateType, platform, templateID, language)
 
 	ts.mu.RLock()
-	if result, ok := ts.tileUsage[key]; ok {
+	if result, ok := usage(ts)[key]; ok {
 		ts.mu.RUnlock()
 		return result
 	}
@@ -507,13 +559,13 @@ func (ts *TemplateStore) UsesTile(templateType, platform, templateID, language s
 		return true // conservative
 	}
 
-	uses := strings.Contains(strings.ToLower(source), "staticmap")
+	result := uses(source)
 
 	ts.mu.Lock()
-	ts.tileUsage[key] = uses
+	usage(ts)[key] = result
 	ts.mu.Unlock()
 
-	return uses
+	return result
 }
 
 func cacheKey(templateType, platform, templateID, language string) string {
@@ -1232,6 +1284,7 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 	ts.cache = make(map[string]*raymond.Template)
 	ts.sourceCache = make(map[string]string)
 	ts.tileUsage = make(map[string]bool)
+	ts.perUserUsage = make(map[string]bool)
 	configDir := ts.configDir
 
 	// Collect entries sharing the savePath for the TOML re-encode path.
@@ -1322,6 +1375,7 @@ func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage,
 		ts.cache = make(map[string]*raymond.Template)
 		ts.sourceCache = make(map[string]string)
 		ts.tileUsage = make(map[string]bool)
+		ts.perUserUsage = make(map[string]bool)
 		found = true
 		break
 	}

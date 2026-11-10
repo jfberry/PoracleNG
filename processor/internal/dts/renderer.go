@@ -535,11 +535,15 @@ func deliveryTargetType(userType string) string {
 }
 
 // renderGroupKey identifies a unique (template, platform, language) combination.
+// userID is set only when the template references a per-user field (see
+// TemplateStore.UsesPerUserFields), which puts each such user in a group of
+// their own.
 type renderGroupKey struct {
 	templateID    string
 	platform      string
 	language      string
 	distanceTrack bool
+	userID        string
 }
 
 // renderGrouped renders once per unique (template, platform, language) group and
@@ -581,6 +585,9 @@ func (r *Renderer) renderGrouped(
 			language:      language,
 			distanceTrack: user.TrackDistance > 0,
 		}
+		if r.templates.UsesPerUserFields(templateType, platform, key.templateID, language) {
+			key.userID = user.ID
+		}
 		if g, ok := groupMap[key]; ok {
 			g.users = append(g.users, user)
 		} else {
@@ -597,9 +604,18 @@ func (r *Renderer) renderGrouped(
 		// Render once for this group. Distance-track flag is shared by every
 		// user in the group (it's part of the group key), so we can stash it
 		// in a tiny perUser map and let {{userDistanceTrack}} resolve from
-		// the LayeredView's perUser layer.
+		// the LayeredView's perUser layer. A template that references
+		// distance/bearing gets a group per user (key.userID), and that
+		// user's values go in the same map.
 		perLang := mapOrEmpty(perLangEnrichment, key.language)
 		groupPerUser := map[string]any{"userDistanceTrack": key.distanceTrack}
+		if key.userID != "" {
+			user := g.users[0]
+			groupPerUser["distance"] = user.Distance
+			groupPerUser["bearing"] = user.Bearing
+			groupPerUser["bearingEmojiKey"] = user.CardinalDirection
+			groupPerUser["userTrackDistance"] = user.TrackDistance
+		}
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, groupPerUser, webhookFields, key.platform, areas)
 		view.original = original
 
