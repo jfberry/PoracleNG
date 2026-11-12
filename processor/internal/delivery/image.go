@@ -84,6 +84,13 @@ func NormalizeAndExtractImage(raw json.RawMessage, extractImage bool) (json.RawM
 				continue
 			}
 			coerceEmbedColor(embed)
+			// An attachment:// image only resolves when the sender uploads a
+			// file with the request, which it does for the first embed's image
+			// and only when extracting. Anywhere else the reference would
+			// dangle, so drop it.
+			if !extractImage || i > 0 {
+				dropAttachmentImage(embed)
+			}
 			if sanitizeDiscordEmbed(embed) {
 				sanitized = append(sanitized, embed)
 			}
@@ -446,7 +453,56 @@ func isHexColor(s string) bool {
 	return true
 }
 
-// ReplaceEmbedImageURL sets embeds[0].image.url to "attachment://map.png".
+// InlineImageRef is the embed image URL that points at the image file the
+// Discord sender uploads with the message (see BuildMultipartMessage, which
+// names the file map.png).
+const InlineImageRef = "attachment://map.png"
+
+// IsAttachmentRef reports whether url refers to a file uploaded with the
+// message rather than to a fetchable image.
+func IsAttachmentRef(url string) bool {
+	return strings.HasPrefix(url, "attachment://")
+}
+
+// dropAttachmentImage removes embed.image when its url is an attachment://
+// reference.
+func dropAttachmentImage(embed map[string]any) {
+	if image, ok := embed["image"].(map[string]any); ok {
+		if url, _ := image["url"].(string); IsAttachmentRef(url) {
+			delete(embed, "image")
+		}
+	}
+}
+
+// DropEmbedImage removes embeds[0].image. The sender calls it when the first
+// embed's image is an attachment:// reference but it has no bytes to upload,
+// so the message is sent without the image instead of with a dangling
+// reference.
+func DropEmbedImage(raw json.RawMessage) json.RawMessage {
+	var msg map[string]any
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return raw
+	}
+	embeds, ok := msg["embeds"].([]any)
+	if !ok || len(embeds) == 0 {
+		return raw
+	}
+	embed, ok := embeds[0].(map[string]any)
+	if !ok {
+		return raw
+	}
+	if _, has := embed["image"]; !has {
+		return raw
+	}
+	delete(embed, "image")
+	result, err := marshalNoEscape(msg)
+	if err != nil {
+		return raw
+	}
+	return result
+}
+
+// ReplaceEmbedImageURL sets embeds[0].image.url to InlineImageRef.
 // This is the only function that needs a second JSON parse — called only when
 // an image was successfully downloaded and needs to be replaced with an attachment.
 func ReplaceEmbedImageURL(raw json.RawMessage) json.RawMessage {
@@ -471,7 +527,7 @@ func ReplaceEmbedImageURL(raw json.RawMessage) json.RawMessage {
 		embed["image"] = image
 	}
 
-	image["url"] = "attachment://map.png"
+	image["url"] = InlineImageRef
 
 	result, err := marshalNoEscape(msg)
 	if err != nil {

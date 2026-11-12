@@ -189,6 +189,11 @@ func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.R
 			reqBody = buf
 			contentType = ct
 		}
+	} else if IsAttachmentRef(imageURL) {
+		// Points at an uploaded tile but there are no bytes to upload: send
+		// without the image rather than with a dangling reference.
+		normalized = DropEmbedImage(normalized)
+		message = normalized
 	} else if imageURL != "" {
 		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
@@ -315,6 +320,10 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 			reqBody = buf
 			contentType = ct
 		}
+	} else if IsAttachmentRef(imageURL) {
+		// Points at an uploaded tile but there are no bytes to upload: send
+		// without the image rather than with a dangling reference.
+		normalized = DropEmbedImage(normalized)
 	} else if imageURL != "" {
 		logref.Debugf(logRef, "discord: uploading embed image for bot/%s", channelID)
 		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
@@ -357,6 +366,10 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 			reqBody = buf
 			contentType = ct
 		}
+	} else if IsAttachmentRef(imageURL) {
+		// Points at an uploaded tile but there are no bytes to upload: send
+		// without the image rather than with a dangling reference.
+		normalized = DropEmbedImage(normalized)
 	} else if imageURL != "" {
 		logref.Debugf(logRef, "discord: uploading embed image for webhook/%s", webhookURL)
 		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
