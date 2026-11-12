@@ -158,20 +158,31 @@ func (tp *TilePending) Apply(url string) {
 	}
 }
 
-// ApplyInline writes the fallback URL into the enrichment map for inline mode.
-// The actual bytes are carried through the RenderJob, not stored in enrichment.
-// We use the real fallback URL rather than a marker string because the rendered
-// message JSON must contain a valid URL: Discord's edit endpoint (PATCH) sends
-// the embed JSON directly, and "inline" isn't a valid URL. The fallback URL
-// works for both new sends (where delivery's StaticMapData short-circuit fires
-// first and replaces it with attachment://map.png) and edits (where the fallback
-// URL appears in the embed if no bytes are available).
+// ApplyInline writes the inline-mode stand-in into the enrichment map. The
+// actual bytes are carried through the RenderJob, not stored in enrichment;
+// the Discord sender uploads them when it sees bytes plus a non-empty embed
+// image URL, and rewrites that URL to attachment://map.png.
+//
+// The stand-in must be a non-empty, valid URL: an empty one makes the sender
+// skip the upload (no image at all), and Discord's edit endpoint rejects a
+// non-URL marker. The fallback URL is used when configured (unchanged
+// behaviour); with no fallback, InlineImageRef is used, which is exactly the
+// reference the upload resolves.
 func (tp *TilePending) ApplyInline() {
 	if tp.target != nil {
-		tp.target["staticMap"] = tp.Fallback
-		tp.target["staticmap"] = tp.Fallback
+		url := tp.Fallback
+		if url == "" {
+			url = InlineImageRef
+		}
+		tp.target["staticMap"] = url
+		tp.target["staticmap"] = url
 	}
 }
+
+// InlineImageRef is the stand-in {{staticMap}} gets in inline mode when no
+// fallback URL is configured. It must equal delivery.InlineImageRef (checked
+// by a test in cmd/processor); staticmap doesn't import delivery.
+const InlineImageRef = "attachment://map.png"
 
 // tileRequest is an internal work item for the tile queue.
 type tileRequest struct {
