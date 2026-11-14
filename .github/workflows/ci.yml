@@ -51,7 +51,7 @@ jobs:
           # golangci-lint refuses to run when its own Go build version is
           # older than the module's target ("the Go language version used to
           # build golangci-lint is lower than the targeted Go version").
-          version: v2.13.1
+          version: v2.15.0
           working-directory: processor
           # Config is .golangci.yml at repo root.
           args: --config=${{ github.workspace }}/.golangci.yml ./...

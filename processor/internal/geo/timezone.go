@@ -3,7 +3,7 @@ package geo
 import (
 	"time"
 
-	"github.com/ringsaturn/tzf"
+	"github.com/ringsaturn/tzf/v2"
 )
 
 var finder tzf.F
