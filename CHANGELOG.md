@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   those alerts render once and share the result between users. A template
   that uses any of these fields, directly or in a partial, is now rendered once
   per user. Templates that don't use them are still shared.
+- **A broken template no longer reports "Template not found".** When your
+  template is matched but has a Handlebars syntax error (for example an
+  unclosed `{{#if}}`), the alert now says "Template compile error". When its
+  `templateFile` can't be read, it says "Template could not be loaded". The
+  processor log names the exact problem. `!poracle-test` reports the same.
 
 ## [5.4.0] - 2026-11-10
 

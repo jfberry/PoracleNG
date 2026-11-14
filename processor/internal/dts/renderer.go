@@ -194,21 +194,40 @@ func (r *Renderer) ResolveTemplate(trackingTemplate string) string {
 // Returns nil if a template exists, or an error describing what's missing.
 func (r *Renderer) CheckTemplate(templateType, platform, templateID, language string) error {
 	resolvedID := r.resolveTemplate(templateID)
-	tmpl := r.templates.Get(templateType, platform, resolvedID, language)
+	tmpl, status := r.lookupTemplate(templateType, platform, resolvedID, language)
 	if tmpl != nil {
 		return nil
 	}
-	// Try monsterNoIv → monster fallback
-	if templateType == "monsterNoIv" {
-		tmpl = r.templates.Get("monster", platform, resolvedID, language)
-		if tmpl != nil {
-			return nil
-		}
+	switch status {
+	case LookupLoadError:
+		return fmt.Errorf("DTS template for type=%q platform=%q template=%q language=%q could not be loaded (templateFile missing or no template content; see processor log)", templateType, platform, resolvedID, language)
+	case LookupCompileError:
+		return fmt.Errorf("DTS template for type=%q platform=%q template=%q language=%q has a Handlebars syntax error (see processor log)", templateType, platform, resolvedID, language)
 	}
 	if resolvedID == "" {
 		return fmt.Errorf("no DTS template found for type=%q platform=%q (no default template configured)", templateType, platform)
 	}
 	return fmt.Errorf("no DTS template found for type=%q platform=%q template=%q language=%q", templateType, platform, resolvedID, language)
+}
+
+// lookupTemplate looks up a template, falling back from monsterNoIv to
+// monster when the monsterNoIv lookup produced nothing. When both fail, the
+// status reports a broken template (load/compile error) in preference to a
+// missing one, so a broken monsterNoIv isn't hidden behind "not found" for
+// monster.
+func (r *Renderer) lookupTemplate(templateType, platform, templateID, language string) (*raymond.Template, LookupStatus) {
+	tmpl, status := r.templates.Lookup(templateType, platform, templateID, language)
+	if tmpl != nil || templateType != "monsterNoIv" {
+		return tmpl, status
+	}
+	tmpl, monsterStatus := r.templates.Lookup("monster", platform, templateID, language)
+	if tmpl != nil {
+		return tmpl, LookupOK
+	}
+	if status != LookupNotFound {
+		return nil, status
+	}
+	return nil, monsterStatus
 }
 
 // Templates returns the underlying TemplateStore.
@@ -386,14 +405,11 @@ func (r *Renderer) renderForUsers(
 
 		// f. Get template (with monsterNoIv -> monster fallback)
 		templateID := r.resolveTemplate(user.Template)
-		tmpl := r.templates.Get(templateType, platform, templateID, language)
-		if tmpl == nil && templateType == "monsterNoIv" {
-			tmpl = r.templates.Get("monster", platform, templateID, language)
-		}
+		tmpl, status := r.lookupTemplate(templateType, platform, templateID, language)
 
 		var rendered string
 		if tmpl == nil {
-			rendered = fallbackMessage(fallbackNotFound, templateType, platform, templateID, language)
+			rendered = fallbackMessage(lookupFallbackReason(status), templateType, platform, templateID, language)
 		} else {
 			df := raymond.NewDataFrame()
 			df.Set("language", language)
@@ -619,11 +635,11 @@ func (r *Renderer) renderGrouped(
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, groupPerUser, webhookFields, key.platform, areas)
 		view.original = original
 
-		tmpl := r.templates.Get(templateType, key.platform, key.templateID, key.language)
+		tmpl, status := r.templates.Lookup(templateType, key.platform, key.templateID, key.language)
 
 		var rendered string
 		if tmpl == nil {
-			rendered = fallbackMessage(fallbackNotFound, templateType, key.platform, key.templateID, key.language)
+			rendered = fallbackMessage(lookupFallbackReason(status), templateType, key.platform, key.templateID, key.language)
 		} else {
 			df := raymond.NewDataFrame()
 			df.Set("language", key.language)
@@ -826,13 +842,32 @@ func mapOrEmpty(m map[string]map[string]any, key string) map[string]any {
 type fallbackReason int
 
 const (
-	fallbackNotFound    fallbackReason = iota // no template matched the selection chain
-	fallbackRenderError                       // template found but failed to execute
-	fallbackInvalidJSON                       // template rendered, but the output is not valid JSON
+	fallbackNotFound     fallbackReason = iota // no template matched the selection chain
+	fallbackRenderError                        // template found but failed to execute
+	fallbackInvalidJSON                        // template rendered, but the output is not valid JSON
+	fallbackLoadError                          // template matched, but its templateFile couldn't be read (or it has no content)
+	fallbackCompileError                       // template matched, but its Handlebars source failed to parse
 )
+
+// lookupFallbackReason maps a failed template lookup to the fallback reason
+// shown to the user.
+func lookupFallbackReason(s LookupStatus) fallbackReason {
+	switch s {
+	case LookupLoadError:
+		return fallbackLoadError
+	case LookupCompileError:
+		return fallbackCompileError
+	default:
+		return fallbackNotFound
+	}
+}
 
 func (f fallbackReason) text() string {
 	switch f {
+	case fallbackLoadError:
+		return "Template could not be loaded"
+	case fallbackCompileError:
+		return "Template compile error"
 	case fallbackRenderError:
 		return "Template render error"
 	case fallbackInvalidJSON:

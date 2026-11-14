@@ -357,34 +357,58 @@ func (ts *TemplateStore) Reload(configDir, fallbackDir string) error {
 	return nil
 }
 
+// LookupStatus says why a template lookup did or didn't produce a compiled
+// template. A selected entry that fails to load or compile is NOT the same
+// as no entry matching: the operator's template was found and is broken, so
+// the fix is in the template, not in its type/platform/id/language keys.
+type LookupStatus int
+
+const (
+	LookupOK           LookupStatus = iota // compiled template returned
+	LookupNotFound                         // no entry matched the selection chain
+	LookupLoadError                        // entry matched, but its templateFile couldn't be read (or it has no content)
+	LookupCompileError                     // entry matched, but the Handlebars source failed to parse
+)
+
 // Get finds and returns a compiled template using the selection chain.
-// Returns nil if no matching entry exists or if compilation fails.
+// Returns nil if no matching entry exists or if compilation fails; use
+// Lookup to tell those apart.
 func (ts *TemplateStore) Get(templateType, platform, templateID, language string) *raymond.Template {
+	tmpl, _ := ts.Lookup(templateType, platform, templateID, language)
+	return tmpl
+}
+
+// Lookup is Get plus the reason a nil template was returned. A selected
+// entry that fails to load or compile is reported as such and does not fall
+// through to the bundled fallback: the error is logged with the parser's
+// message, and the status lets the renderer tell the operator their
+// template is broken rather than missing.
+func (ts *TemplateStore) Lookup(templateType, platform, templateID, language string) (*raymond.Template, LookupStatus) {
 	ts.mu.RLock()
 	key := cacheKey(templateType, platform, templateID, language)
 	if cached, ok := ts.cache[key]; ok {
 		ts.mu.RUnlock()
-		return cached
+		return cached, LookupOK
 	}
 	ts.mu.RUnlock()
 
 	// Find matching entry via selection chain
 	entry := ts.selectEntry(templateType, platform, templateID, language)
 	if entry == nil {
-		return nil
+		return nil, LookupNotFound
 	}
 
 	// Resolve and compile
 	tmplStr, err := resolveTemplate(*entry, ts.configDir)
 	if err != nil {
 		log.Errorf("dts: resolve template %s/%s/%s/%s: %v", templateType, platform, templateID, language, err)
-		return nil
+		return nil, LookupLoadError
 	}
 
 	compiled, err := raymond.Parse(tmplStr)
 	if err != nil {
 		log.Errorf("dts: compile template %s/%s/%s/%s: %v", templateType, platform, templateID, language, err)
-		return nil
+		return nil, LookupCompileError
 	}
 
 	// Register partials on this template instance (not globally, so reloads work)
@@ -400,7 +424,7 @@ func (ts *TemplateStore) Get(templateType, platform, templateID, language string
 	ts.sourceCache[key] = tmplStr
 	ts.mu.Unlock()
 
-	return compiled
+	return compiled, LookupOK
 }
 
 // Exists checks whether a template with the given ID exists for the type and
