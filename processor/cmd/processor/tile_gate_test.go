@@ -72,8 +72,8 @@ func TestResolveTilePendingInlineFailureAppliesFallback(t *testing.T) {
 	}
 }
 
-// When the deadline passes, the gate gives up: fallback applied, counted, and
-// the in-flight tileserver request cancelled.
+// When the deadline passes, the gate gives up: fallback applied and the
+// in-flight tileserver request cancelled.
 func TestResolveTilePendingTimeoutAbandonsRequest(t *testing.T) {
 	var cancelled atomic.Bool
 	entered := make(chan struct{}, 1)
@@ -94,9 +94,10 @@ func TestResolveTilePendingTimeoutAbandonsRequest(t *testing.T) {
 	if got := target["staticMap"]; got != gateFallback {
 		t.Errorf("staticMap = %v, want the fallback", got)
 	}
-	if n := ps.tileStats.timedOut.Load(); n != 1 {
-		t.Errorf("timedOut = %d, want 1", n)
-	}
+	// Not asserting tileStats.timedOut here: the worker's request context
+	// shares the gate's deadline, so the worker may hand back the fallback
+	// just as the gate's timer fires, and receiveBy rightly takes it. The
+	// counter is covered by TestTileGaveUpCounts.
 	<-entered
 	deadline := time.Now().Add(5 * time.Second)
 	for !cancelled.Load() && time.Now().Before(deadline) {
@@ -104,6 +105,16 @@ func TestResolveTilePendingTimeoutAbandonsRequest(t *testing.T) {
 	}
 	if !cancelled.Load() {
 		t.Error("tileserver request was not cancelled after the gate gave up")
+	}
+}
+
+// A tile that never arrives by the deadline is counted as a give-up.
+func TestTileGaveUpCounts(t *testing.T) {
+	ps := &ProcessorService{}
+	pending := &staticmap.TilePending{Result: make(chan string, 1), Deadline: time.Now().Add(30 * time.Millisecond), Fallback: gateFallback}
+	ps.resolveTilePending(pending, 0, 0)
+	if n := ps.tileStats.timedOut.Load(); n != 1 {
+		t.Errorf("timedOut = %d, want 1", n)
 	}
 }
 
