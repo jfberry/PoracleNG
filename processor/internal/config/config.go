@@ -639,12 +639,12 @@ type TuningConfig struct {
 	WorkerPoolSize             int `toml:"worker_pool_size"`
 	BatchSize                  int `toml:"batch_size"`                   // unused: never read, has no effect
 	FlushIntervalMillis        int `toml:"flush_interval_millis"`        // unused: never read, has no effect
-	TileserverConcurrency      int `toml:"tileserver_concurrency"`       // tile worker goroutines (default 2)
-	TileserverTimeout          int `toml:"tileserver_timeout"`           // HTTP POST timeout ms (default 10000)
+	TileserverConcurrency      int `toml:"tileserver_concurrency"`       // tile worker goroutines (default 5)
+	TileserverTimeout          int `toml:"tileserver_timeout"`           // HTTP POST timeout ms (default 30000)
 	TileserverFailureThreshold int `toml:"tileserver_failure_threshold"` // circuit breaker threshold (default 5)
 	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`       // circuit breaker cooldown ms (default 30000)
 	TileserverQueueSize        int `toml:"tileserver_queue_size"`        // async tile queue depth (default 100)
-	TileserverDeadlineMs       int `toml:"tileserver_deadline"`          // max wait for tile before fallback ms (default 10000)
+	TileserverDeadlineMs       int `toml:"tileserver_deadline"`          // max wait for tile before fallback ms (default 30000)
 	TileserverPregenTTL        int `toml:"tileserver_pregen_ttl"`        // seconds for pregenerated tile TTL (default 86400 = 1 day, -1 = no TTL)
 	GeocodingConcurrency       int `toml:"geocoding_concurrency"`
 	GeocodingTimeout           int `toml:"geocoding_timeout"` // ms

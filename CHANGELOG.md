@@ -6,7 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **Tile defaults are higher.** `[tuning] tileserver_concurrency` now
+  defaults to 5 (was 2), and `tileserver_timeout` and `tileserver_deadline`
+  to 30000 ms (were 10000). An alert can now wait up to 30 seconds for its
+  map before going out with the fallback image. If your `config.toml` sets
+  these keys (the old example config did), your values still apply: change
+  them yourself to pick up the new defaults. Rampardos copes well with 5 or
+  more concurrent tiles; an older tileserver may need fewer.
+
+### Changed
+
+- **Alerts that go out without their map are now logged.** When an alert stops
+  waiting for its tile, the processor logs a WARN: `gave up waiting for
+  <type> tile after …` when the deadline passed, or `skipped waiting for
+  <type> tile, render queue … is over 80% full`. Both include the tile queue
+  depth. The periodic status line adds counts after `Tiles:` when any are
+  non-zero: `gaveup`, `skipped`, `expired`, `abandoned`, `queuefull`,
+  `circuitopen`. New Prometheus counter: `poracle_render_tile_timeout_total`;
+  `poracle_processor_tile_total` gains the `abandoned` result.
+- **Tiles nobody will use are no longer generated.** When an alert gives up on
+  its tile, a request still in the tile queue is skipped and one already at the
+  tileserver is cancelled, so the tile workers move on to tiles that can still
+  be used. These cancellations don't count toward the circuit breaker; a
+  tileserver that is genuinely slow still trips it.
+- **Embed image downloads are shared.** When many Discord destinations upload
+  the same image (a tile, the fallback image, an icon), it is downloaded once
+  and reused for two minutes, instead of once per destination.
+
 ### Fixed
+
+- **Fewer missing maps when the processor is busy** (for example weather
+  changes at the top of the hour):
+  - Under render-queue pressure, a tile that had already arrived was thrown
+    away. It is now used.
+  - A tile that arrived just as the deadline passed was dropped about half the
+    time. It is now used.
+  - In inline mode (`uploadEmbedImages`), a tile that failed left the message
+    with no image. It now shows the fallback image, like the other modes.
+- **`monsterChanged` alerts get a map when only that template uses one.** The
+  tile was decided from the `monster` template, so if `monsterChanged` used
+  `{{staticMap}}` and `monster` didn't, change alerts went out without a map.
+  An unencountered pokemon with no `monsterNoIv` template now follows the
+  `monster` template too, rather than always generating a tile.
+- **Per-user weather tiles no longer replace a template's own image.** With
+  `show_altered_pokemon_static_map` on, the tile bytes were uploaded over any
+  image the weather template set itself.
 
 - **`distance`, `bearing`, `bearingEmoji` and `userTrackDistance` now work in
   non-pokemon templates** (raid, egg, quest, invasion, incident, lure, nest,

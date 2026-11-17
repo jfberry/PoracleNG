@@ -2,13 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -36,6 +39,13 @@ import (
 type tileGate struct {
 	ready chan struct{}
 	bytes []byte
+}
+
+// tileGateStats counts alerts that went out without their tile because the
+// gate stopped waiting. Reported (and reset) in the periodic status line.
+type tileGateStats struct {
+	timedOut atomic.Int64 // tile not ready by its deadline
+	skipped  atomic.Int64 // render queue over 80%, didn't wait
 }
 
 // newTileGate spawns a goroutine that resolves the supplied TilePending and
@@ -189,7 +199,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 		// pregen URL in URL/URLWithBytes mode, the fallback URL in inline mode).
 		// The inline tile bytes must only replace a message whose embed image IS
 		// that tile — see tileBytesForMessage.
-		tileURL, _ := job.Enrichment["staticMap"].(string)
+		tileURL := jobTileURL(job)
 		for _, j := range jobs {
 			var tth delivery.TTH
 			if job.OverrideCleanTTH != 0 {
@@ -204,6 +214,24 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 	}
 
 	metrics.RenderTotal.WithLabelValues("ok").Inc()
+}
+
+// jobTileURL returns what {{staticMap}} resolved to for this job. The tile is
+// usually in the base enrichment, but a per-user tile (weatherchange with
+// show_altered_pokemon_static_map) is written into that user's per-language
+// map instead. Reading only the base map there returned "", which made
+// tileBytesForMessage attach the tile bytes to every message — replacing a
+// template's own image with the tile.
+func jobTileURL(job RenderJob) string {
+	if url, _ := job.Enrichment["staticMap"].(string); url != "" {
+		return url
+	}
+	for _, lang := range job.PerLangEnrichment {
+		if url, _ := lang["staticMap"].(string); url != "" {
+			return url
+		}
+	}
+	return ""
 }
 
 // tileBytesForMessage decides whether this rendered message should carry the
@@ -236,83 +264,194 @@ func tileBytesForMessage(msg json.RawMessage, tileBytes []byte, tileURL string) 
 // resolveTilePending performs the synchronous tile wait that processRenderJob
 // previously did inline. It mutates pending.target (the shared Enrichment map)
 // via Apply / ApplyInline and returns the resulting tile bytes (nil if the
-// mode doesn't produce bytes, the bytes channel timed out, or the result was
-// nil). queueLen/queueCap are passed in so the function can apply the same
+// mode doesn't produce bytes, the bytes didn't arrive in time, or the result
+// was nil). queueLen/queueCap are passed in so the function can apply the same
 // queue-pressure back-off as before — the caller samples them at the point
 // of dispatch (which is close enough to render time for the heuristic).
 //
+// Whenever the gate stops waiting without a tile it calls Abandon, so a tile
+// worker that hasn't started the request yet skips it and one mid-request
+// cancels it: a tile nobody will use only delays the tiles behind it. It then
+// logs a WARN, so a busy tileserver shows up in the logs as alerts that went
+// out with the fallback image.
+//
+// Every failure path leaves {{staticMap}} as the fallback URL, inline mode
+// included (it used to stay unset there, so the message lost its image
+// instead of showing the fallback).
+//
 // Safe to call from a goroutine spawned by the dispatcher (see tileGate).
 func (ps *ProcessorService) resolveTilePending(pending *staticmap.TilePending, queueLen, queueCap int) []byte {
+	start := time.Now()
+
 	if queueCap > 0 && float64(queueLen)/float64(queueCap) > 0.8 {
-		// Queue is under pressure — skip waiting for tile.
-		switch {
-		case pending.Both:
-			// Drain both channels so the tile worker doesn't block; apply fallback URL.
-			go func() { <-pending.ResultImg }()
-			pending.Apply(pending.Fallback)
-		case pending.Inline:
-			// Don't set "inline" marker without image bytes — the template
-			// would render "inline" as the image URL. Drain the channel in
-			// the background so the tile worker doesn't block.
-			go func() { <-pending.ResultImg }()
-		default:
-			pending.Apply(pending.Fallback)
+		// Render queue under pressure: don't wait. A tile that is already
+		// done is still used.
+		if img, done := takeReadyTile(pending); done {
+			return img
 		}
+		pending.Abandon()
+		pending.Apply(pending.Fallback)
 		metrics.RenderTileSkipped.Inc()
+		ps.tileStats.skipped.Add(1)
+		logref.Warnf(pending.Ref, "staticmap: skipped waiting for %s tile, render queue %d/%d is over 80%% full; using fallback%s",
+			pending.Maptype, queueLen, queueCap, ps.tileQueueSuffix())
 		return nil
 	}
 
 	switch {
 	case pending.Both:
 		// Wait for the public URL first (embedded in the message).
-		select {
-		case url := <-pending.Result:
-			if url != "" {
-				pending.Apply(url)
-			} else {
-				pending.Apply(pending.Fallback)
-			}
-		case <-time.After(time.Until(pending.Deadline)):
-			pending.Apply(pending.Fallback)
-			// Drain bytes channel in the background.
-			go func() { <-pending.ResultImg }()
+		url, ok := receiveBy(pending.Result, pending.Deadline)
+		if !ok {
+			ps.tileGaveUp(pending, start)
 			return nil
 		}
-		// Then wait for the bytes (independent deadline). Nil bytes
-		// are fine — Discord-upload destinations fall back to URL fetch.
-		select {
-		case imgData := <-pending.ResultImg:
-			return imgData
-		case <-time.After(time.Until(pending.Deadline)):
-			// bytes timed out — Discord-upload destinations fall back to URL fetch
+		applyTileURL(pending, url)
+		// Then the bytes (same deadline). Missing bytes are fine:
+		// Discord-upload destinations fetch the URL themselves.
+		img, ok := receiveBy(pending.ResultImg, pending.Deadline)
+		if !ok {
+			pending.Abandon()
+			logref.Debugf(pending.Ref, "staticmap: %s tile bytes not ready by the deadline; Discord uploads fetch the URL", pending.Maptype)
 			return nil
 		}
+		return img
 	case pending.Inline:
-		select {
-		case imgData := <-pending.ResultImg:
-			if imgData != nil {
-				pending.ApplyInline()
-				return imgData
-			}
-			return nil
-		case <-time.After(time.Until(pending.Deadline)):
-			// no image, proceed without
+		img, ok := receiveBy(pending.ResultImg, pending.Deadline)
+		if !ok {
+			ps.tileGaveUp(pending, start)
 			return nil
 		}
+		return applyInlineResult(pending, img)
 	default:
-		// Wait for tile to resolve or deadline to expire.
-		select {
-		case url := <-pending.Result:
-			if url != "" {
-				pending.Apply(url)
-			} else {
-				pending.Apply(pending.Fallback)
-			}
-		case <-time.After(time.Until(pending.Deadline)):
-			pending.Apply(pending.Fallback)
+		url, ok := receiveBy(pending.Result, pending.Deadline)
+		if !ok {
+			ps.tileGaveUp(pending, start)
+			return nil
 		}
+		applyTileURL(pending, url)
 		return nil
 	}
+}
+
+// tileGaveUp handles a tile that wasn't ready by its deadline: it abandons the
+// request, applies the fallback, counts it and logs a WARN.
+func (ps *ProcessorService) tileGaveUp(pending *staticmap.TilePending, start time.Time) {
+	pending.Abandon()
+	pending.Apply(pending.Fallback)
+	metrics.RenderTileTimeout.Inc()
+	ps.tileStats.timedOut.Add(1)
+	logref.Warnf(pending.Ref, "staticmap: gave up waiting for %s tile after %s (deadline reached); using fallback%s",
+		pending.Maptype, time.Since(start).Round(time.Millisecond), ps.tileQueueSuffix())
+}
+
+// tileQueueSuffix describes the tile queue for give-up log lines, or "" when
+// there is no tile resolver.
+func (ps *ProcessorService) tileQueueSuffix() string {
+	if ps.enricher == nil || ps.enricher.StaticMap == nil {
+		return ""
+	}
+	depth, capacity := ps.enricher.StaticMap.QueueDepth()
+	return fmt.Sprintf(" (tile queue %d/%d)", depth, capacity)
+}
+
+// tileShortfall formats, for the periodic status line, the tiles that weren't
+// generated or weren't waited for in the interval, or "" when there were none.
+// timedOut and skipped come from the tile gates; the rest from the resolver.
+func tileShortfall(ts staticmap.Stats, timedOut, skipped int64) string {
+	parts := []struct {
+		name string
+		n    int64
+	}{
+		{"gaveup", timedOut},
+		{"skipped", skipped},
+		{"expired", ts.Expired},
+		{"abandoned", ts.Abandoned},
+		{"queuefull", ts.QueueFull},
+		{"circuitopen", ts.CircuitOpen},
+	}
+	out := ""
+	for _, p := range parts {
+		if p.n > 0 {
+			out += fmt.Sprintf(" %s:%d", p.name, p.n)
+		}
+	}
+	return out
+}
+
+// receiveBy waits for a value on ch until deadline. A value that is already
+// waiting is taken even when the deadline has passed, and one that arrives as
+// the timer fires still wins, so a ready tile is never thrown away for an
+// expired timer.
+func receiveBy[T any](ch <-chan T, deadline time.Time) (T, bool) {
+	select {
+	case v := <-ch:
+		return v, true
+	default:
+	}
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case v := <-ch:
+		return v, true
+	case <-timer.C:
+		select {
+		case v := <-ch:
+			return v, true
+		default:
+			var zero T
+			return zero, false
+		}
+	}
+}
+
+// takeReadyTile applies a tile that has already resolved, without waiting.
+// done reports whether one had; img is its bytes, if any. When the URL is
+// ready but the bytes aren't (Both mode), the bytes are abandoned.
+func takeReadyTile(pending *staticmap.TilePending) (img []byte, done bool) {
+	if pending.Inline {
+		select {
+		case img := <-pending.ResultImg:
+			return applyInlineResult(pending, img), true
+		default:
+			return nil, false
+		}
+	}
+	select {
+	case url := <-pending.Result:
+		applyTileURL(pending, url)
+	default:
+		return nil, false
+	}
+	if pending.Both {
+		select {
+		case img := <-pending.ResultImg:
+			return img, true
+		default:
+			pending.Abandon()
+		}
+	}
+	return nil, true
+}
+
+// applyTileURL writes a resolved tile URL, or the fallback when it is empty.
+func applyTileURL(pending *staticmap.TilePending, url string) {
+	if url == "" {
+		url = pending.Fallback
+	}
+	pending.Apply(url)
+}
+
+// applyInlineResult applies an inline-mode result: the upload stand-in when
+// there are bytes, otherwise the fallback (the tile worker has already logged
+// why there are none).
+func applyInlineResult(pending *staticmap.TilePending, img []byte) []byte {
+	if img == nil {
+		pending.Apply(pending.Fallback)
+		return nil
+	}
+	pending.ApplyInline()
+	return img
 }
 
 func tthFromMap(m map[string]any) delivery.TTH {

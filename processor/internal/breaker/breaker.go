@@ -41,6 +41,11 @@ type Config struct {
 	// OnHealthChange fires on state transitions: false when the circuit opens,
 	// true when it closes. Drives a health gauge. Nil disables.
 	OnHealthChange func(healthy bool)
+	// IsExcluded reports errors from fn that the breaker should ignore: they
+	// count neither as a failure nor as a success, so they don't trip the
+	// circuit and don't reset a run of real failures either (e.g. a call the
+	// caller abandoned itself). Nil excludes nothing.
+	IsExcluded func(err error) bool
 }
 
 // Breaker guards calls to an external dependency that returns a T.
@@ -68,6 +73,9 @@ func New[T any](cfg Config) *Breaker[T] {
 			return c.ConsecutiveFailures >= uint32(threshold)
 		},
 	}
+	if cfg.IsExcluded != nil {
+		st.IsExcluded = cfg.IsExcluded
+	}
 	if cfg.OnHealthChange != nil {
 		onHealth := cfg.OnHealthChange
 		st.OnStateChange = func(_ string, _, to gobreaker.State) {
@@ -94,8 +102,8 @@ func New[T any](cfg Config) *Breaker[T] {
 // Do runs fn if the breaker permits it, honouring the concurrency limit. When
 // the circuit is open (or the half-open probe budget is spent) fn is NOT run
 // and Do returns the zero T and ErrOpen. Otherwise it returns fn's result; a
-// non-nil error from fn counts toward tripping the breaker unless IsSuccessful
-// classifies it as a success.
+// non-nil error from fn counts toward tripping the breaker unless
+// Config.IsExcluded excludes it.
 //
 // The concurrency limiter sits inside the breaker gate, so a rejected call
 // never acquires a slot.
@@ -144,7 +152,7 @@ func NewGate(cfg Config) *Gate {
 // Do runs fn if the breaker permits it (honouring the concurrency limit) and
 // returns fn's error. When the circuit is open it returns ErrOpen without
 // running fn. A non-nil error from fn counts toward tripping the breaker
-// unless IsSuccessful classifies it as a success.
+// unless Config.IsExcluded excludes it.
 func (g *Gate) Do(fn func() error) error {
 	_, err := g.b.Do(func() (struct{}, error) {
 		return struct{}{}, fn()
