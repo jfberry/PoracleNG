@@ -28,7 +28,8 @@ type DiscordSender struct {
 	rateLimiter  *DiscordRateLimiter
 	uploadImages bool
 	deleteDelay  time.Duration
-	dmChannels   sync.Map // userID → DM channelID
+	dmChannels   sync.Map      // userID → DM channelID
+	images       *imageFetcher // shared embed-image downloads (nil: download per call)
 
 	// Per-subtype wire-call concurrency semaphores (nil = unlimited). A slot is
 	// held only across a single HTTP round-trip (see roundTrip), never during
@@ -75,14 +76,25 @@ func (ds *DiscordSender) rewriteTileURL(url string) string {
 
 // NewDiscordSender creates a new Discord sender.
 func NewDiscordSender(token string, uploadImages bool, deleteDelayMs int) *DiscordSender {
+	client := &http.Client{Timeout: 30 * time.Second}
 	return &DiscordSender{
 		baseURL:      defaultDiscordBaseURL,
 		token:        token,
-		client:       &http.Client{Timeout: 30 * time.Second},
+		client:       client,
+		images:       newImageFetcher(client),
 		rateLimiter:  NewDiscordRateLimiter(),
 		uploadImages: uploadImages,
 		deleteDelay:  time.Duration(deleteDelayMs) * time.Millisecond,
 	}
+}
+
+// fetchImage downloads an embed image for upload, sharing the download with
+// other destinations fetching the same URL (see imageFetcher).
+func (ds *DiscordSender) fetchImage(url string) ([]byte, error) {
+	if ds.images == nil {
+		return DownloadImage(ds.client, url)
+	}
+	return ds.images.fetch(url)
 }
 
 // makeSem returns a semaphore of capacity n, or nil for n<=0 (unlimited).
@@ -195,7 +207,7 @@ func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.R
 		normalized = DropEmbedImage(normalized)
 		message = normalized
 	} else if imageURL != "" {
-		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
+		if imageData, err := ds.fetchImage(ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, fileField)
 			if err == nil {
@@ -326,7 +338,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 		normalized = DropEmbedImage(normalized)
 	} else if imageURL != "" {
 		logref.Debugf(logRef, "discord: uploading embed image for bot/%s", channelID)
-		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
+		if imageData, err := ds.fetchImage(ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, "files[0]")
 			if err == nil {
@@ -372,7 +384,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 		normalized = DropEmbedImage(normalized)
 	} else if imageURL != "" {
 		logref.Debugf(logRef, "discord: uploading embed image for webhook/%s", webhookURL)
-		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
+		if imageData, err := ds.fetchImage(ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, "file")
 			if err == nil {

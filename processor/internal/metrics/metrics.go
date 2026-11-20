@@ -99,7 +99,7 @@ var (
 	})
 	TileTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "poracle_processor_tile_total",
-		Help: "Tile generation outcomes",
+		Help: "Tile generation outcomes (success, error, deadline, abandoned, queue_full, circuit_break)",
 	}, []string{"result"})
 	TileInFlight = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "poracle_processor_tile_in_flight",
@@ -254,6 +254,11 @@ var (
 	RenderTileSkipped = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "poracle_render_tile_skipped_total",
 		Help: "Tiles skipped due to render queue pressure",
+	})
+
+	RenderTileTimeout = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_render_tile_timeout_total",
+		Help: "Alerts sent with the fallback because their tile wasn't ready by the deadline",
 	})
 
 	TileModeTotal = promauto.NewCounterVec(prometheus.CounterOpts{

@@ -160,3 +160,27 @@ func TestBreaker_IsOpenReflectsState(t *testing.T) {
 		t.Fatal("breaker should be open after threshold failures")
 	}
 }
+
+// Errors IsExcluded matches count neither as failures nor as successes: they
+// don't open the circuit, and they don't reset a run of real failures.
+func TestBreaker_IsExcluded(t *testing.T) {
+	errMine := errors.New("abandoned")
+	b := New[int](Config{
+		Name: "t", FailureThreshold: 2, Cooldown: time.Minute,
+		IsExcluded: func(err error) bool { return errors.Is(err, errMine) },
+	})
+
+	for range 5 {
+		b.Do(func() (int, error) { return 0, errMine })
+	}
+	if b.IsOpen() {
+		t.Fatal("excluded errors opened the circuit")
+	}
+
+	b.Do(func() (int, error) { return 0, errBoom })
+	b.Do(func() (int, error) { return 0, errMine }) // must not reset the run
+	b.Do(func() (int, error) { return 0, errBoom })
+	if !b.IsOpen() {
+		t.Error("two real failures around an excluded error didn't open the circuit")
+	}
+}

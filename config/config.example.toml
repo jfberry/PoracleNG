@@ -537,10 +537,16 @@ worker_pool_size = 4
 # Webhook payloads are held in the sender until their tile resolves or the deadline
 # expires (fallback URL used). This prevents slow tileservers from blocking webhook
 # processing.
-tileserver_concurrency = 2               # tile worker goroutines (parallel tileserver POSTs)
-tileserver_timeout = 10000               # HTTP timeout per tile POST (ms)
+# An alert whose tile isn't ready by the deadline is sent with the fallback image
+# and logs a "gave up waiting for ... tile" WARN; the periodic status line counts
+# these (gaveup/skipped/expired/queuefull/circuitopen). Lots of them at busy times
+# (e.g. weather changes at the top of the hour) mean the tile workers or the
+# tileserver can't keep up: raise tileserver_concurrency if the tileserver has
+# headroom. Rampardos queues internally and copes well with 5 or more.
+tileserver_concurrency = 5               # tile worker goroutines (parallel tileserver POSTs)
+tileserver_timeout = 30000               # HTTP timeout per tile POST (ms)
 tileserver_queue_size = 100              # max pending tile requests; overflow uses fallback URL
-tileserver_deadline = 10000              # max time a payload waits for its tile before using fallback (ms)
+tileserver_deadline = 30000              # max time a payload waits for its tile before using fallback (ms)
 tileserver_failure_threshold = 5         # consecutive errors before circuit breaker opens
 tileserver_cooldown_ms = 30000           # how long circuit breaker stays open before retrying (ms)
 render_pool_size = 8                             # concurrent render goroutines

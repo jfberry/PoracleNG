@@ -859,7 +859,8 @@ func main() {
 			}
 			if proc.enricher.StaticMap != nil {
 				ts := proc.enricher.StaticMap.GetStats()
-				statusParts = append(statusParts, fmt.Sprintf("Tiles: %d calls avg:%dms err:%d", ts.Calls, ts.AvgMs(), ts.Errors))
+				statusParts = append(statusParts, fmt.Sprintf("Tiles: %d calls avg:%dms err:%d", ts.Calls, ts.AvgMs(), ts.Errors)+
+					tileShortfall(ts, proc.tileStats.timedOut.Swap(0), proc.tileStats.skipped.Swap(0)))
 				proc.enricher.StaticMap.ResetStats()
 			}
 			if proc.enricher.Geocoder != nil {
@@ -1315,6 +1316,7 @@ type ProcessorService struct {
 	recentActivity   *tracker.RecentActivity
 	pokemonTypes     *gamedata.PokemonTypes
 	enricher         *enrichment.Enricher
+	tileStats        tileGateStats // alerts sent without their tile (see resolveTilePending)
 	dtsRenderer      *dts.Renderer
 	dispatcher       *delivery.Dispatcher
 	humans           store.HumanStore

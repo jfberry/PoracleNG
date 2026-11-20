@@ -204,7 +204,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		enrichStart := time.Now()
 		allRecipients := slices.Concat(matched, priorOnlyUsers)
-		mode := ps.tileMode("monster", allRecipients, pokemon.EncounterID)
+		mode := ps.tileModeFor(pokemonTileAudiences(matched, priorOnlyUsers, change, processed.Encountered), pokemon.EncounterID)
 		baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
 
 		var perLang map[string]map[string]any
@@ -273,6 +273,23 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		}
 	}()
 	return nil
+}
+
+// pokemonTileAudiences groups a pokemon event's recipients by the template
+// type the renderer will use for them, for tileModeFor: matched users get
+// `monster` (`monsterNoIv` when not encountered, see RenderPokemon) and
+// prior-only users get `monsterChanged` — but only when dispatchPokemonAlert
+// will actually render the change for them.
+func pokemonTileAudiences(matched, priorOnly []webhook.MatchedUser, change *tracker.EncounterChange, encountered bool) []tileAudience {
+	matchedType := "monster"
+	if !encountered {
+		matchedType = "monsterNoIv"
+	}
+	audiences := []tileAudience{{templateType: matchedType, users: matched}}
+	if change != nil && change.Type != tracker.ChangeEncountered {
+		audiences = append(audiences, tileAudience{templateType: "monsterChanged", users: priorOnly})
+	}
+	return audiences
 }
 
 // pokemonDispatchInput bundles inputs to dispatchPokemonAlert. All
